@@ -256,9 +256,16 @@ class HubNetworkViewContractTest(unittest.TestCase):
         self.assertIn("document.body.contains(slot)", self.code())
 
     def test_unmeasured_node_explains_itself(self):
+        """Most nodes in a radius-4 ring were never measured, so the card has
+        to say something other than an empty figure.
+
+        The heading used to read "How it connects" above a list capped at eight
+        rows. It is a Connections TAB now, carrying the true count -- the
+        wording moved, the obligation did not.
+        """
         body = self.code()
         self.assertIn("connectedEdges()", body)
-        self.assertIn("How it connects", body)
+        self.assertIn("Connections", body)
         self.assertIn("nothing to plot", body)
 
     def test_click_highlight_does_not_fight_the_dim_class(self):
@@ -634,6 +641,303 @@ class NamesNotIdsTest(unittest.TestCase):
         self.assertEqual(body.count("mappingComp"), 1)
         start = body.index("this.nameOf = function")
         self.assertGreater(body.index("mappingComp"), start)
+
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
+class ConnectionsModelTest(unittest.TestCase):
+    """paHubConnections(): every connection, grouped, DE first, counted true.
+
+    The panel used to print `connectedEdges().slice(0, 8)`. On the STATegra
+    job, gene Ggt1 has 72 connections and 44 distinct partners, so eight rows
+    were 11% of the answer with nothing on screen saying so -- and 48 of that
+    graph's 161 nodes were truncated the same way. The cap is gone; these
+    tests exist so it cannot come back by accident.
+    """
+
+    def run_model(self, body):
+        """Evaluate paHubConnections() in node and return its JSON."""
+        with open(HUB_NETWORK_VIEW, "r", encoding="utf-8") as handle:
+            source = handle.read()
+        match = re.search(r"var\s+paHubConnections\s*=\s*function", source)
+        if match is None:
+            raise AssertionError("paHubConnections() is not defined in the view")
+        opening = source.index("{", match.end())
+        depth = 0
+        for index in range(opening, len(source)):
+            if source[index] == "{":
+                depth += 1
+            elif source[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    fn = source[match.start():index + 1] + ";"
+                    break
+        else:
+            raise AssertionError("unbalanced braces in paHubConnections()")
+        directory = tempfile.mkdtemp(prefix="paintomics-conn-")
+        try:
+            path = os.path.join(directory, "check.js")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(fn + "\n" + body)
+            done = subprocess.run(["node", path], capture_output=True,
+                                  text=True, timeout=60)
+            if done.returncode != 0:
+                raise AssertionError("node failed:\n%s" % done.stderr)
+            return json.loads(done.stdout)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    HARNESS = """
+    var STATE = %s;
+    var NAME = %s;
+    function describe(id) {
+      return { name: NAME[id] || id, state: STATE[id] || "absent" };
+    }
+    """
+
+    def test_no_connection_is_ever_dropped(self):
+        """72 in, 72 out -- and 500 in, 500 out. There is no cap at any size."""
+        out = self.run_model("""
+        var edges = [], STATE = {}, NAME = {};
+        for (var i = 0; i < 500; i++) {
+          edges.push({ source: "hub", target: "p" + i, kind: "ECrel",
+                       subtype: "compound", pathway: "mmu0048" + (i % 3) });
+          STATE["p" + i] = "quiet"; NAME["p" + i] = "G" + i;
+        }
+        function describe(id) {
+          return { name: NAME[id] || id, state: STATE[id] || "absent" };
+        }
+        var m = paHubConnections(edges, "hub", describe);
+        var rows = m.groups.reduce(function (a, g) { return a + g.rows.length; }, 0);
+        console.log(JSON.stringify({ total: m.total, rows: rows,
+                                     partners: m.partners }));
+        """)
+        self.assertEqual(out["total"], 500)
+        self.assertEqual(out["rows"], 500, "a cap has come back")
+        self.assertEqual(out["partners"], 500)
+
+    def test_the_total_counts_edges_and_partners_separately(self):
+        """Ggt1's real shape: 72 edges over 44 partners. Reporting either
+        number for the other one would misstate the graph."""
+        out = self.run_model("""
+        var edges = [
+          { source: "hub", target: "a", kind: "ECrel", subtype: "compound", pathway: "p1" },
+          { source: "hub", target: "a", kind: "PPrel", subtype: "activation", pathway: "p2" },
+          { source: "b", target: "hub", kind: "ECrel", subtype: "compound", pathway: "p1" }
+        ];
+        function describe(id) { return { name: id.toUpperCase(), state: "quiet" }; }
+        var m = paHubConnections(edges, "hub", describe);
+        console.log(JSON.stringify({ total: m.total, partners: m.partners }));
+        """)
+        self.assertEqual(out["total"], 3)
+        self.assertEqual(out["partners"], 2)
+
+    def test_differentially_expressed_partners_come_first(self):
+        """DE concentration is the claim the whole panel exists to show, so a
+        DE neighbour must never sort below a gene nobody measured."""
+        out = self.run_model("""
+        var edges = ["quietOne", "absentOne", "downOne", "upOne"].map(function (t) {
+          return { source: "hub", target: t, kind: "ECrel", subtype: "", pathway: "p1" };
+        });
+        var STATE = { quietOne: "quiet", absentOne: "absent",
+                      downOne: "down", upOne: "up" };
+        function describe(id) { return { name: id, state: STATE[id] || "absent" }; }
+        var m = paHubConnections(edges, "hub", describe);
+        console.log(JSON.stringify(m.groups[0].rows.map(function (r) { return r.state; })));
+        """)
+        self.assertEqual(out, ["up", "down", "quiet", "absent"])
+
+    def test_pathways_are_ranked_by_how_much_de_they_carry(self):
+        """A pathway holding the DE neighbours outranks a bigger one that
+        holds none -- size alone would bury the finding."""
+        out = self.run_model("""
+        var edges = [
+          { source: "hub", target: "u1", kind: "ECrel", subtype: "", pathway: "small" },
+          { source: "hub", target: "q1", kind: "ECrel", subtype: "", pathway: "big" },
+          { source: "hub", target: "q2", kind: "ECrel", subtype: "", pathway: "big" },
+          { source: "hub", target: "q3", kind: "ECrel", subtype: "", pathway: "big" }
+        ];
+        var STATE = { u1: "up", q1: "quiet", q2: "quiet", q3: "quiet" };
+        function describe(id) { return { name: id, state: STATE[id] || "absent" }; }
+        var m = paHubConnections(edges, "hub", describe);
+        console.log(JSON.stringify(m.groups.map(function (g) { return g.pathway; })));
+        """)
+        self.assertEqual(out, ["small", "big"])
+
+    def test_a_shared_symbol_is_disambiguated_by_its_id(self):
+        """KEGG ids 100042314, 14857 and 14858 all resolve to the symbol
+        Gsta5, so three rows printed the identical line and the panel looked
+        like it was repeating itself. Rows that collide carry their id."""
+        out = self.run_model("""
+        var edges = ["100042314", "14857", "66988"].map(function (t) {
+          return { source: "hub", target: t, kind: "ECrel", subtype: "", pathway: "p1" };
+        });
+        var NAME = { "100042314": "Gsta5", "14857": "Gsta5", "66988": "Lap3" };
+        function describe(id) { return { name: NAME[id], state: "quiet" }; }
+        var m = paHubConnections(edges, "hub", describe);
+        console.log(JSON.stringify(m.groups[0].rows.map(function (r) {
+          return { name: r.name, ambiguous: !!r.ambiguous };
+        })));
+        """)
+        collided = [r for r in out if r["name"] == "Gsta5"]
+        self.assertEqual(len(collided), 2)
+        self.assertTrue(all(r["ambiguous"] for r in collided),
+                        "a repeated symbol must be marked so the row can show its id")
+        alone = [r for r in out if r["name"] == "Lap3"][0]
+        self.assertFalse(alone["ambiguous"], "a unique symbol needs no id")
+
+    def test_states_are_counted_per_partner_not_per_edge(self):
+        """Two edges to one gene is one partner. Counting edges would claim
+        more differentially expressed neighbours than the job has."""
+        out = self.run_model("""
+        var edges = [
+          { source: "hub", target: "a", kind: "ECrel", subtype: "", pathway: "p1" },
+          { source: "hub", target: "a", kind: "PPrel", subtype: "", pathway: "p2" }
+        ];
+        function describe(id) { return { name: id, state: "up" }; }
+        var m = paHubConnections(edges, "hub", describe);
+        console.log(JSON.stringify(m.states));
+        """)
+        self.assertEqual(out["up"], 1)
+
+    def test_direction_survives_so_reciprocal_edges_stay_distinct(self):
+        """KEGG records Ggt1->Chac1 AND Chac1->Ggt1 as two ECrel edges in
+        mmu00480. Dropping which way each one points prints the same line
+        twice, which is the "it repeats itself" complaint all over again --
+        this time manufactured by the fix rather than by a name collision."""
+        out = self.run_model("""
+        var edges = [
+          { source: "hub", target: "chac", kind: "ECrel", subtype: "compound", pathway: "p1" },
+          { source: "chac", target: "hub", kind: "ECrel", subtype: "compound", pathway: "p1" }
+        ];
+        function describe(id) { return { name: "Chac1", state: "quiet" }; }
+        var m = paHubConnections(edges, "hub", describe);
+        console.log(JSON.stringify(m.groups[0].rows.map(function (r) {
+          return r.direction;
+        })));
+        """)
+        self.assertEqual(sorted(out), ["in", "out"],
+                         "a reciprocal pair must not render as one line twice")
+
+    def test_an_isolated_node_reports_nothing_rather_than_breaking(self):
+        out = self.run_model("""
+        function describe(id) { return { name: id, state: "absent" }; }
+        var m = paHubConnections([], "hub", describe);
+        console.log(JSON.stringify({ total: m.total, partners: m.partners,
+                                     groups: m.groups.length }));
+        """)
+        self.assertEqual(out, {"total": 0, "partners": 0, "groups": 0})
+
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
+class NodeInspectorTest(unittest.TestCase):
+    """The click has to answer "how does this connect?" in the GRAPH.
+
+    Before this, selecting a node drew a 4px ring on that node and did nothing
+    else: its 72 edges stayed indistinguishable inside a 600-edge wash, which
+    is why a text list had to carry the whole answer in a 269px drawer holding
+    1273px of content.
+    """
+
+    def source(self):
+        with open(HUB_NETWORK_VIEW, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def code(self):
+        body = re.sub(r"/\*.*?\*/", "", self.source(), flags=re.S)
+        return re.sub(r"(?m)^\s*//.*$", "", body)
+
+    def test_the_eight_row_cap_is_gone(self):
+        """The specific regression: `.slice(0, 8)` over connectedEdges()."""
+        body = self.code()
+        self.assertNotIn(".slice(0, 8)", body)
+        self.assertIn("paHubConnections", body)
+        self.assertIn("pa-hub-dir", body)   # direction is still on the row
+
+    def test_selecting_a_node_lights_its_own_edges(self):
+        body = self.code()
+        self.assertIn("this.focusEgo", body)
+        self.assertIn("pa-ego-edge", body)
+
+    def test_the_focus_leaves_the_step_filter_alone(self):
+        """setLevel owns .dim. The ego focus must compose with it, not fight
+        it -- an edge outside the chosen ring stays dimmed either way."""
+        body = self.code()
+        start = body.index("this.focusEgo = function")
+        window = body[start:start + 2200]
+        self.assertIn('hasClass("dim")', window)
+        self.assertNotIn('removeClass("dim")', window)
+
+    def test_the_seed_card_clears_the_focus(self):
+        """Opening the panel shows the metabolite, and focusing its ego on
+        load would dim most of the graph before anyone clicked anything."""
+        body = self.code()
+        start = body.index("this.showSeedDetail = function")
+        end = body.index("this.showNodeDetail = function", start)
+        self.assertIn("focusEgo(null)", body[start:end])
+
+    def test_the_drawer_separates_expression_from_connections(self):
+        body = self.code()
+        self.assertIn("pa-hub-tab", body)
+        self.assertIn("detailTab", body)
+
+    def test_the_connection_count_is_on_the_tab(self):
+        """8 of 72 was silent. The number is now furniture."""
+        body = self.code()
+        self.assertIn("model.total", body)
+
+    def test_the_drawer_can_be_resized(self):
+        """The expression figures alone measure 1046px in a 269px window."""
+        body = self.code()
+        self.assertIn("pa-hub-grip", body)
+        self.assertIn("flexBasis", body)
+
+    def test_a_dragged_height_survives_a_tab_switch(self):
+        """Switching tab or facet re-renders through clearDetail(), which drops
+        the inline flex-basis -- so the card snapped back to 300px every time
+        the reader touched a chip, discarding the height they just dragged."""
+        body = self.code()
+        self.assertIn("detailHeight", body)
+        start = body.index("this.openDetail = function")
+        window = body[start:start + 1400]
+        self.assertIn("me.detailHeight", window)
+        self.assertIn("flexBasis", window)
+
+    def test_the_resize_does_not_animate_height(self):
+        """A height transition on this flex item resolved to 1px and stayed
+        there; flex-basis is what the column algorithm reads."""
+        body = self.code()
+        start = body.index("this.bindResize")
+        window = body[start:start + 1800]
+        self.assertNotIn(".style.height", window)
+
+
+class ConnectionStylesTest(unittest.TestCase):
+    """The stylesheet half of the same change."""
+
+    def css(self):
+        path = os.path.join(CLIENT, "resources", "css", "network-views.css")
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_the_card_advertises_that_it_scrolls(self):
+        """macOS overlay scrollbars are invisible until dragged, so a row cut
+        mid-glyph read as a broken render rather than as more content."""
+        body = self.css()
+        self.assertIn(".pa-hub-detail-body::after", body)   # the fade
+        self.assertIn(".pa-hub-detail-body.at-end::after", body)
+        self.assertIn(".pa-hub-pane::-webkit-scrollbar", body)
+
+    def test_the_ego_edges_carry_the_de_colours(self):
+        body = self.css()
+        self.assertIn("pa-hub-tab", body)
+        self.assertIn("pa-hub-facet", body)
+
+    def test_the_card_title_sits_on_the_same_rail_as_its_rows(self):
+        """main.css's `div.contentbox h3` is (0,1,2) and beat the bare
+        `.pa-hub-detail-title` class (0,1,0), so the title rendered at
+        margin-left 0 while the tabs, counts and rows sit on the 12px rail."""
+        body = self.css()
+        self.assertIn(".pa-hub-detail .pa-hub-detail-title", body)
 
 
 def main():
