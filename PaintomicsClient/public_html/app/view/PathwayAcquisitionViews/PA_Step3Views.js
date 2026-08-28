@@ -6224,17 +6224,27 @@ function PA_Step3MetaboliteView() {
 			});
 		}
 
+		/* The readout goes into its own span, laid OVER the resting caption
+		   (main.css: .paClassMapReadout is position: absolute and the caption
+		   turns visibility: hidden, so it keeps its lines). It used to REPLACE
+		   the caption, and the caption is what sizes this paragraph: three
+		   lines became one, the SVG directly below rose 35px, and the mark
+		   slid out from under a cursor that had not moved -- mouseleave,
+		   caption back, map down, mouseenter, 27 times a second. Measured on
+		   PU14YF2L61 with the mouse held still on "Amino acids": 54 enter and
+		   54 leave in two seconds. Nothing above the map may change height
+		   on hover. */
 		var summary = document.getElementById("classActivityMapSummary");
 		if (!summary) return;
+		var readout = summary.querySelector(".paClassMapReadout");
 		if (!className) {
-			summary.innerHTML = summary.getAttribute("data-base") || "";
 			summary.classList.remove("paIsFocused");
+			if (readout) readout.innerHTML = "";
 			return;
 		}
 		var row = (classMapRowsCache || []).filter(function (r) { return r.name === className; })[0];
-		if (!row) return;
-		summary.classList.add("paIsFocused");
-		summary.innerHTML =
+		if (!row || !readout) return;
+		readout.innerHTML =
 			'<b>' + classMapEscape(row.name) + '</b> <span class="paClassMapMuted">'
 			+ classMapEscape(row.parent) + '</span> &nbsp; '
 			+ '<b>' + row.k + '</b>/' + row.n + ' relevant (' + Math.round(row.proportion * 100) + '%)'
@@ -6243,6 +6253,7 @@ function PA_Step3MetaboliteView() {
 				? ' &nbsp; <span class="paDirUp">▲' + row.up + '</span> <span class="paDirDown">▼' + row.down + '</span>'
 				: "")
 			+ ' &nbsp; <span class="paClassMapMuted">click to paint its compounds</span>';
+		summary.classList.add("paIsFocused");
 	};
 
 	this.drawClassMap = function () {
@@ -6489,7 +6500,8 @@ function PA_Step3MetaboliteView() {
 					+ ' and that is the bar every class is measured against';
 			}
 			summary.innerHTML =
-				'<b>' + passing + '</b> of ' + rows.length + ' classes at FDR &lt; 0.05'
+				'<span class="paClassMapBase">'
+				+ '<b>' + passing + '</b> of ' + rows.length + ' classes at FDR &lt; 0.05'
 				+ (p0 === null ? "" :
 					' &middot; ' + (userSet
 						? 'tested against <b>' + p0.toFixed(3) + '</b>, the fixed proportion you set'
@@ -6497,10 +6509,11 @@ function PA_Step3MetaboliteView() {
 						: 'tested against the rest of this job, p<sub>0</sub> = <b>' + p0.toFixed(3) + '</b>'
 							+ '<span class="paClassMapMuted">' + background + '</span>'))
 				+ (classMapHasDirection ? "" :
-					' &middot; <span class="paClassMapMuted">values never cross zero, so no direction is shown</span>');
-			/* focusClass borrows this line while a class is hovered, so keep the
-			   resting text to put back on mouseleave. */
-			summary.setAttribute("data-base", summary.innerHTML);
+					' &middot; <span class="paClassMapMuted">values never cross zero, so no direction is shown</span>')
+				/* The second span is the hover readout. focusClass fills it and
+				   lays it over the caption; the caption stays put, so the
+				   paragraph -- and the map under it -- never changes height. */
+				+ '</span><span class="paClassMapReadout"></span>';
 		}
 	};
 
