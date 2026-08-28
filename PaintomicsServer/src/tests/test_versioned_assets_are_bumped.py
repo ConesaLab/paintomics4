@@ -162,7 +162,7 @@ PUBLISHED = {
     # browser keeping the v=1.9 script would build markup those rules describe
     # while a browser keeping the old CSS would render the new markup unstyled.
     "app/view/PathwayAcquisitionViews/PA_Step3HubNetworkView.js": (
-        "2.5", "PLACEHOLDER"),
+        "2.5", "f06fdb156681d2b0d607d272d3c884e88940228d828553031dfe6e37d90d9852"),
     # v=0.9 adds SERVER_URL_PA_PATHWAY_EVIDENCE. The endpoint was added at
     # v=0.8 WITHOUT a bump, which this guard caught: a returning browser keeps
     # this file for up to 12 hours, so the evidence overlay would have POSTed
