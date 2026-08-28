@@ -22,16 +22,36 @@
  *
  *   position (ring) -> hop distance      the layout already carries it, so
  *                                        distance deliberately takes NO colour
- *   fill colour     -> DE direction      the scientific payload
+ *   node face       -> one wedge per condition, in that omic's heatmap colours
  *   filled/hollow   -> DE vs not DE      so identity is never colour-alone
  *   dashed stroke   -> never measured    absence shown as absence
  *   shape           -> compound / gene
- *   size            -> the seed, only
+ *   size            -> the seed, and DE nodes (they carry the wedges)
  *
- * The two hues are validated, not chosen by eye: CVD dE 21.6 and normal-vision
- * dE 32.3 against the light surface (targets >=8 and >=15). The near-white
- * diverging midpoint was rejected at 1.12:1 contrast -- "measured but not DE" is
- * most of the graph, so those nodes are hollow and the STROKE carries contrast.
+ * The face used to be a single fill, chosen by `values[0] < 0 ? down : up`.
+ * A fill is one colour, so it had to answer "up or down?" for a feature that
+ * has one answer PER CONDITION, and it answered with condition 1 -- which is
+ * how citric acid came out red ("up") on the STATegra job while the heatmap
+ * directly beneath it fell from +0.22 at 0h to -0.34 at 24h. That is not a
+ * near miss: across that job's DE features the first condition disagrees with
+ * the largest-magnitude one for 26% of genes and 68% of metabolites.
+ *
+ * No summary rule replaces it, because none of them is right. moanin, which
+ * exists to reduce a time course to one fold change, says so itself: when a
+ * feature is not consistently up- or down-regulated the estimated direction
+ * does not represent the observed changes. So the reduction is gone rather
+ * than improved. Slicing is what the field does with this -- Pathview cuts a
+ * node into one piece per state, VANTED draws a chart inside it, Escher
+ * refuses to aggregate at all -- and Paintomics' own pathway diagrams already
+ * draw one box per condition. This is that encoding on a round node.
+ *
+ * The edges follow: a lit edge says its neighbour is DE, and the neighbour's
+ * own face says what it did. An edge cannot carry six values, so it does not
+ * claim one.
+ *
+ * "Measured but not DE" is most of the graph, so those nodes stay hollow and
+ * the STROKE carries their contrast: the near-white diverging midpoint was
+ * rejected at 1.12:1 against the light surface.
  */
 /**
  * Everything in an omic figure that is not a data row: the chart's top margin
@@ -105,7 +125,7 @@ var paHubConnections = function (edges, id, describe) {
 		}
 	});
 
-	var RANK = { up: 0, down: 1, quiet: 2, absent: 3 };
+	var RANK = { de: 0, quiet: 1, absent: 2 };
 	order.forEach(function (group) {
 		group.de = 0;
 		group.rows.forEach(function (row) {
@@ -114,7 +134,7 @@ var paHubConnections = function (edges, id, describe) {
 			// identical line reads as the panel repeating itself. A collided
 			// row keeps its id so the two can be told apart.
 			row.ambiguous = Object.keys(byName[row.name] || {}).length > 1;
-			if (row.state === "up" || row.state === "down") { group.de++; }
+			if (row.state === "de") { group.de++; }
 		});
 		group.rows.sort(function (a, b) {
 			var rank = (RANK[a.state] === undefined ? 9 : RANK[a.state]) -
@@ -136,6 +156,67 @@ var paHubConnections = function (edges, id, describe) {
 		states: states,
 		groups: order
 	};
+};
+
+/**
+ * A node face: one wedge per condition, clockwise from twelve o'clock.
+ *
+ * The clip is drawn HERE rather than left to cytoscape's `background-clip`,
+ * for one reason worth stating: cytoscape's own `pie-*` styles draw a CIRCLE
+ * whatever the node's shape is, so slicing a compound through them silently
+ * erases the diamond that distinguishes it from a gene. Owning the geometry
+ * keeps the shape language intact, and it also lifts cytoscape's cap of
+ * sixteen slices per node.
+ *
+ * The wedges overshoot the box on purpose: the clip decides the outline, so a
+ * diamond's corners are cut from painted area instead of being left white.
+ *
+ * @param {Array}  colours  one CSS colour per condition, in column order
+ * @param {String} shape    "diamond" for compounds, anything else for genes
+ * @returns {String} an SVG data URI
+ */
+var paHubWedgeImage = function (colours, shape) {
+	var n = colours.length, c = 50, r = 100, faces = [], i, a, a0, a1, big;
+
+	if (n === 1) {
+		/* One condition is not a pie. Drawing it as a single 360-degree arc
+		   leaves a hairline seam where the two ends meet. */
+		faces.push('<rect x="0" y="0" width="100" height="100" fill="' + colours[0] + '"/>');
+	} else {
+		for (i = 0; i < n; i++) {
+			a0 = -Math.PI / 2 + (2 * Math.PI * i) / n;
+			a1 = -Math.PI / 2 + (2 * Math.PI * (i + 1)) / n;
+			big = ((a1 - a0) > Math.PI) ? 1 : 0;
+			faces.push('<path d="M' + c + ' ' + c +
+				' L' + (c + r * Math.cos(a0)).toFixed(1) + ' ' + (c + r * Math.sin(a0)).toFixed(1) +
+				' A' + r + ' ' + r + ' 0 ' + big + ' 1 ' +
+				(c + r * Math.cos(a1)).toFixed(1) + ' ' + (c + r * Math.sin(a1)).toFixed(1) +
+				' Z" fill="' + colours[i] + '"/>');
+		}
+		/* Hairlines between wedges. Two adjacent conditions can land on nearly
+		   the same colour -- which is the common case, since neighbouring
+		   timepoints usually agree -- and without a break they read as one
+		   wedge, so the node quietly loses a condition. Dropped past twelve,
+		   where the separators would take more of the face than the data. */
+		if (n <= 12) {
+			for (i = 0; i < n; i++) {
+				a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+				faces.push('<line x1="' + c + '" y1="' + c +
+					'" x2="' + (c + r * Math.cos(a)).toFixed(1) +
+					'" y2="' + (c + r * Math.sin(a)).toFixed(1) +
+					'" stroke="#ffffff" stroke-width="3"/>');
+			}
+		}
+	}
+
+	var clip = (shape === "diamond")
+		? '<path d="M50 0 L100 50 L50 100 L0 50 Z"/>'
+		: '<circle cx="50" cy="50" r="50"/>';
+
+	return "data:image/svg+xml;base64," + btoa(
+		'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" ' +
+		'viewBox="0 0 100 100"><defs><clipPath id="k">' + clip + '</clipPath></defs>' +
+		'<g clip-path="url(#k)">' + faces.join("") + '</g></svg>');
 };
 
 function PA_Step3HubNetworkView() {
@@ -164,6 +245,9 @@ function PA_Step3HubNetworkView() {
 	this.metabolites = [];   // one entry per compound, with its four step rows
 	this.featureCache = {};  // id|kind -> /pa_hub_feature payload
 	this.compoundNames = {}; // KEGG compound id -> readable name
+	this.readings = {};      // kind|id -> {state, omicName, values, headers, wedges}
+	this.limitsCache = {};   // omic name -> the colour range its heatmap uses
+	this.wedgeCache = {};    // colour signature -> data URI; repeats cost nothing
 	this.sortKey = "padjust";
 	this.detailTab = "expr";  // sticky across clicks
 	this.detailFacet = null;   // "state:up" | "pathway:mmu00480"
@@ -566,23 +650,140 @@ function PA_Step3HubNetworkView() {
 	};
 
 	/**
-	 * DE state for one feature.
+	 * Everything the node face and its tooltip need for one feature.
+	 *
+	 * The colours come from getMinMax + getColor against the omic's OWN
+	 * distribution summary, with the same default reference the detail card
+	 * uses. That is the whole point: the node and the heatmap underneath it are
+	 * now one calculation, so they cannot disagree again.
 	 *
 	 * `entry.relevant` is an ARRAY after OmicValue.loadFromJSON, and [] is
-	 * truthy -- so testing the property directly made "measured but not DE"
-	 * unreachable and painted every measured feature up or down. Ask the
-	 * OmicValue instead; that is what its accessors are for.
+	 * truthy -- so testing the property directly makes "measured but not DE"
+	 * unreachable and marks every measured feature DE. Ask the OmicValue
+	 * instead; that is what its accessors are for.
 	 */
+	this.readingOf = function (id, kind) {
+		var me = this, key = kind + "|" + id;
+		if (key in me.readings) { return me.readings[key]; }
+
+		var reading = { state: "absent", omicName: "", values: [], headers: [], wedges: "" };
+		var entry = me.expressionFor(id, kind);
+
+		if (entry) {
+			var de = (typeof entry.isRelevant === "function")
+				? (entry.isRelevant() || entry.isRelevantAssociation())
+				: false;
+			reading.state = de ? "de" : "quiet";
+			reading.omicName = me.omicNameOf(entry, kind);
+
+			// The mode the figures are drawn in, so a job with an applied sample
+			// mapping gets one wedge per SAMPLE, matching its own heatmap rather
+			// than the raw replicate columns behind it.
+			var mode = me.model.getReplicateMode ? me.model.getReplicateMode() : "replicates";
+			var raw = (typeof entry.getValues === "function")
+				? entry.getValues(mode) : entry.values;
+			reading.values = (raw || []).map(Number);
+
+			// headers[0] names the id column, not a condition.
+			reading.headers = (paOmicHeaders(me.model, reading.omicName) || [])
+				.slice(1, reading.values.length + 1);
+
+			var limits = me.limitsFor(reading.omicName);
+			if (de && limits && reading.values.length) {
+				var colours = reading.values.map(function (value) {
+					// A gap in one condition is not a measurement, and running it
+					// through the ramp would state one. It gets the surface colour.
+					return isFinite(value)
+						? getColor(limits, value, PA_DEFAULT_COLOR_SCALE) : "#f4f4f5";
+				});
+				var shape = (kind === "compound") ? "diamond" : "ellipse";
+				var signature = shape + "|" + colours.join("|");
+				if (!(signature in me.wedgeCache)) {
+					me.wedgeCache[signature] = paHubWedgeImage(colours, shape);
+				}
+				reading.wedges = me.wedgeCache[signature];
+			}
+		}
+
+		me.readings[key] = reading;
+		return reading;
+	};
+
+	/** The DE state alone, for the callers that only branch on it. */
 	this.stateOf = function (id, kind) {
-		var entry = this.expressionFor(id, kind);
-		if (!entry) { return "absent"; }              // never measured
-		var de = (typeof entry.isRelevant === "function")
-			? (entry.isRelevant() || entry.isRelevantAssociation())
-			: false;
-		if (!de) { return "quiet"; }
-		var values = (typeof entry.getValues === "function") ? entry.getValues() : entry.values;
-		var first = (values && values.length) ? Number(values[0]) : 0;
-		return (first < 0) ? "down" : "up";
+		return this.readingOf(id, kind).state;
+	};
+
+	/**
+	 * The colour range one omic's figures are painted against.
+	 *
+	 * Memoised because elements() asks per node and a radius-4 graph is
+	 * thousands of them, all sharing at most two omics.
+	 */
+	this.limitsFor = function (omicName) {
+		if (omicName in this.limitsCache) { return this.limitsCache[omicName]; }
+		var summaries = (this.model && this.model.getDataDistributionSummaries()) || {};
+		var limits = null;
+		try {
+			if (summaries[omicName]) {
+				limits = getMinMax(summaries[omicName], PA_DEFAULT_COLOR_REFERENCE);
+			} else {
+				// Not fatal: the node keeps its heavier DE stroke and simply
+				// carries no colour. Silence here would look like a render fault.
+				console.warn("[hub] no distribution summary for '" + omicName +
+					"', so its nodes cannot be coloured per condition.");
+			}
+		} catch (error) {
+			console.warn("[hub] no colour range for '" + omicName + "': " + error);
+		}
+		this.limitsCache[omicName] = limits;
+		return limits;
+	};
+
+	/**
+	 * The omic a globalExpressionData entry came from.
+	 *
+	 * globalExpressionData is built from `omicsValues[0]` and nothing else, so
+	 * it is ONE omic whatever the job uploaded -- but it never said which, and
+	 * without the name there is no distribution summary to scale it against.
+	 * The server sends it now. The fallback covers a job still being served
+	 * from the pre-restart in-memory cache, and names the same omic by
+	 * construction, since that cache was built from omicsValues[0] too.
+	 */
+	this.omicNameOf = function (entry, kind) {
+		if (entry && entry.omicName) { return entry.omicName; }
+		var names = (kind === "compound")
+			? (this.model.getCompoundOmicNames ? this.model.getCompoundOmicNames() : [])
+			: (this.model.getGeneOmicNames ? this.model.getGeneOmicNames() : []);
+		return names[0] || "";
+	};
+
+	/**
+	 * The node's own numbers, condition by condition.
+	 *
+	 * The face is N colours; this says which condition each one is and what it
+	 * was. Without it the wedges are a picture of a movement the reader cannot
+	 * name, which is the failure the single fill had, only prettier. Capped,
+	 * because a 24-condition job would push the tooltip off the stage.
+	 */
+	this.conditionTable = function (reading) {
+		if (!reading || !reading.wedges || !reading.values.length) { return ""; }
+		var limits = this.limitsFor(reading.omicName);
+		var rows = reading.values.slice(0, 10).map(function (value, i) {
+			var swatch = (limits && isFinite(value))
+				? getColor(limits, value, PA_DEFAULT_COLOR_SCALE) : "#f4f4f5";
+			return '<tr><td><i class="pa-hub-cell" style="background:' + swatch +
+				'"></i></td><td>' +
+				Ext.String.htmlEncode(reading.headers[i] || ("condition " + (i + 1))) +
+				'</td><td>' + (isFinite(value) ? value.toFixed(2) : "&mdash;") +
+				'</td></tr>';
+		}).join("");
+		var more = reading.values.length - 10;
+		return '<div class="pa-hub-tip-omic">' +
+			Ext.String.htmlEncode(reading.omicName) + '</div>' +
+			'<table class="pa-hub-tip-values">' + rows + '</table>' +
+			(more > 0 ? '<div class="pa-hub-tip-hint">and ' + more +
+			            ' more condition' + (more === 1 ? "" : "s") + '</div>' : "");
 	};
 
 	this.expressionFor = function (id, kind) {
@@ -595,7 +796,10 @@ function PA_Step3HubNetworkView() {
 	this.elements = function (payload) {
 		var me = this, out = [];
 		payload.nodes.forEach(function (n) {
-			var state = (n.step === 0) ? "seed" : me.stateOf(n.id, n.type);
+			// The seed is an identity marker, not a measurement: it is the thing
+			// the user picked, and its own conditions are in the card below.
+			var reading = (n.step === 0) ? null : me.readingOf(n.id, n.type);
+			var state = reading ? reading.state : "seed";
 			var name = me.nameOf(n.id, n.type);
 			out.push({ group: "nodes", data: {
 				id: n.id,
@@ -608,10 +812,15 @@ function PA_Step3HubNetworkView() {
 				step: n.step,
 				kind: n.type,
 				state: state,
+				// The face, as a data URI. Empty for everything that is not a DE
+				// feature with a scalable omic behind it; `hasWedges` is the
+				// selector, because cytoscape cannot test a style for emptiness.
+				wedges: (reading && reading.wedges) || "",
+				hasWedges: (reading && reading.wedges) ? 1 : 0,
 				seed: (n.step === 0) ? 1 : 0,
 				// Only the seed and the DE nodes are labelled. Radius 4 can
 				// reach thousands of nodes; a label on each is unreadable.
-				showLabel: (n.step === 0 || state === "up" || state === "down") ? 1 : 0
+				showLabel: (n.step === 0 || state === "de") ? 1 : 0
 			}});
 		});
 		(payload.edges || []).forEach(function (e, i) {
@@ -669,10 +878,25 @@ function PA_Step3HubNetworkView() {
 					"text-background-padding": 2 }},
 				{ selector: "node[kind = 'compound']", style: {
 					"shape": "diamond", "width": 15, "height": 15 }},
-				{ selector: "node[state = 'up']", style: {
-					"background-color": "#e34948", "border-color": "#e34948" }},
-				{ selector: "node[state = 'down']", style: {
-					"background-color": "#2a78d6", "border-color": "#2a78d6" }},
+				// Bigger, because the face has to carry one wedge per condition,
+				// and darker-stroked, because a face built from the omic's own
+				// ramp includes pale colours: on a feature whose conditions all
+				// sit near zero the stroke is the only thing separating it from a
+				// hollow "not DE" node. It also keeps DE legible when the omic has
+				// no distribution summary and there are no wedges to draw.
+				{ selector: "node[state = 'de']", style: {
+					"width": 22, "height": 22,
+					"border-width": 2, "border-color": "#18181b" }},
+				{ selector: "node[kind = 'compound'][state = 'de']", style: {
+					"width": 24, "height": 24 }},
+				{ selector: "node[hasWedges = 1]", style: {
+					"background-image": "data(wedges)",
+					"background-fit": "cover",
+					// The clip lives inside the SVG, so cytoscape must not clip
+					// again: two anti-aliased passes over the same outline leave a
+					// seam at the edge.
+					"background-clip": "none",
+					"background-image-opacity": 1 }},
 				{ selector: "node[state = 'absent']", style: {
 					"border-style": "dashed", "border-color": "#a1a1aa" }},
 				{ selector: "node[seed = 1]", style: {
@@ -696,10 +920,8 @@ function PA_Step3HubNetworkView() {
 				// and BEFORE the ego classes so a lit edge overrides it.
 				{ selector: "node.pa-away", style: { "opacity": 0.15 }},
 				{ selector: "edge.pa-away", style: { "opacity": 0.04 }},
-				// The clicked node's own edges, coloured by the neighbour's DE
-				// direction -- the same two validated hues the nodes use, so
-				// the graph answers "how does this connect?" without the
-				// reader moving to a list.
+				// The clicked node's own edges, so the graph answers "how does
+				// this connect?" without the reader moving to a list.
 				// A mid grey, not a dark one: the canvas is transparent over
 				// --pa-surface, which flips with the theme, and cytoscape
 				// styles are JS so they cannot read a CSS token. #71717a is
@@ -709,10 +931,14 @@ function PA_Step3HubNetworkView() {
 				{ selector: "edge.pa-ego-edge", style: {
 					"width": 1.8, "opacity": 0.95, "line-color": "#71717a",
 					"target-arrow-color": "#71717a", "z-index": 20 }},
-				{ selector: "edge.pa-ego-up", style: {
-					"line-color": "#e34948", "target-arrow-color": "#e34948" }},
-				{ selector: "edge.pa-ego-down", style: {
-					"line-color": "#2a78d6", "target-arrow-color": "#2a78d6" }},
+				// An edge to a DE neighbour, weighted rather than hued. It used
+				// to be painted red or blue by that neighbour's "direction",
+				// which the neighbour does not have -- it has one value per
+				// condition, and they can disagree. Weight says "this partner
+				// carries the finding"; the partner's own face says what it did.
+				{ selector: "edge.pa-ego-de", style: {
+					"width": 2.4, "line-color": "#27272a",
+					"target-arrow-color": "#27272a" }},
 				{ selector: "node.pa-ego-node", style: { "z-index": 21 }},
 				// A ring of 44 partners cannot all be labelled legibly, so the
 				// label goes on the neighbours that carry the finding; a small
@@ -842,7 +1068,7 @@ function PA_Step3HubNetworkView() {
 		var me = this;
 		var tip = document.getElementById(me.tipID);
 		if (!tip) { return; }
-		var WORDS = { up: "up", down: "down", quiet: "measured, not DE",
+		var WORDS = { de: "differentially expressed", quiet: "measured, not DE",
 		              absent: "not measured", seed: "this metabolite" };
 		me.cy.on("mouseover", "node", function (event) {
 			var n = event.target;
@@ -855,7 +1081,8 @@ function PA_Step3HubNetworkView() {
 					Ext.String.htmlEncode(id) + "</span>") + "<br>" +
 				(n.data("kind") || "feature") + " · " + WORDS[n.data("state")] +
 				(step ? "<br>" + step + " step" + (step === 1 ? "" : "s") + " away" : "") +
-				'<br><span class="pa-hub-tip-hint">click for expression</span>';
+				(step ? me.conditionTable(me.readingOf(id, n.data("kind"))) : "") +
+				'<span class="pa-hub-tip-hint">click for expression</span>';
 			tip.style.display = "block";
 		});
 		me.cy.on("mouseout", "node", function (event) {
@@ -901,7 +1128,7 @@ function PA_Step3HubNetworkView() {
 		if (!me.cy) { return; }
 		me.cy.batch(function () {
 			me.cy.elements().removeClass(
-				"pa-away pa-ego-edge pa-ego-up pa-ego-down pa-ego-node pa-ego-label");
+				"pa-away pa-ego-edge pa-ego-de pa-ego-node pa-ego-label");
 			if (!id) { return; }
 			var node = me.cy.getElementById(id);
 			if (!node || !node.length) { return; }
@@ -926,16 +1153,14 @@ function PA_Step3HubNetworkView() {
 				if (!lit[n.id()]) { n.addClass("pa-away"); return; }
 				n.addClass("pa-ego-node");
 				var state = n.data("state");
-				if (nameAll || state === "up" || state === "down" || n.id() === id) {
+				if (nameAll || state === "de" || n.id() === id) {
 					n.addClass("pa-ego-label");
 				}
 			});
 			me.cy.edges().forEach(function (e) { if (!e.hasClass("dim")) { e.addClass("pa-away"); } });
 			edges.forEach(function (row) {
-				var state = row.other.data("state");
 				row.edge.removeClass("pa-away").addClass("pa-ego-edge");
-				if (state === "up") { row.edge.addClass("pa-ego-up"); }
-				else if (state === "down") { row.edge.addClass("pa-ego-down"); }
+				if (row.other.data("state") === "de") { row.edge.addClass("pa-ego-de"); }
 			});
 		});
 	};
@@ -1266,10 +1491,10 @@ function PA_Step3HubNetworkView() {
 		var shownRows = 0;
 
 		var chips = "";
-		["up", "down", "quiet", "absent"].forEach(function (state) {
+		["de", "quiet", "absent"].forEach(function (state) {
 			var n = model.states[state] || 0;
 			if (!n) { return; }
-			var WORD = { up: "up", down: "down", quiet: "measured",
+			var WORD = { de: "differentially expressed", quiet: "measured",
 			             absent: "not measured" };
 			chips += '<button type="button" class="pa-hub-facet' +
 				(facet === "state:" + state ? " is-on" : "") +
@@ -1348,7 +1573,11 @@ function PA_Step3HubNetworkView() {
 
 		me.clearDetail();
 		var seedName = me.nameOf(me.seed, "compound");
-		var WORDS = { up: "up in this comparison", down: "down in this comparison",
+		// No direction here, and none on the node either. This feature has one
+		// value per condition and the figures below print all of them; a summary
+		// word would have to pick one, which is the bug this panel just lost.
+		var WORDS = { de: "differentially expressed &mdash; each wedge on the node is " +
+		                  "one condition, in the same colours as the heatmap below",
 		              quiet: "measured, not differentially expressed",
 		              absent: "not measured in any omic you uploaded" };
 		var state = node.data("state");
@@ -1652,8 +1881,8 @@ function PA_Step3HubNetworkView() {
 		var me = this;
 		var legend =
 			'<div class="pa-hub-legend">' +
-			  '<span><i class="sw up"></i>up</span>' +
-			  '<span><i class="sw down"></i>down</span>' +
+			  '<span><i class="sw de"></i>differentially expressed &mdash; one wedge ' +
+			    'per condition, in that omic\'s heatmap colours</span>' +
 			  '<span><i class="sw quiet"></i>measured, not DE</span>' +
 			  '<span><i class="sw absent"></i>not measured</span>' +
 			  '<span><i class="sw seed"></i>this metabolite</span>' +

@@ -2894,6 +2894,12 @@ class PathwayAcquisitionJob(Job):
             expressionDetail = {
                 'keggName': self.inputCompoundsData[j].name,
                 'inputName': self.inputCompoundsData[j].omicsValues[0].inputName,
+                # The omic these values came from. globalExpressionData is built
+                # from omicsValues[0] and is therefore ONE omic, but it never said
+                # which, so the client could not look up the distribution summary
+                # that omic's own heatmap is scaled against -- and a node could not
+                # be painted in the same colours as the figure below it.
+                'omicName': self.inputCompoundsData[j].omicsValues[0].omicName,
                 'originalName': self.inputCompoundsData[j].omicsValues[0].originalName,
                 'relevant': self.inputCompoundsData[j].omicsValues[0].relevant,
                 'relevantAssociation': self.inputCompoundsData[j].omicsValues[0].relevantAssociation,
@@ -2906,6 +2912,12 @@ class PathwayAcquisitionJob(Job):
             expressionDetail = {
                 'keggName': self.inputGenesData[i].name,
                 'inputName': self.inputGenesData[i].omicsValues[0].inputName,
+                # The omic these values came from. globalExpressionData is built
+                # from omicsValues[0] and is therefore ONE omic, but it never said
+                # which, so the client could not look up the distribution summary
+                # that omic's own heatmap is scaled against -- and a node could not
+                # be painted in the same colours as the figure below it.
+                'omicName': self.inputGenesData[i].omicsValues[0].omicName,
                 'originalName': self.inputGenesData[i].omicsValues[0].originalName,
                 'relevant': self.inputGenesData[i].omicsValues[0].relevant,
                 'relevantAssociation': self.inputGenesData[i].omicsValues[0].relevantAssociation,

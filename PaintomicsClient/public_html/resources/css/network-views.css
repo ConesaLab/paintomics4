@@ -440,8 +440,8 @@
    (CVD dE 19.2, normal-vision 29.0). Do not add a dark block for this one
    component; it would be the only one in the app. */
 .pa-hub-net {
-	--hub-up:        #e34948;
-	--hub-down:      #2a78d6;
+	--hub-accent:    #e34948;   /* significance accent, NOT a direction.   */
+	--hub-link:      #2a78d6;   /* the clear-filter link, NOT a direction.  */
 	--hub-quiet:     #ffffff;   /* hollow: the STROKE carries the contrast.  */
 	--hub-quiet-ink: #595959;   /* #f0efec was rejected at 1.12:1 on white.  */
 	--hub-absent:    #a1a1aa;
@@ -481,12 +481,16 @@
 /* Shared with the connection rows and the facet chips: a swatch means the
    same thing wherever it appears, so the colours are not scoped to the
    legend that happened to need them first. */
-.pa-hub-legend .sw.up,
-.pa-hub-conns .sw.up,
-.pa-hub-facet .sw.up     { background: var(--hub-up);   border-color: var(--hub-up); }
-.pa-hub-legend .sw.down,
-.pa-hub-conns .sw.down,
-.pa-hub-facet .sw.down   { background: var(--hub-down); border-color: var(--hub-down); }
+/* The swatch IS the encoding it explains: four steps of the same diverging
+   ramp the heatmaps use, wedged the same way the nodes are. A row in the
+   connection list and a node in the graph therefore read as the same claim. */
+.pa-hub-legend .sw.de,
+.pa-hub-conns .sw.de,
+.pa-hub-facet .sw.de {
+	background: conic-gradient(#a51f1e 0deg 90deg, #e8e8e8 90deg 180deg,
+	                           #0f59a9 180deg 270deg, #8fb4d8 270deg 360deg);
+	border-color: var(--hub-ink, #18181b);
+}
 .pa-hub-legend .sw.absent,
 .pa-hub-conns .sw.absent,
 .pa-hub-facet .sw.absent { border-style: dashed; border-color: var(--hub-absent); }
@@ -495,6 +499,29 @@
 	transform: rotate(45deg);
 	border-width: 2px;
 	border-color: var(--hub-ink);
+}
+
+/* The hovered node's own numbers. The tooltip is absolutely positioned and
+   offset down-right of the cursor, so growing it cannot move the node out from
+   under the pointer -- the oscillation that a self-resizing hover readout
+   caused on the class map is not reachable here. */
+.pa-hub-tip-omic {
+	margin: 6px 0 3px 0;
+	font-weight: 600;
+	color: var(--hub-ink, #18181b);
+}
+.pa-hub-tip-values { border-collapse: collapse; margin: 0 0 4px 0; }
+.pa-hub-tip-values td { padding: 1px 6px 1px 0; white-space: nowrap; }
+.pa-hub-tip-values td:last-child {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	padding-right: 0;
+}
+.pa-hub-cell {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border: 1px solid rgba(0, 0, 0, 0.18);
 }
 
 /* The stage is a column: head, notice, graph, detail card. The graph is the
@@ -667,7 +694,7 @@
 	background: var(--pa-surface, #fff);
 	border-left-color: var(--hub-ink, #18181b);
 }
-.pa-hub-item.is-significant { border-left-color: var(--hub-up, #e34948); }
+.pa-hub-item.is-significant { border-left-color: var(--hub-accent, #e34948); }
 .pa-hub-item.is-marginal    { border-left-color: var(--hub-absent, #a1a1aa); }
 .pa-hub-item-name {
 	display: block;
@@ -912,7 +939,7 @@
 	color: var(--pa-ink-muted, #595959);
 }
 .pa-hub-edge-src { color: var(--pa-ink-subtle, #8a8a8a); }
-.pa-hub-warn { color: var(--hub-up, #e34948); }
+.pa-hub-warn { color: var(--hub-accent, #e34948); }
 
 /* ------------------------------------------------------------------ *
  * The node inspector: tabs, facets, and a card that admits it scrolls *
@@ -1073,7 +1100,7 @@
 	padding: 0;
 	border: 0;
 	background: none;
-	color: var(--hub-down, #2a78d6);
+	color: var(--hub-link, #2a78d6);
 	text-decoration: underline;
 	cursor: pointer;
 }
