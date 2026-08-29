@@ -2637,8 +2637,7 @@ function OmicSubmittingPanel(nElem, options) {
 							/* data-guides="ignore": the note sits on the INPUT rail (150px
 							   in, under the field it annotates), which the overlay lists as a
 							   rail but judges this paragraph against the label column. */
-							html: '<p class="paDesignNote" data-guides="ignore">Optional. With a design, the class activity test runs on your ' +
-								'replicates instead of on the relevant list.</p>'
+							html: '<p class="paDesignNote" data-guides="ignore">Optional &mdash; runs the class test on your replicates.</p>'
 						}, {
 							xtype: 'combo',
 							fieldLabel: 'Can be mapped to',
