@@ -9324,14 +9324,15 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
    segmented control reads as one control only when its parts match. */
 .paLadderSeg { display: inline-grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #B5C1CE;
                border-radius: 6px; overflow: hidden; background: #FFFFFF; }
-.paLadderSeg button { display: inline-flex; align-items: baseline; justify-content: center; gap: 6px; min-width: 124px;
+.paLadderSeg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 124px;
                       height: 32px; border: 0; background: transparent; padding: 0 12px; cursor: pointer; color: #44556A;
                       font: inherit; font-size: 13px; line-height: 1; border-right: 1px solid #E3E9EF; white-space: nowrap; }
 .paLadderSeg button:last-child { border-right: 0; }
 /* color: inherit -- the card paints every <b> in the accent blue, which on the
    pressed (blue) segment made the level number vanish. */
 .paLadderSeg button b { font-weight: 600; color: inherit; }
-.paLadderSeg button small { font-size: 11px; color: #78879A; }
+.paLadderSeg button small { font-size: 11px; line-height: 1; color: #78879A; }
+.paLadderSeg button b { line-height: 1; }
 .paLadderSeg button[aria-pressed="true"] { background: #19589E; color: #FFFFFF; }
 .paLadderSeg button[aria-pressed="true"] small { color: rgba(255, 255, 255, .8); }
 .paLadderSwitch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #44556A; cursor: pointer; }
