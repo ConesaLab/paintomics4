@@ -494,51 +494,49 @@ function PA_Step3JobView() {
 	* @returns {String} the hexadecimal color code
 	**/
 	this.getClassificationColor = function(classificationID, otherColors){
-		/* The first seven are KEGG's classifications and keep their hues, which
-		   is what people recognise: C is still the blue one, H still the yellow
-		   one, and the pie, the grid stripes and the network still agree with
-		   each other. What they give up is chroma. They were an iOS system
-		   palette running to 0.265 (#C644FC) and 0.238 (#FF2D55) - against 0.135
-		   for the database badges and 0.125 for everything else here - and that
-		   is what made six discs in a quiet white card read as shouting. They
-		   now sit at 0.100-0.130, so nothing in this file is louder than
-		   anything else in it.
+		/* The first seven are KEGG's classifications and keep their hues, which is
+		   what people recognise: C is still the blue one, H still the yellow one,
+		   and the pie, the grid stripes and the network still agree with each
+		   other. Hue is the recognition; lightness and chroma are not, so those
+		   move - but only so far. An earlier cut of this generator held the hues
+		   and let lightness float, and turned #a8454d, a dark red, into a pale
+		   pink at the same angle. Same hue is not the same colour. Each of the
+		   seven now stays within 0.075 of the lightness it had.
 
-		   Their lightness moved too, and had to: #FF2D55 sat at L=0.650 and
-		   #C644FC at L=0.648, which is the lane the database badges occupy.
+		   Indices 7-35 are Reactome's, and the four in OTHER_COLORS below are cut
+		   from the same construction: every value here is chosen farthest-point
+		   first out of the OKLCH colours that render inside sRGB, sit between
+		   1.60:1 and 7.95:1 against the white page, hold chroma between 0.070 and
+		   0.131, and clear all four database badges by 0.121 in OKLab.
 
-		   Indices 7-35 are Reactome's and are new. The old tail was not a
-		   categorical palette, it was an accumulation, and it failed the one
-		   thing a category colour has to do - be visible. Measured as contrast
-		   against the white page it ran from 1.07:1 (#ffff00) to 10.34:1
-		   (#50394c): eight of the twenty-nine were effectively white discs
-		   (#ffef96 at 1.16, #deeaee at 1.23, #e3eaa7 at 1.27) and five were
-		   near-black. Since the same value paints the legend chip, the pie
-		   slice and the network node, an invisible chip meant an invisible
-		   slice - on Reactome, "Immune System" and "Hemostasis" simply had no
-		   colour. Two entries (#b9936c / #c1946a) were also near-duplicates,
-		   0.014 apart in OKLab.
+		   That last constraint is what this generation changed, and it is worth
+		   being precise about. Until now the badges sat together at one lightness,
+		   L=0.645, and this palette was drawn from two bands either side of them,
+		   L<=0.525 and L>=0.765. The 0.121 gap was a consequence of that geometry:
+		   lightness is OKLab's first coordinate, so two bands and a lane between
+		   them put a floor under the distance whatever hues the two ended up
+		   wearing. It cost the badges their brand colours. KEGG's yellow is only
+		   yellow at high lightness - at 0.645 the most saturated yellow sRGB holds
+		   is a mustard - and Reactome's blue and OmniPath's teal are nineteen
+		   degrees apart, so at a shared lightness they collapsed to 0.044 and one
+		   of them had to be pushed off brand.
 
-		   Those twenty-nine are chosen farthest-point-first out of every OKLCH
-		   colour that clears the badges, clears the seven above and renders
-		   inside sRGB, drawn from lightnesses 0.435-0.525 and 0.765-0.835.
+		   So the badges now sit at their own lightnesses and the exclusion is four
+		   points, not two bands. Four spheres of radius 0.121 remove far less of
+		   the space than two banned bands did, which is why this palette is not
+		   merely as good as the one it replaces but measurably better: the closest
+		   pair anywhere is 0.080, against 0.055 before, and the mid-lightness
+		   range the badges used to fence off is open again.
 
-		   What has to hold is the distance between ANY two of them, not between
-		   neighbours in this array: the legend renders a tree, parents with
-		   their sub-classifications nested underneath, and which
-		   classifications a job has varies, so this order is not the order
-		   anyone reads. The closest pair anywhere in the palette is 0.055,
-		   against the old 0.014; every entry lands between 1.60:1 and 8.17:1
-		   against the page; and contrastingInk() still picks each letter's ink,
-		   so every badge keeps its AA pair.
-
-		   Those band positions are not free parameters. The database badges in
-		   the summary card sit at L=0.645, between them, and the gap is what
-		   keeps a source from being confused with a category; see DB_COLORS
-		   below. Moving a band toward 0.645 closes that gap. */
-		var colors = ["#2f61a7", "#8dcd92", "#a8454d", "#e3c776", "#73c6ef", "#7b4993", "#e7a262",
-					  "#007b72", "#ffb1b2", "#00558a", "#f8ba8b", "#005e57", "#f2b1df", "#4a5900", "#d4bbfd", "#006b3d", "#aec9ff", "#6e5600", "#77dbe7", "#913546", "#88ddbd", "#86386d",
-					  "#b5d694", "#584b9a", "#acbc69", "#00647a", "#dc98d2", "#5f6900", "#b4a6f3", "#3a7c34", "#86b4f8", "#a44e26", "#5bc9ad", "#964b85", "#846600", "#5d60b0"];
+		   What has to hold is the distance between ANY two of these, not between
+		   neighbours in this array: the legend renders a tree, parents with their
+		   sub-classifications nested underneath, and which classifications a job
+		   has varies, so this order is not the order anyone reads.
+		   contrastingInk() still picks each letter's ink, and the worst badge in
+		   the file keeps its letter at 4.88:1. */
+		var colors = ["#1e5099", "#8cde95", "#8d3239", "#c7b784", "#35b0e6", "#8e57a5", "#de9046",
+					  "#fa9acf", "#8c6d08", "#37ac78", "#a78ae3", "#3982c9", "#febdb0", "#694276", "#96911a", "#6c4c09", "#935e64", "#4c8939", "#0ac2c6", "#fb908a", "#589ba5", "#c797b4",
+					  "#8bc068", "#b16db7", "#9f4b0b", "#5861a3", "#b6770b", "#94a7d5", "#fba866", "#596a24", "#739269", "#6a93e5", "#7cb398", "#e7bdfd", "#ad9365", "#8274cc"];
 		var pos = ["cellular_processes", "environmental_information_processing", "genetic_information_processing", "human_diseases", "metabolism", "organismal_systems", "overview",
 				  // Added Reactome classification
 				  "cell_cycle", "cell-cell_communication", "cellular_responses_to_external_stimuli", "chromatin_organization", "circadian_clock", "developmental_biology",
@@ -1420,56 +1418,46 @@ function PA_Step3JobView() {
 					new Odometer({el: $("#significantPathwaysTag")[0],value: 0});
 					// SUMMARY PANEL PER DATABASE
 					if (me.getModel().getDatabases().length > 1) {
-						/* A database is a source, not a category, and it was wearing
-						   the classification palette: this list used to be the first
-						   six entries of getClassificationColor()'s array, so on the
-						   very same screen the KEGG badge and the "Cellular Processes"
-						   badge were both #007AFF, OmniPath and "Environmental
-						   Information Processing" both #4CD964, Reactome and "Genetic
-						   Information Processing" both #FF2D55. Two taxonomies, one
-						   set of colours, four hundred pixels apart - and the three
-						   database discs sit alone in a white summary card with
-						   nothing to carry that much saturation, which is why they
-						   read as shouting.
+						/* A database is a source, not a category, and it used to wear the
+						   classification palette: this list was once the first six entries of
+						   getClassificationColor()'s array, so on the very same screen the KEGG
+						   badge and the "Cellular Processes" badge were both #007AFF, OmniPath
+						   and "Environmental Information Processing" both #4CD964.
 
-						   The hue now follows the database rather than its position in
-						   the list: KEGG yellow, Reactome blue, OmniPath green, which
-						   is how each of them is identified everywhere else. Under the
-						   old scheme KEGG was blue for no better reason than being
-						   index 0. MapMan takes the one remaining hue - it has to be
-						   told apart from the other three, and that is the only claim
+						   These are the databases' own colours: KEGG's yellow, OmniPath's teal,
+						   Reactome's blue, as each of them is identified everywhere else.
+						   Three are the brand value exactly. Reactome is the one that moves,
+						   and only in chroma - its #B6DEEA is at 0.045, and a 24px disc that
+						   desaturated reads as grey rather than as blue, so it is lifted to
+						   0.066 and keeps the pale character (0.042 away in OKLab). MapMan
+						   takes a hue none of the other three claims; that is the only claim
 						   being made about it.
 
-						   Hue cannot also be what separates a source from a category,
-						   because both systems now use the whole circle: there is no
-						   arrangement of four database colours and twenty-nine category
-						   colours in which every pair is distinct, and picking brand
-						   hues guarantees a gold badge shares a hue with some gold
-						   category. Lightness does the separating instead. These four
-						   sit at OKLCH L=0.645, and getClassificationColor()'s rebuilt
-						   tail is generated in two bands deliberately placed either
-						   side of them, at L<=0.525 and L>=0.775. Lightness is OKLab's
-						   first coordinate, so that gap is a floor on the distance
-						   whatever hues the two end up wearing: no category comes
-						   closer than 0.121, against 0.021 when the databases sat
-						   inside the palette's own bands.
+						   They no longer share a lightness, and that is deliberate rather than
+						   careless. Yellow has no dark form - at the L=0.645 these four used to
+						   share, the most saturated yellow in sRGB is a mustard 0.226 from
+						   KEGG's own colour - and Reactome's blue and OmniPath's teal are
+						   nineteen degrees apart in hue, which at one lightness put them 0.044
+						   from each other. Their brand lightnesses, 0.840 and 0.530, are what
+						   makes both hues usable at once: 0.312 apart.
 
-						   The KEGG seven used to be the exception, because they were
-						   fixed and could not be moved out of the way; softening them
-						   moved them into the same construction as everything else, so
-						   the floor is now uniform. No classification of any database
-						   comes within 0.121 of any badge.
+						   Hue cannot be what separates a source from a category either, because
+						   both systems use the whole circle. The separation is asserted directly
+						   instead: every one of the 40 classification colours is generated to
+						   clear all four of these by 0.121 in OKLab, and the palette test holds
+						   that floor pair by pair. Four excluded points cost the classifications
+						   less than the two banned lightness bands they replace, so the palette
+						   got better in the same move: closest pair 0.080, against 0.055.
 
-						   Keyed by name rather than by position. The old lookup was
-						   DB_COLORS[i] over whatever order the model happened to
-						   return, so Reactome was red in a three-database job and
-						   green in a two-database one; a source's identity must not
-						   move between jobs. Anything unlisted falls back to the
-						   classification palette, which is what this line did before. */
+						   Keyed by name rather than by position. The old lookup was DB_COLORS[i]
+						   over whatever order the model happened to return, so Reactome was red
+						   in a three-database job and green in a two-database one; a source's
+						   identity must not move between jobs. Anything unlisted falls back to
+						   the classification palette, which is what this line did before. */
 						var DB_COLORS = {
-							"KEGG":     "#ab8a00",
-							"Reactome": "#6a89e0",
-							"OmniPath": "#41a563",
+							"KEGG":     "#fcce00",
+							"Reactome": "#9ad5e9",
+							"OmniPath": "#027b7f",
 							"MapMan":   "#d3686e"
 						};
 						// The two count cells must stay the sole content of their id'd
@@ -1557,31 +1545,28 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 	this.database = db;
 	this.dbid = this.database.replace(' ', '__');
 	this.highcharts = null;
-	/* Handed to getClassificationColor() for classifications the name list
-	   does not cover - which on OmniPath is most of them. Three of the four
-	   old values were near-white (#E0F8D8 at 1.13:1 against the page,
-	   #FFD3E0 at 1.34, #55EFCB at 1.44), so "Cell cycle, death and
-	   autophagy" and "Immune signalling" drew blank discs and blank pie
-	   slices.
+	/* Handed to getClassificationColor() for classifications the name list does
+	   not cover - which on OmniPath is most of them. Three of the four original
+	   values were near-white (#E0F8D8 at 1.13:1 against the page, #FFD3E0 at
+	   1.34, #55EFCB at 1.44), so "Cell cycle, death and autophagy" and "Immune
+	   signalling" drew blank discs and blank pie slices.
 
-	   These four have to clear two different things, and getting either wrong
-	   is visible on the page. They must clear the database badges, which sit
-	   at OKLCH L=0.645 - a first attempt put a green 0.028 from OmniPath's
-	   own badge, the very collision this change exists to remove. And they
-	   must clear all 36 palette entries, because a classification that takes
-	   one of these sits in the same legend as classifications that took a
-	   palette colour by name: drawing these FROM the palette instead, which
-	   was the second attempt, put "Drug ADME" and "Cell-Cell communication"
-	   on the same hex in the Reactome legend.
+	   These four are cut from the same generation as the 36 above and satisfy
+	   the same constraints - they clear every database badge by 0.121 and every
+	   palette entry by 0.080 - because a classification that takes one of these
+	   sits in the same legend as classifications that took a palette colour by
+	   name. Drawing them FROM the palette instead, which was an early attempt,
+	   put "Drug ADME" and "Cell-Cell communication" on the same hex in the
+	   Reactome legend.
 
-	   So they are their own colours, chosen from the same safe zones the
-	   palette is drawn from (L <= 0.525 or L >= 0.765, which is what staying
-	   0.12 clear of the databases in OKLab's first coordinate means) but far
-	   enough from all thirty-six to never double one. That leaves them 0.055
-	   from the nearest palette entry, 0.121 from the nearest badge, and 0.221
-	   apart from each other - which matters, because they are handed out
-	   together to consecutive rows of one legend. */
-	this.OTHER_COLORS = ["#794100", "#0073a2", "#f19690", "#49c7d3"];
+	   One thing is asked of these four that is not asked of the other 36:
+	   `otherColors.shift()` hands them out in order to CONSECUTIVE rows of one
+	   legend, so they must be far from each other and not merely far from
+	   everything. They are the four-subset of the generated tail with the
+	   largest minimum pairwise distance, 0.259 apart. A generation that simply
+	   took the last four of the farthest-point sequence left two mauves 0.083
+	   apart, side by side in the same list. */
+	this.OTHER_COLORS = ["#275d02", "#bda7ff", "#954074", "#bba737"];
 
 	/*********************************************************************
 	* OTHER FUNCTIONS
@@ -1675,7 +1660,17 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 		/**********************************************************/
 		/* STEP 3.1 INITIALIZE VARIABLES                          */
 		/**********************************************************/
-		OTHER_COLORS = ["#794100", "#0073a2", "#f19690", "#49c7d3"];
+		/* Reset the shift-cursor: the pie above has already consumed some of these,
+		   and the selector panel below must start again from the first fallback so a
+		   classification gets the same colour in the legend as it got in the wedge.
+
+		   This line used to restate the four values as a literal. That was only ever
+		   invisible because the literal happened to equal me.OTHER_COLORS - the pie
+		   (fed from the copy taken at the top of updateObserver) and this panel were
+		   reading two different lists that happened to agree. Editing the palette in
+		   one place would have split them, and a wedge and its own legend chip would
+		   have drawn in different colours. Copied from the one source instead. */
+		OTHER_COLORS = $.extend(true, [], me.OTHER_COLORS);
 		var htmlContent = "", mainClassificationHTMLcode, secClassificationHTMLcode,
 		pathClassificationHTMLcode, color, pathwayID, temporalCodeTable, namesAux, posAux,
 		isCustomMainClass, isHiddenMainClass, isCustomSecClass, isHiddenSecClass;
@@ -1838,6 +1833,15 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 		*/
 	this.applyVisualSettings =  function(updateSettings=true) {
 		var me = this;
+		/* One working copy per run, shared by every classification in the loop below.
+		   getClassificationColor() takes its fallback with otherColors.shift(), so
+		   passing me.OTHER_COLORS itself - which is what this did - drained the
+		   instance array permanently: after four unnamed classifications the list was
+		   empty for the rest of the session and every later one fell through to the
+		   name hash, so a pie redrawn after a filter change came back in different
+		   colours. Copying inside the loop instead would be the opposite bug, handing
+		   every classification the same first colour. */
+		var otherColors = $.extend(true, [], me.OTHER_COLORS);
 
 		/********************************************************/
 		/* STEP 1. UPDATE THE pathways Visibility               */
@@ -1885,7 +1889,7 @@ function PA_Step3PathwayClassificationView(db = "KEGG") {
 					mainClassifications.push({
 						name: mainClassificationInstance.name,
 						y: (mainVisiblePathways/pathwaysVisibility.length) * 100,
-						color: me.getParent().getClassificationColor(classificationID, me.OTHER_COLORS),
+						color: me.getParent().getClassificationColor(classificationID, otherColors),
 						drilldown: classificationID
 					});
 				}

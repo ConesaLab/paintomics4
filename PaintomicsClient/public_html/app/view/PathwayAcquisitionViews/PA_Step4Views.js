@@ -4110,7 +4110,7 @@ function PA_Step4GlobalHeatmapView() {
 				}
 			},
 			previousWidth: 400, width: 400, minWidth: 400, html:
-			'<div class="lateralOptionsPanel-header" data-guides="ignore" style="background: #2A8368;">' +
+			'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 			'  <div class="lateralOptionsPanel-toolbar">' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="hideHeatmapPanelButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="configureHeatmapButton" title="Configure heatmap"><i class="fa fa-cogs"></i></a>' +
@@ -4811,7 +4811,7 @@ function PA_Step4DetailsView() {
 			},
 			items: [{
 				xtype: 'box', html:
-				'<div class="lateralOptionsPanel-header" data-guides="ignore" style="background: #2A8368;">' +
+				'<div class="lateralOptionsPanel-header" data-guides="ignore">' +
 				'  <div class="lateralOptionsPanel-toolbar">' +
 				'    <a class="toolbarOption btn-secondary helpTip" id="hideFeatureSetButton" title="Hide this panel"><i class="fa fa-times"></i></a>' +
 				'    <a class="toolbarOption btn-secondary helpTip" id="expandFeatureSetButton" title="Expand this panel"><i class="fa fa-expand"></i></a>' +

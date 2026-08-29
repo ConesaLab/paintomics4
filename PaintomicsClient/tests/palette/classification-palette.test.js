@@ -190,18 +190,22 @@ test("a Reactome classification clears the KEGG seven it shares a legend with", 
     }
 });
 
-test("nothing in the palette is louder than the badges", () => {
-    /* The KEGG seven were an iOS system palette at chroma up to 0.265, against
-       0.135 for the badges - six saturated discs in a quiet white card, which
-       is the complaint this whole change started from. Nothing here may exceed
-       the badges again. */
+test("nothing in the palette is louder than 0.131 chroma", () => {
+    /* The KEGG seven were once an iOS system palette at chroma up to 0.265 -
+       six saturated discs in a quiet white card, which is the complaint this
+       whole line of work started from.
+
+       The ceiling is a literal on purpose. It used to be derived as "no louder
+       than the loudest database badge", which worked only while the badges were
+       a deliberately quiet family. They are brand colours now, and KEGG's is at
+       chroma 0.177, so a derived ceiling would have quietly risen by a third and
+       let the categories get louder than the palette that was just calmed. A
+       ceiling that moves when something else moves is not a ceiling. */
     const chroma = hex => { const [, a, b] = oklab(hex); return Math.hypot(a, b); };
-    const loudestBadge = Math.max(...DATABASE.map(chroma));
     for (const fill of CLASSIFICATION.concat(OTHER)) {
         assert.ok(
-            chroma(fill) <= loudestBadge + 0.002,
-            fill + " is at chroma " + chroma(fill).toFixed(3) +
-            ", past the badges' " + loudestBadge.toFixed(3)
+            chroma(fill) <= 0.131,
+            fill + " is at chroma " + chroma(fill).toFixed(3) + ", past the palette's 0.131"
         );
     }
 });
@@ -237,34 +241,100 @@ test("a database badge is not wearing a classification colour", () => {
             !CLASSIFICATION.includes(db),
             db + " paints both a database and a pathway classification"
         );
-        /* Not merely "not identical". Both systems now use the whole hue
-           circle - KEGG's database gold shares a hue with some gold category,
+        /* Not merely "not identical". Both systems use the whole hue circle -
+           KEGG's database yellow shares a hue with some yellow category,
            necessarily - so hue cannot be what separates them and the distance
            has to be asserted rather than assumed.
 
-           One floor for the whole palette. The KEGG seven used to need a
-           looser one because they were fixed and could not be moved out of the
-           badges' way; softening them put them in the same construction as
-           everything else, so every classification now clears every badge by
-           the same structural margin. */
+           This assertion used to be a consequence of the geometry rather than a
+           check on it: the badges sat together at L=0.645 and the palette was
+           drawn from two bands either side of them, so the gap fell out of
+           OKLab's first coordinate for free. The badges wear their brand
+           lightnesses now and there are no bands, so nothing enforces this
+           except this line and the generator that satisfies it. It is the one
+           assertion in this file that a future palette cannot be regenerated
+           without. */
         for (const cls of CLASSIFICATION.concat(OTHER)) {
             assert.ok(
                 distance(db, cls) > 0.12,
                 db + " is only " + distance(db, cls).toFixed(4) + " from " + cls +
-                " - the lightness bands either side of the databases have closed up"
+                " - a source badge and a category badge on one screen in one colour"
             );
         }
     }
 });
 
-test("the databases are one quiet family, not six competing ones", () => {
-    /* Sources label the science, they are not the science. The databases sit
-       within a narrow lightness band so none of them outranks another, and all
-       of them are softer than the classification palette they used to borrow. */
-    const seen = DATABASE.map(d => contrast(d, "#ffffff"));
+test("each database badge is its own colour, not a colour near it", () => {
+    /* This replaces an assertion that the four badges sat within a narrow
+       lightness band. That band was real, and it was what made the badges
+       recognisably one family - but it also made them impossible to paint in
+       the databases' own colours, because yellow has no dark form and the
+       Reactome/OmniPath pair are nineteen degrees apart in hue and so collapse
+       to 0.044 at any shared lightness. The badges are brand-anchored now and
+       deliberately span L=0.530 to L=0.866; "one quiet family" is no longer a
+       property this file should be asserting.
+
+       What must still hold is that the four are the colours the databases
+       actually use. Pinned to the references so a later edit that drifts one
+       back toward the palette fails here rather than on the page. */
+    const BRAND = {
+        "#fcce00": "KEGG",       // brand value, exactly
+        "#027b7f": "OmniPath",   // brand value, exactly
+        "#9ad5e9": "Reactome",   // #b6deea lifted from chroma 0.045 to 0.066 - see below
+        "#d3686e": "MapMan"      // the one hue the other three do not claim
+    };
+    for (const db of DATABASE) {
+        assert.ok(BRAND[db], db + " is not one of the four database colours");
+    }
+    assert.strictEqual(DATABASE.length, Object.keys(BRAND).length);
+
+    /* Reactome is the only one that is not its brand hex, and the amount it
+       moved is the whole argument for moving it: #b6deea is at chroma 0.045,
+       and a 24px disc that desaturated reads grey rather than blue. Held to a
+       small correction so "similar to the brand" stays checkable. */
     assert.ok(
-        Math.max(...seen) - Math.min(...seen) < 1.0,
-        "database badges differ in weight: " + seen.map(v => v.toFixed(2)).join(", ")
+        distance("#9ad5e9", "#b6deea") < 0.06,
+        "the Reactome badge has drifted away from its brand reference"
+    );
+});
+
+test("two database badges are told apart from each other", () => {
+    /* They no longer share a lightness, so the thing that used to keep them
+       distinct - four hues at one L - is gone. Asserted directly instead. The
+       tightest pair is KEGG against Reactome at 0.226. */
+    for (let i = 0; i < DATABASE.length; i++) {
+        for (let j = i + 1; j < DATABASE.length; j++) {
+            const d = distance(DATABASE[i], DATABASE[j]);
+            assert.ok(
+                d > 0.15,
+                DATABASE[i] + " and " + DATABASE[j] + " are " + d.toFixed(4) + " apart"
+            );
+        }
+    }
+});
+
+test("the fallback list is read from one place, not restated", () => {
+    /* Two ways this file's colours can be correct and the page still wrong,
+       both found while regenerating the palette and both invisible until the
+       values changed:
+
+       The classification selector panel used to reset its shift-cursor by
+       restating the four fallbacks as a literal, while the pie above it read a
+       copy of me.OTHER_COLORS. Identical lists, so nothing showed - until one
+       of them was edited, at which point a pie wedge and its own legend chip
+       would have drawn in different colours.
+
+       And applyVisualSettings() passed me.OTHER_COLORS itself into a function
+       that takes its fallback with shift(), draining the instance array for the
+       rest of the session. */
+    const literals = code.match(/OTHER_COLORS\s*=\s*\[[^\]]*\]/g) || [];
+    assert.strictEqual(
+        literals.length, 1,
+        "OTHER_COLORS is written as a literal in " + literals.length + " places: " + literals.join(" | ")
+    );
+    assert.ok(
+        !/getClassificationColor\([^,)]*,\s*me\.OTHER_COLORS\s*\)/.test(code),
+        "a caller hands getClassificationColor() the instance array, which it shifts empty"
     );
 });
 
