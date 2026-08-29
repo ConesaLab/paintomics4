@@ -4022,10 +4022,28 @@ div.contentbox li {
 i.classificationNameBox {
 	margin-right: 10px;
 	border-radius: 50%;
-	/* 20px, the content box inside the 2px borders (24px border-box). At
-	   24px the line box overran the circle and the letter sat 2px low. */
-	line-height: 20px;
-	display: inline-block;
+	/* Centred by the box, not by a line-height that has to guess the box.
+
+	   This badge is 24px with a 2px border, and ExtJS puts `box-sizing:
+	   border-box` on everything (`.x-border-box *`, ext-theme-neptune-all.css),
+	   so its content box is 20px tall - not the 24px the `line-height: 24px`
+	   here was written against. A 24px line box in a 20px content box overflows
+	   downward, and the letter rendered 2.01px below the centre of its own
+	   disc: measured on the Step 3 summary card, not inferred. It read as a
+	   badge that had been nudged, which is the sort of thing that looks like
+	   sloppiness rather than a bug and so never gets reported.
+
+	   line-height cannot be the fix either - it would have to be re-derived
+	   every time the size or the border changes, and it is overridden inline in
+	   one caller already (the Highcharts legend formatter sets 20px). Flex
+	   centring does not care: the glyph is centred in whatever content box the
+	   border leaves behind, at any size, with any border, in any font. What is
+	   left is the ~0.5px by which a capital's ink sits above its line box,
+	   which is optical centring working correctly rather than a residue. */
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 1;
 	border: 2px solid;
 	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
 	font-style: normal;
