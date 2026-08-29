@@ -6084,7 +6084,14 @@ function PA_Step3MetaboliteView() {
 
 		classActivity = (typeof this.model.getClassActivity === "function") ? this.model.getClassActivity() : null;
 		if (classActivity && !(classActivity.levels && classActivity.levels["2"])) classActivity = null;
-		ladderState = {level: 2, sort: "effect", hideSmall: false, open: {}, condition: 0};
+		/* Permutation rows open ordered by effect: when most of a targeted
+		   panel moves every self-contained p is small and the mean F is what
+		   separates classes. Binomial rows open by p, as the ranking always
+		   did: by share, a one-member class at 1/1 outranks 23/30. */
+		ladderState = {
+			level: 2, sort: (classActivity && classActivity.test === "permutation") ? "effect" : "p",
+			hideSmall: false, open: {}, condition: 0
+		};
 	}
 
 
@@ -6140,16 +6147,9 @@ function PA_Step3MetaboliteView() {
 
 		var omicName = compoundOmicName;
 		var ladderOpen = (typeof classActivity !== "undefined" && classActivity);
-		/* With the ladder, a row expands in place into its member table; the
-		   panel that used to open down here repeated that table beside a
-		   heatmap of the same values, and was asked to go. The class map
-		   without a ladder keeps it: there, this is the only detail. */
-		if (ladderOpen) {
-			host.innerHTML = "";
-			host.classList.remove("paIsOpen");
-			classDetailKey = null;
-			return;
-		}
+		/* The class activity rows carry the level's own members (dataFinal
+		   is keyed by level-2 class NAME and has nothing for a level-1 or
+		   level-3 row). */
 		var ids = ladderOpen ? ladderIDsFor(row.key) : ((dataFinal[row.name] || {}).ID || []);
 		var values = [];
 		ids.forEach(function (id) {
@@ -6169,7 +6169,7 @@ function PA_Step3MetaboliteView() {
 		var head = '<div class="paClassDetailHead">'
 			+ '<h4>' + classMapEscape(row.name) + '</h4>'
 			+ '<span class="paClassDetailStats">' + ((typeof classActivity !== "undefined" && classActivity && classActivity.test === "permutation" && typeof row.stat === "number")
-				? 'mean F ' + row.stat.toFixed(1) + ' &middot; ' + row.k + ' of ' + row.n + ' in your relevant list'
+				? 'mean F ' + row.stat.toFixed(1) + ' &middot; ' + row.k + ' of ' + row.n + ' respond on their own'
 				: row.k + ' of ' + row.n + ' measured compounds relevant')
 			+ ' &middot; p ' + classMapFormatP(row.p) + ' &middot; FDR ' + classMapFormatP(row.fdr) + '</span>'
 			+ '<span class="paClassDetailTools">'
@@ -6483,14 +6483,17 @@ function PA_Step3MetaboliteView() {
 			if (readout) readout.innerHTML = "";
 			return;
 		}
-		var row = (classMapRowsCache || []).filter(function (r) { return r.name === className; })[0];
+		var row = (classMapRowsCache || []).filter(function (r) { return (r.key || r.name) === className; })[0];
 		if (!row || !readout) return;
+		var perm = (typeof classActivity !== "undefined" && classActivity && classActivity.test === "permutation");
 		readout.innerHTML =
 			'<b>' + classMapEscape(row.name) + '</b> <span class="paClassMapMuted">'
 			+ classMapEscape(row.parent) + '</span> &nbsp; '
-			+ '<b>' + row.k + '</b>/' + row.n + ' relevant (' + Math.round(row.proportion * 100) + '%)'
+			+ (perm
+				? 'mean F <b>' + Number(row.value).toFixed(1) + '</b> &nbsp; <b>' + row.k + '</b>/' + row.n + ' respond'
+				: '<b>' + row.k + '</b>/' + row.n + ' relevant (' + Math.round(row.proportion * 100) + '%)')
 			+ ' &nbsp; p ' + classMapFormatP(row.p) + ' &nbsp; FDR BH ' + classMapFormatP(row.fdr)
-			+ (classMapHasDirection
+			+ ((perm || classMapHasDirection) && (row.up + row.down) > 0
 				? ' &nbsp; <span class="paDirUp">▲' + row.up + '</span> <span class="paDirDown">▼' + row.down + '</span>'
 				: "")
 			+ ' &nbsp; <span class="paClassMapMuted">click to open its compounds below</span>';
@@ -6516,44 +6519,98 @@ function PA_Step3MetaboliteView() {
 	this.drawClassMap = function () {
 		var host = document.getElementById("classActivityMap");
 		if (!host) return;
+		host.innerHTML = "";
+
 		/* typeof: test_class_ranking_keeps_every_class_in_its_row runs this
 		   function extracted into node, where the view's closure variables are
 		   only the ones it stubs. */
-		if (typeof classActivity !== "undefined" && classActivity) { me.drawClassLadder(host); return; }
-		host.innerHTML = "";
+		var ladder = (typeof classActivity !== "undefined" && classActivity) ? classActivity : null;
+		var perm = !!ladder && ladderIsPermutation();
+		var rows, all, p0 = null, userSet = false, warnings = "";
 
-		var rows = me.buildClassMapRows(classMapCondition);
+		if (ladder) {
+			/* The class activity payload: one row per class at the BRITE level
+			   the toolbar chose, ordered as the toolbar says. Drawn with the
+			   same lollipop and pie as the ranking below, so the reader sees
+			   one chart whichever test ran; only the axis changes. */
+			all = ((ladder.levels || {})[String(ladderState.level)] || []).map(ladderRowOf).map(classMapRowFromLadder);
+			rows = ladderRows().map(classMapRowFromLadder);
+			classMapRowsCache = all;
+			me.renderLadderControls(perm);
+			if (!perm) {
+				var nullP0 = (ladder.nullProportion || [])[ladderState.condition];
+				userSet = ladder.nullKind === "alpha";
+				p0 = (typeof nullP0 === "number") ? nullP0 : (userSet ? Number(ladder.alpha) : null);
+				if (typeof p0 !== "number" || isNaN(p0)) p0 = null;
+			}
+			warnings = (ladder.warnings || []).map(function (w) {
+				return '<p class="paLadderWarn">' + classMapEscape(w) + '</p>';
+			}).join("");
+		} else {
+			rows = me.buildClassMapRows(classMapCondition);
+			/* Ranked by evidence -- raw p first, then the proportion, then n --
+			   and the rank IS the layout: one row per class, top to bottom. A
+			   class can therefore never be drawn on top of another or outside
+			   the chart. The previous scatter placed classes by BRITE parent
+			   along x and by -log10 FDR along y, then nudged siblings sideways
+			   by +-0.27, +-0.54 band widths to keep them apart. A job stored
+			   before the parents were sent (every class "Unclassified") put all
+			   eight in ONE band: the fourth nudge is 0.54 of the band, past its
+			   edge, and that mark was drawn half outside the plot. And with
+			   every FDR at 1.0 all eight sat on the x axis, on top of the parent
+			   label, saying nothing. Rows have no such failure mode, and the
+			   proportion axis still separates classes when the test does not. */
+			rows.sort(classMapRank);
+			/* The reading on the axis is the proportion itself. */
+			rows.forEach(function (r) { r.value = r.proportion; });
+			all = rows;
+			classMapRowsCache = rows;
+			var meta = classMapMeta || {};
+			var nullList = meta.nullProportion || [];
+			p0 = (typeof nullList[classMapCondition] === "number") ? nullList[classMapCondition] : null;
+			userSet = (meta.thresholdSource === "user");
+			me.renderClassMapControls();
+		}
+
 		if (!rows.length) {
-			classMapRowsCache = [];
-			host.innerHTML = '<p class="paEmptyNote">No metabolite class in this job carries measured compounds.</p>';
+			host.innerHTML = warnings + '<p class="paEmptyNote">' + (ladder
+				? 'Every class at this level has fewer than 3 members.'
+				: 'No metabolite class in this job carries measured compounds.') + '</p>';
+			if (!ladder) classMapRowsCache = [];
 			me.renderClassDetail();
 			return;
 		}
 
-		/* Ranked by evidence -- raw p first, then the proportion, then n --
-		   and the rank IS the layout: one row per class, top to bottom. A
-		   class can therefore never be drawn on top of another or outside
-		   the chart. The previous scatter placed classes by BRITE parent
-		   along x and by -log10 FDR along y, then nudged siblings sideways
-		   by +-0.27, +-0.54 band widths to keep them apart. A job stored
-		   before the parents were sent (every class "Unclassified") put all
-		   eight in ONE band: the fourth nudge is 0.54 of the band, past its
-		   edge, and that mark was drawn half outside the plot. And with
-		   every FDR at 1.0 all eight sat on the x axis, on top of the parent
-		   label, saying nothing. Rows have no such failure mode, and the
-		   proportion axis still separates classes when the test does not. */
-		rows.sort(classMapRank);
-		classMapRowsCache = rows;
-
-		var meta = classMapMeta || {};
-		var nullList = meta.nullProportion || [];
-		var p0 = (typeof nullList[classMapCondition] === "number") ? nullList[classMapCondition] : null;
-		var userSet = (meta.thresholdSource === "user");
+		/* The axis. Binomial: the share of the class's members in the relevant
+		   list, 0 to 100%, stems growing from p0. Permutation: the class's
+		   mean F on a log axis, stems growing from F = 1 (no effect); the
+		   axis ends at the power of two above the level's largest mean F or
+		   null tick plus 40% headroom, so the scale follows the dataset and
+		   the last label stops short of the next column. */
+		var axis;
+		if (perm) {
+			var largest = 1;
+			all.forEach(function (r) { largest = Math.max(largest, r.value || 0, r.q95 || 0); });
+			LADDER_FMAX = Math.pow(2, Math.ceil(Math.log2(Math.max(largest, 2)))) * 1.4;
+			var fTicks = [];
+			for (var f = LADDER_FMIN; f <= LADDER_FMAX; f *= 2) {
+				fTicks.push({v: f, label: f < 1 ? String(f) : String(Math.round(f))});
+			}
+			axis = {title: "Mean F of the class, log axis", ticks: fTicks, from: 1, fx: ladderFx, edgeEnd: false};
+		} else {
+			axis = {
+				title: ladder ? "Members in the relevant list" : "Relevant compounds in class",
+				ticks: [0, 0.25, 0.5, 0.75, 1].map(function (t) { return {v: t, label: Math.round(t * 100) + "%"}; }),
+				from: p0 === null ? 0 : p0,
+				fx: function (v) { return Math.max(0, Math.min(1, v)); },
+				edgeEnd: true
+			};
+		}
 
 		var width = Math.max(640, host.clientWidth || 640);
 		var pitch = 30;
 		var headH = 40;
-		var footH = (p0 === null) ? 10 : 26;
+		var footH = (p0 === null && !perm) ? 10 : 26;
 		var height = headH + rows.length * pitch + footH;
 		var colName = Math.min(250, Math.max(170, Math.round(width * 0.25)));
 		var colMark = 46;
@@ -6563,8 +6620,10 @@ function PA_Step3MetaboliteView() {
 		var trackW = Math.max(120, axisR - axisL);
 		var nMax = rows.reduce(function (t, r) { return Math.max(t, r.n); }, 1);
 		var nameChars = Math.max(10, Math.floor((colName - 14) / 6.6));
+		var directionKnown = perm || classMapHasDirection;
+		var idOf = function (r) { return r.key || r.name; };
 
-		function xFor(proportion) { return axisL + Math.max(0, Math.min(1, proportion)) * trackW; }
+		function xFor(value) { return axisL + axis.fx(value) * trackW; }
 		function yFor(index) { return headH + (index + 0.5) * pitch; }
 		/* Area is n: r grows with sqrt(n), the biggest class filling its row. */
 		function radiusFor(n) { return Math.max(4, 12 * Math.sqrt(n / nMax)); }
@@ -6573,25 +6632,32 @@ function PA_Step3MetaboliteView() {
 			width: width, height: height, viewBox: "0 0 " + width + " " + height,
 			"class": "paClassMap", role: "img",
 			"aria-label": "Metabolite classes ranked by evidence. Each row is one class: the mark's area is "
-				+ "the number of compounds measured and its filled sweep the share of them that were relevant; "
-				+ "the dot places that share on a 0 to 100 percent axis against the null proportion; the last "
-				+ "column is the BH-adjusted p-value."
+				+ "the number of compounds measured and its filled sweep the share of them that "
+				+ (perm ? "respond on their own; the dot places the class's mean F on a log axis against the null's 95th percentile"
+					: "were relevant; the dot places that share on a 0 to 100 percent axis against the null proportion")
+				+ "; the last column is the BH-adjusted p-value."
 		});
 
-		/* Column headings and the proportion axis. */
+		/* Column headings and the axis. */
 		svg.appendChild(classMapText("Class", colName - 8, 14, "paClassRankHead", {"text-anchor": "end"}));
-		svg.appendChild(classMapText("Relevant compounds in class", axisL, 14, "paClassRankHead"));
+		svg.appendChild(classMapText(axis.title, axisL, 14, "paClassRankHead"));
 		svg.appendChild(classMapText("FDR (BH)", width - 8, 14, "paClassRankHead", {"text-anchor": "end"}));
-		[0, 0.25, 0.5, 0.75, 1].forEach(function (tick) {
-			var x = xFor(tick);
+		axis.ticks.forEach(function (tick, i) {
+			var x = xFor(tick.v);
 			svg.appendChild(classMapEl("line", {
 				x1: x, x2: x, y1: headH - 6, y2: height - footH, "class": "paClassMapGrid"
 			}));
-			svg.appendChild(classMapText(Math.round(tick * 100) + "%", x, headH - 10, "paClassMapTick",
-				{"text-anchor": tick === 0 ? "start" : (tick === 1 ? "end" : "middle")}));
+			var anchor = i === 0 ? "start" : ((axis.edgeEnd && i === axis.ticks.length - 1) ? "end" : "middle");
+			svg.appendChild(classMapText(tick.label, x, headH - 10, "paClassMapTick", {"text-anchor": anchor}));
 		});
 
-		if (p0 !== null) {
+		if (perm) {
+			var ox = xFor(1);
+			svg.appendChild(classMapEl("line", {
+				x1: ox, x2: ox, y1: headH - 6, y2: height - footH + 4, "class": "paClassMapZeroLine"
+			}));
+			svg.appendChild(classMapText("F = 1 · no effect", ox, height - 8, "paClassMapSigLabel", {"text-anchor": "middle"}));
+		} else if (p0 !== null) {
 			var px = xFor(p0);
 			svg.appendChild(classMapEl("line", {
 				x1: px, x2: px, y1: headH - 6, y2: height - footH + 4, "class": "paClassMapSigLine"
@@ -6604,7 +6670,7 @@ function PA_Step3MetaboliteView() {
 
 		rows.forEach(function (row, index) {
 			var cy = yFor(index);
-			var group = classMapEl("g", {"class": "paClassMapMark", "data-class": row.name});
+			var group = classMapEl("g", {"class": "paClassMapMark" + (row.desc ? " paIsDesc" : ""), "data-class": idOf(row)});
 
 			/* The whole row is the target, not just the glyphs. */
 			group.appendChild(classMapEl("rect", {
@@ -6626,7 +6692,7 @@ function PA_Step3MetaboliteView() {
 			if (row.k > 0) {
 				var start = -Math.PI / 2;
 				var sweep = row.proportion * Math.PI * 2;
-				var directional = classMapHasDirection && (row.up + row.down) > 0;
+				var directional = directionKnown && (row.up + row.down) > 0;
 				var upFraction = directional ? row.up / (row.up + row.down) : 0;
 
 				var addWedge = function (from, to, cls) {
@@ -6649,20 +6715,28 @@ function PA_Step3MetaboliteView() {
 				}
 			}
 
-			/* The proportion on its axis: a stem from p0 (or from 0 when no
-			   null was sent) to k/n, and the dot that is the reading. */
-			var dx = xFor(row.proportion);
-			var from = xFor(p0 === null ? 0 : p0);
+			/* The reading on its axis: a stem from the reference (p0, 0 when
+			   no null was sent, F = 1 under the permutation test) to the
+			   value, and the dot that is the reading. */
+			var dx = xFor(row.value);
+			var from = xFor(axis.from);
 			group.appendChild(classMapEl("line", {
 				x1: from, x2: dx, y1: cy, y2: cy,
-				"class": "paClassRankStem" + ((p0 !== null && row.proportion < p0) ? " paClassRankStemBelow" : "")
+				"class": "paClassRankStem" + ((row.value < axis.from) ? " paClassRankStemBelow" : "")
 			}));
+			/* The permutation null is per class: its 95th percentile is a
+			   tick on the row, and a dot past the tick is significant at
+			   about 0.05 before the BH correction. */
+			if (perm && typeof row.q95 === "number") {
+				var qx = xFor(row.q95);
+				group.appendChild(classMapEl("line", {x1: qx, x2: qx, y1: cy - 8, y2: cy + 8, "class": "paClassMapQ95"}));
+			}
 			if (row.significant) {
 				group.appendChild(classMapEl("circle", {cx: dx, cy: cy, r: 9, "class": "paClassMapRing"}));
 			}
 			group.appendChild(classMapEl("circle", {cx: dx, cy: cy, r: 5, "class": "paClassRankDot"}));
 
-			var countText = row.k + "/" + row.n;
+			var countText = perm ? row.value.toFixed(1) : (row.k + "/" + row.n);
 			var countRight = (dx + 14 + countText.length * 6.4) < axisR;
 			group.appendChild(classMapText(countText, countRight ? dx + 12 : dx - 12, cy + 4, "paClassMapCount",
 				{"text-anchor": countRight ? "start" : "end"}));
@@ -6671,51 +6745,86 @@ function PA_Step3MetaboliteView() {
 				"paClassRankFdr" + (row.significant ? " paIsSig" : ""), {"text-anchor": "end"}));
 
 			var tip = row.name + (showParent ? " (" + row.parent + ")" : "")
-				+ "\n" + row.k + " of " + row.n + " measured compounds relevant"
-				+ " = " + (row.proportion * 100).toFixed(0) + "%"
-				+ (p0 === null ? "" : "\nnull p0 = " + p0.toFixed(3))
+				+ (perm
+					? "\nmean F " + row.value.toFixed(2) + (typeof row.q95 === "number" ? "   null 95th percentile " + row.q95.toFixed(2) : "")
+						+ "\n" + row.k + " of " + row.n + " measured compounds respond on their own (BH < " + ladderAlpha() + ")"
+					: "\n" + row.k + " of " + row.n + " measured compounds relevant"
+						+ " = " + (row.proportion * 100).toFixed(0) + "%"
+						+ (p0 === null ? "" : "\nnull p0 = " + p0.toFixed(3)))
 				+ "\np = " + classMapFormatP(row.p)
 				+ "   FDR BH = " + classMapFormatP(row.fdr)
-				+ (classMapHasDirection ? "\ndirection: " + row.up + " up, " + row.down + " down" : "");
+				+ (directionKnown ? "\ndirection: " + row.up + " up, " + row.down + " down" : "")
+				+ (row.desc ? "\nfewer than 3 members: descriptive only" : "");
 			var title = classMapEl("title", {});
 			title.textContent = tip;
 			group.appendChild(title);
 
-			group.addEventListener("mouseenter", function () { me.focusClass(row.name); });
+			group.addEventListener("mouseenter", function () { me.focusClass(idOf(row)); });
 			group.addEventListener("mouseleave", function () { me.focusClass(null); });
-			group.addEventListener("click", function () { me.paintClassCompounds(row.name); });
+			group.addEventListener("click", function () { me.paintClassCompounds(idOf(row)); });
 
 			svg.appendChild(group);
 		});
 
+		if (warnings) host.insertAdjacentHTML("beforeend", warnings);
 		host.appendChild(svg);
 
 		var keys = document.getElementById("classActivityKeys");
+		/* What never reached a class goes under the legend, as a footnote to
+		   the chart rather than a line between the chart and its key. */
+		if (ladder && keys && keys.parentNode) {
+			var stale = keys.parentNode.querySelector(".paLadderExcluded");
+			if (stale) stale.parentNode.removeChild(stale);
+			keys.insertAdjacentHTML("afterend", classMapExcludedHTML(perm));
+		}
 		if (keys) {
 			/* Only the keys this chart actually uses. Direction is dropped when
 			   the omic never crosses zero, and printing its two colours anyway
 			   put swatches in the legend that appear nowhere on the plot. */
-			var items = classMapHasDirection
-				? [['paKeySwatch paKeyUp', 'relevant &amp; increased'],
-				   ['paKeySwatch paKeyDown', 'relevant &amp; decreased']]
-				: [['paKeySwatch paKeyNeutral', 'relevant']];
-			items.push(['paKeySwatch paKeyNull', 'measured, not relevant']);
+			var on = perm ? "responds" : "relevant";
+			var items = directionKnown
+				? [['paKeySwatch paKeyUp', on + ' &amp; increased'],
+				   ['paKeySwatch paKeyDown', on + ' &amp; decreased']]
+				: [['paKeySwatch paKeyNeutral', on]];
+			items.push(['paKeySwatch paKeyNull', 'measured, not ' + (perm ? 'responding' : 'relevant')]);
 			items.push(['paKeyGlyph paKeyArea', 'area = compounds measured', true]);
+			if (perm) items.push(['paKeyGlyph paKeyQ95', 'tick = 95th percentile of the re-labelled null']);
 			items.push(['paKeyGlyph paKeyRing', 'passes FDR 0.05']);
 
 			keys.innerHTML = items.map(function (item) {
 				return '<li' + (item[2] ? ' class="paKeyBreak"' : '') + '>'
 					+ '<span class="' + item[0] + '"></span>' + item[1] + '</li>';
 			}).join("");
-			/* Under the proportion axis, where the marks it describes are. */
+			/* Under the axis, where the marks it describes are. */
 			keys.style.paddingLeft = colName + "px";
 		}
 
-		me.renderClassMapControls();
-
 		var passing = rows.filter(function (r) { return r.significant; }).length;
 		var summary = document.getElementById("classActivityMapSummary");
-		if (summary) {
+		if (summary && ladder) {
+			summary.classList.remove("paIsFocused");
+			/* Caption: which test, against what, and how many pass. */
+			var small = all.filter(function (r) { return r.desc; }).length;
+			var what;
+			if (perm) {
+				var design = ladder.design || {};
+				var factor = (ladder.factors || []).filter(function (f) { return f.id === ladder.factor; })[0];
+				what = '<b>Permutation test on your replicates</b> &middot; ' + (design.samples || "?") + ' samples in '
+					+ (design.conditions || "?") + ' conditions &middot; factor <b>' + classMapEscape((factor && factor.label) || ladder.factor || "")
+					+ '</b>' + ((design.strata || []).length > 1 ? ', stratified by ' + classMapEscape((design.strata || []).slice(0, 3).join(", ")) + ((design.strata || []).length > 3 ? "…" : "") : "")
+					+ ' &middot; ' + (ladder.nPerm || 0).toLocaleString() + ' re-labellings';
+			} else if (userSet) {
+				what = '<b>Binomial on your relevant list</b> against your threshold p<sub>0</sub> = <b>' + Number(ladder.alpha).toFixed(2)
+					+ '</b> <span class="paClassMapMuted">(H<sub>0</sub>: no member of the class changed; valid when the list came from a test at that threshold)</span>';
+			} else {
+				what = '<b>Binomial on your relevant list</b> against the rest of this job, p<sub>0</sub> = <b>'
+					+ (p0 !== null ? p0.toFixed(3) : "?") + '</b> <span class="paClassMapMuted">(H<sub>0</sub>: the class is like the rest of the panel &mdash; a relative question)</span>';
+			}
+			summary.innerHTML = '<span class="paClassMapBase">' + what
+				+ ' &middot; <b>' + passing + '</b> of ' + all.length + ' classes at level ' + ladderState.level + ' pass BH &lt; 0.05'
+				+ (small ? ' &middot; ' + small + ' with fewer than 3 members (descriptive)' : "")
+				+ '</span><span class="paClassMapReadout"></span>';
+		} else if (summary) {
 			summary.classList.remove("paIsFocused");
 			/* The null, in the words of the question it asks, and the counts it
 			   was estimated from. Which of the two hypotheses ran is the whole
@@ -6767,66 +6876,130 @@ function PA_Step3MetaboliteView() {
 		/* The selection survives a redraw (resize, condition change), and the
 		   first draw opens the top-ranked class, so the card is one
 		   instrument from the start rather than a chart with a hidden door. */
-		if (classMapSelected && !rows.some(function (r) { return r.name === classMapSelected; })) {
+		if (classMapSelected && !rows.some(function (r) { return idOf(r) === classMapSelected; })) {
 			classMapSelected = null;
 		}
 		if (!classMapSelected && !classDetailDismissed) {
-			classMapSelected = rows[0].name;
+			classMapSelected = idOf(rows[0]);
 		}
 		me.markSelectedClass();
 		me.renderClassDetail();
 	};
 
-	/* ------------------------------------------------------------------
-	   The class activity ladder: one row per class at the chosen BRITE
-	   level, drawn from the job's classActivity payload. Replaces the
-	   level-2 ranking above whenever the payload exists; jobs stored before
-	   it existed keep the ranking.
-
-	   Reading a row: the bar is the test statistic against its own null --
-	   under the permutation test the class's mean F on a log axis with the
-	   null's 95th percentile as a tick, under the binomial the share of
-	   members in the relevant list against p0 -- the strip is the mean
-	   change of the members per condition, |FC| their mean absolute change,
-	   and the pill the p-value with its BH correction underneath. Rows are
-	   ordered by effect, not by p: when most of a targeted panel moves every
-	   self-contained p is small and the effect is what separates classes.
-	   ------------------------------------------------------------------ */
-	function ladderEscape(value) { return classMapEscape(value); }
-
-	function ladderColor(value, clamp) {
-		var dark = document.documentElement.getAttribute("data-theme") === "dark";
-		var down = [0x0F, 0x59, 0xA9], up = [0xA5, 0x1F, 0x1E], mid = dark ? [0x3A, 0x39, 0x36] : [0xE8, 0xE8, 0xE8];
-		if (value === null || value === undefined || isNaN(value)) return dark ? "#2A3340" : "#EEF1F4";
-		var t = Math.max(-1, Math.min(1, value / clamp));
-		var target = t < 0 ? down : up, w = Math.abs(t);
-		/* OKLab interpolation, the ramp the heatmaps use, so a cell here is the
-		   colour it is on a pathway. */
-		function lin(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
-		function toLab(rgb) {
-			var r = lin(rgb[0]), g = lin(rgb[1]), b = lin(rgb[2]);
-			var l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-			var m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-			var s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-			return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
-				1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
-				0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
-		}
-		function toHex(L, a, b) {
-			var l_ = L + 0.3963377774 * a + 0.2158037573 * b, m_ = L - 0.1055613458 * a - 0.0638541728 * b,
-				s_ = L - 0.0894841775 * a - 1.2914855480 * b;
-			var l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
-			var rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-				-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-				-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s];
-			return "#" + rgb.map(function (c) {
-				c = Math.max(0, Math.min(1, c));
-				return Math.round(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)).toString(16).padStart(2, "0");
-			}).join("");
-		}
-		var A = toLab(mid), B = toLab(target);
-		return toHex(A[0] + (B[0] - A[0]) * w, A[1] + (B[1] - A[1]) * w, A[2] + (B[2] - A[2]) * w);
+	/* A class activity row in the shape the lollipop draws: `value` on the
+	   axis, `k` the members that count (in the relevant list, or responding
+	   on their own under the permutation test), and up/down from the sign of
+	   those members' change. Keyed by the class path, not its name: BRITE
+	   reuses names at level 3 ("Biogenic amines" under Amines and under
+	   Neurotransmitters). */
+	function classMapRowFromLadder(r) {
+		var perm = ladderIsPermutation();
+		var features = (classActivity && classActivity.features) || {};
+		var c = ladderState.condition;
+		var up = 0, down = 0;
+		(r.members || []).forEach(function (m) {
+			var f = features[m] || {};
+			if (!(perm ? f.sig : (f.relevant || [])[c])) return;
+			var mean = null;
+			if (perm) {
+				var eff = (f.eff || []).filter(function (v) { return typeof v === "number" && !isNaN(v); });
+				if (eff.length) mean = eff.reduce(function (s, v) { return s + v; }, 0) / eff.length;
+			} else if (typeof (f.values || [])[c] === "number") {
+				mean = f.values[c];
+			}
+			if (mean === null) return;
+			if (mean >= 0) up++; else down++;
+		});
+		var out = {};
+		for (var p in r) if (Object.prototype.hasOwnProperty.call(r, p)) out[p] = r[p];
+		out.k = perm ? (r.nsig || 0) : (r.k || 0);
+		out.up = up; out.down = down;
+		out.proportion = r.n ? out.k / r.n : 0;
+		out.value = perm ? ((typeof r.stat === "number" && !isNaN(r.stat)) ? r.stat : 0) : out.proportion;
+		out.ID = ladderIDsFor(r.key);
+		return out;
 	}
+
+	/* What never reached a class, under the chart. */
+	function classMapExcludedHTML(perm) {
+		var excluded = classActivity.excluded || {};
+		var features = classActivity.features || {};
+		var unmatched = excluded.unmatched || [], unclassified = excluded.unclassified || [];
+		if (!unmatched.length && !unclassified.length) return "";
+		var li = function (name, key) {
+			var f = key ? features[key] : null;
+			var sig = f && f.sig;
+			return '<li' + (sig ? ' class="paIsSig"' : "") + '>' + classMapEscape(name)
+				+ (f && typeof f.F === "number" ? ' <span class="paClassMapMuted">F ' + f.F.toFixed(1) + '</span>' : "") + '</li>';
+		};
+		return '<details class="paLadderExcluded"><summary data-guides="ignore">' + (unmatched.length + unclassified.length) + ' measured metabolites are in no class'
+			+ ' &mdash; ' + unmatched.length + ' matched no KEGG compound, ' + unclassified.length + ' are not in KEGG BRITE'
+			+ (perm ? '; bold = responds on its own (BH &lt; ' + ladderAlpha() + ')' : "") + '</summary>'
+			+ (unmatched.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">No KEGG match</div><ul data-guides="ignore">' + unmatched.map(function (n) { return li(n, null); }).join("") + '</ul>' : "")
+			+ (unclassified.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">Outside br08001</div><ul data-guides="ignore">' + unclassified.map(function (k) { return li((features[k] || {}).name || k, k); }).join("") + '</ul>' : "")
+			+ '</details>';
+	}
+
+	/* The class activity toolbar: level, order, small classes, and the
+	   condition when the binomial ran per condition. */
+	this.renderLadderControls = function (perm) {
+		var controls = document.getElementById("classActivityMapControls");
+		if (!controls) return;
+		var levelNames = classActivity.levelNames || {"1": "category", "2": "class", "3": "subclass"};
+		var seg = [1, 2, 3].map(function (l) {
+			var count = ((classActivity.levels || {})[String(l)] || []).length;
+			/* One line per button, all the same width (CSS): three different
+			   widths read as three unrelated buttons, not one control. */
+			return '<button type="button" data-level="' + l + '" aria-pressed="' + (l === ladderState.level) + '">'
+				+ '<b>' + l + '</b><small>' + classMapEscape(levelNames[String(l)] || "") + ' · ' + count + '</small></button>';
+		}).join("");
+		var condSel = "";
+		if (!perm && (classActivity.nConditions || 1) > 1) {
+			condSel = '<label class="paClassMapControlLabel" for="classLadderCondition" data-guides="ignore">Condition</label>'
+				+ '<select id="classLadderCondition" class="paClassMapSelect">'
+				+ (classActivity.conditions || []).map(function (name, i) {
+					return '<option value="' + i + '"' + (i === ladderState.condition ? " selected" : "") + '>' + classMapEscape(name) + '</option>';
+				}).join("") + '</select>';
+		}
+		controls.innerHTML = '<div class="paLadderBar">'
+			+ '<span class="paClassMapControlLabel">Level</span><div class="paLadderSeg" id="classLadderLevel">' + seg + '</div>'
+			/* data-guides="ignore" on the mid-row labels: their rail is the
+			   select they name, not the card's. */
+			+ '<label class="paClassMapControlLabel" for="classLadderSort" data-guides="ignore">Order by</label>'
+			+ '<select id="classLadderSort" class="paClassMapSelect">'
+			+ '<option value="effect"' + (ladderState.sort === "effect" ? " selected" : "") + '>' + (perm ? "Effect (mean F)" : "Share in relevant list") + '</option>'
+			+ '<option value="p"' + (ladderState.sort === "p" ? " selected" : "") + '>p-value</option>'
+			+ '<option value="n"' + (ladderState.sort === "n" ? " selected" : "") + '>Class size</option>'
+			+ '<option value="name"' + (ladderState.sort === "name" ? " selected" : "") + '>Name</option></select>'
+			+ condSel
+			+ '<label class="paLadderSwitch" data-guides="ignore"><input type="checkbox" id="classLadderHideSmall"' + (ladderState.hideSmall ? " checked" : "")
+			+ '> Hide classes with fewer than 3 members</label></div>';
+		controls.querySelector("#classLadderLevel").addEventListener("click", function (event) {
+			var button = event.target.closest("button");
+			if (!button) return;
+			ladderState.level = parseInt(button.getAttribute("data-level"), 10) || 2;
+			me.drawClassMap();
+		});
+		controls.querySelector("#classLadderSort").addEventListener("change", function (event) {
+			ladderState.sort = event.target.value; me.drawClassMap();
+		});
+		controls.querySelector("#classLadderHideSmall").addEventListener("change", function (event) {
+			ladderState.hideSmall = event.target.checked; me.drawClassMap();
+		});
+		var condNode = controls.querySelector("#classLadderCondition");
+		if (condNode) condNode.addEventListener("change", function (event) {
+			ladderState.condition = parseInt(event.target.value, 10) || 0; me.drawClassMap();
+		});
+	};
+
+	/* ------------------------------------------------------------------
+	   Class activity rows: read from the job's classActivity payload (one
+	   entry per class at each BRITE level) and drawn by drawClassMap above.
+	   Under the permutation test a class's statistic is its members' mean F
+	   against a re-labelled null, under the binomial the share of members
+	   in the relevant list against p0. Jobs stored before the payload
+	   existed keep the level-2 ranking from dataFinal.
+	   ------------------------------------------------------------------ */
 
 	/* The F axis. FMIN is fixed; FMAX is set per draw from the level's own
 	   values (drawClassMap), so the scale follows the dataset. */
@@ -6834,21 +7007,6 @@ function PA_Step3MetaboliteView() {
 	function ladderFx(f) {
 		return Math.max(0, Math.min(1, Math.log2(Math.max(f, LADDER_FMIN) / LADDER_FMIN) / Math.log2(LADDER_FMAX / LADDER_FMIN)));
 	}
-	function ladderFormatP(p) {
-		if (typeof p !== "number" || isNaN(p)) return "–";
-		if (p < 0.001) return p.toExponential(0).replace("e-", "e−");
-		return p.toFixed(p < 0.1 ? 3 : 2);
-	}
-	function ladderStrip(values, clamp, cls) {
-		var labels = (classActivity && classActivity.conditions) || [];
-		if (!values || !values.length) return '<div class="paLadderStrip ' + (cls || "") + '" style="--pa-strip-n:1"><i></i></div>';
-		return '<div class="paLadderStrip ' + (cls || "") + '" style="--pa-strip-n:' + values.length + '">'
-			+ values.map(function (v, i) {
-				return '<i style="background:' + ladderColor(v, clamp) + '" data-label="' + ladderEscape(labels[i] || ("#" + (i + 1)))
-					+ '" data-v="' + (v === null || v === undefined ? "" : v) + '"></i>';
-			}).join("") + '</div>';
-	}
-
 	function ladderIsPermutation() { return !!(classActivity && classActivity.test === "permutation"); }
 	/* The cut-off behind "responds on its own": the server counts nsig and
 	   flags each member at the reader's own threshold when they set one. The
@@ -6896,278 +7054,6 @@ function PA_Step3MetaboliteView() {
 		return rows;
 	}
 
-	this.drawClassLadder = function (host) {
-		var perm = ladderIsPermutation();
-		var rows = ladderRows();
-		var all = ((classActivity.levels || {})[String(ladderState.level)] || []).map(ladderRowOf);
-		/* The axis ends at the power of two above the level's largest mean F
-		   or null tick, plus 40% of headroom, so the last label stops well
-		   short of the next column. It was fixed at 128, which labelled
-		   space no bar reached and put "128" against the next header. */
-		var largest = 1;
-		all.forEach(function (r) { largest = Math.max(largest, r.stat || 0, r.q95 || 0); });
-		LADDER_FMAX = Math.pow(2, Math.ceil(Math.log2(Math.max(largest, 2)))) * 1.4;
-		classMapRowsCache = all;
-		var nullP0 = (classActivity.nullProportion || [])[ladderState.condition];
-		var clamp = perm ? 2 : 2;
-
-		/* Controls: level, order, small classes, and the condition when the
-		   binomial ran per condition. */
-		var controls = document.getElementById("classActivityMapControls");
-		if (controls) {
-			var levelNames = classActivity.levelNames || {"1": "category", "2": "class", "3": "subclass"};
-			var seg = [1, 2, 3].map(function (l) {
-				var count = ((classActivity.levels || {})[String(l)] || []).length;
-				/* One line per button, all the same width (CSS): three different
-				   widths read as three unrelated buttons, not one control. */
-				return '<button type="button" data-level="' + l + '" aria-pressed="' + (l === ladderState.level) + '">'
-					+ '<b>' + l + '</b><small>' + ladderEscape(levelNames[String(l)] || "") + ' · ' + count + '</small></button>';
-			}).join("");
-			var condSel = "";
-			if (!perm && (classActivity.nConditions || 1) > 1) {
-				condSel = '<label class="paClassMapControlLabel" for="classLadderCondition" data-guides="ignore">Condition</label>'
-					+ '<select id="classLadderCondition" class="paClassMapSelect">'
-					+ (classActivity.conditions || []).map(function (name, i) {
-						return '<option value="' + i + '"' + (i === ladderState.condition ? " selected" : "") + '>' + ladderEscape(name) + '</option>';
-					}).join("") + '</select>';
-			}
-			controls.innerHTML = '<div class="paLadderBar">'
-				+ '<span class="paClassMapControlLabel">Level</span><div class="paLadderSeg" id="classLadderLevel">' + seg + '</div>'
-				/* data-guides="ignore" on the mid-row labels: their rail is the
-				   select they name, not the card's. */
-				+ '<label class="paClassMapControlLabel" for="classLadderSort" data-guides="ignore">Order by</label>'
-				+ '<select id="classLadderSort" class="paClassMapSelect">'
-				+ '<option value="effect"' + (ladderState.sort === "effect" ? " selected" : "") + '>' + (perm ? "Effect (mean F)" : "Share in relevant list") + '</option>'
-				+ '<option value="p"' + (ladderState.sort === "p" ? " selected" : "") + '>p-value</option>'
-				+ '<option value="n"' + (ladderState.sort === "n" ? " selected" : "") + '>Class size</option>'
-				+ '<option value="name"' + (ladderState.sort === "name" ? " selected" : "") + '>Name</option></select>'
-				+ condSel
-				+ '<label class="paLadderSwitch" data-guides="ignore"><input type="checkbox" id="classLadderHideSmall"' + (ladderState.hideSmall ? " checked" : "")
-				+ '> Hide classes with fewer than 3 members</label></div>';
-			controls.querySelector("#classLadderLevel").addEventListener("click", function (event) {
-				var button = event.target.closest("button");
-				if (!button) return;
-				ladderState.level = parseInt(button.getAttribute("data-level"), 10) || 2;
-				me.drawClassMap();
-			});
-			controls.querySelector("#classLadderSort").addEventListener("change", function (event) {
-				ladderState.sort = event.target.value; me.drawClassMap();
-			});
-			controls.querySelector("#classLadderHideSmall").addEventListener("change", function (event) {
-				ladderState.hideSmall = event.target.checked; me.drawClassMap();
-			});
-			var condNode = controls.querySelector("#classLadderCondition");
-			if (condNode) condNode.addEventListener("change", function (event) {
-				ladderState.condition = parseInt(event.target.value, 10) || 0; me.drawClassMap();
-			});
-		}
-
-		/* Caption: which test, against what, and how many pass. */
-		var passing = all.filter(function (r) { return r.significant; }).length;
-		var small = all.filter(function (r) { return r.desc; }).length;
-		var summary = document.getElementById("classActivityMapSummary");
-		if (summary) {
-			summary.classList.remove("paIsFocused");
-			var what;
-			if (perm) {
-				var design = classActivity.design || {};
-				var factor = (classActivity.factors || []).filter(function (f) { return f.id === classActivity.factor; })[0];
-				what = '<b>Permutation test on your replicates</b> &middot; ' + (design.samples || "?") + ' samples in '
-					+ (design.conditions || "?") + ' conditions &middot; factor <b>' + ladderEscape((factor && factor.label) || classActivity.factor || "")
-					+ '</b>' + ((design.strata || []).length > 1 ? ', stratified by ' + ladderEscape((design.strata || []).slice(0, 3).join(", ")) + ((design.strata || []).length > 3 ? "…" : "") : "")
-					+ ' &middot; ' + (classActivity.nPerm || 0).toLocaleString() + ' re-labellings';
-			} else if (classActivity.nullKind === "alpha") {
-				what = '<b>Binomial on your relevant list</b> against your threshold p<sub>0</sub> = <b>' + Number(classActivity.alpha).toFixed(2)
-					+ '</b> <span class="paClassMapMuted">(H<sub>0</sub>: no member of the class changed; valid when the list came from a test at that threshold)</span>';
-			} else {
-				what = '<b>Binomial on your relevant list</b> against the rest of this job, p<sub>0</sub> = <b>'
-					+ (typeof nullP0 === "number" ? nullP0.toFixed(3) : "?") + '</b> <span class="paClassMapMuted">(H<sub>0</sub>: the class is like the rest of the panel &mdash; a relative question)</span>';
-			}
-			summary.innerHTML = '<span class="paClassMapBase">' + what
-				+ ' &middot; <b>' + passing + '</b> of ' + all.length + ' classes at level ' + ladderState.level + ' pass BH &lt; 0.05'
-				+ (small ? ' &middot; ' + small + ' with fewer than 3 members (descriptive)' : "")
-				+ '</span><span class="paClassMapReadout"></span>';
-		}
-
-		var warnings = (classActivity.warnings || []).map(function (w) {
-			return '<p class="paLadderWarn">' + ladderEscape(w) + '</p>';
-		}).join("");
-
-		/* Head. */
-		var axis;
-		if (perm) {
-			/* Every power of two the track holds. A fixed 0.5..64 stopped two
-			   ticks short of the track's end, so the header and the bars below
-			   it did not seem to share a scale. */
-			/* From the track's first value to its last, so the scale and the bars
-			   below it start and stop together: a bar that began left of the first
-			   label read as off the scale. The two edge labels sit inside the
-			   track (paIsStart / paIsEnd) instead of straddling its ends. */
-			var ticks = [];
-			for (var tv = LADDER_FMIN; tv <= LADDER_FMAX * 1.0001 && ticks.length < 14; tv *= 2) {
-				ticks.push({v: tv, fx: ladderFx(tv)});
-			}
-			axis = ticks.map(function (t) {
-				var cls = t.v === 1 ? "paIsZero" : (t.fx <= 0.001 ? "paIsStart" : (t.fx >= 0.999 ? "paIsEnd" : ""));
-				return '<span style="left:' + (t.fx * 100) + '%"' + (cls ? ' class="' + cls + '"' : "") + '>' + t.v + '</span>';
-			}).join("");
-		} else {
-			axis = [0, 0.25, 0.5, 0.75, 1].map(function (v) {
-				return '<span style="left:' + (v * 100) + '%">' + Math.round(v * 100) + '%</span>';
-			}).join("");
-		}
-		var head = '<div class="paLadderHead"><div>Class</div><div class="paLadderAxis">' + axis + '</div>'
-			+ '<div>' + ladderEffectHeader() + '</div>'
-			+ '<div class="paLadderNum" title="Mean absolute change across members and conditions">|FC|</div>'
-			+ '<div style="text-align:right">' + (perm ? "Permutation p" : "Binomial p") + '</div></div>';
-
-		var body = rows.map(function (row) {
-			var open = !!ladderState.open[row.key];
-			var crumb = row.path.length > 1 ? row.path.slice(0, -1).join(" › ") + " ›" : "";
-			var chip = 'n = ' + row.n + (row.desc ? ' · descriptive' : "");
-			var sub = perm ? (row.nsig + ' of ' + row.n + ' respond individually' + (row.tested < row.n ? ' (' + (row.n - row.tested) + ' untestable)' : ""))
-				: (row.k + ' of ' + row.n + ' in your relevant list');
-			var bar;
-			if (perm) {
-				var fx = ladderFx(typeof row.stat === "number" ? row.stat : 0);
-				bar = '<div class="paLadderFBar"><div class="paLadderTrack"></div><div class="paLadderZero" style="left:' + (ladderFx(1) * 100) + '%"></div>'
-					+ '<div class="paLadderFill" style="width:' + (fx * 100) + '%"></div>'
-					+ (typeof row.q95 === "number" ? '<div class="paLadderQ95" style="left:' + (ladderFx(row.q95) * 100) + '%" title="null 95th percentile = ' + row.q95.toFixed(1) + '"></div>' : "")
-					+ '<span class="paLadderVal" style="left:' + (fx * 100) + '%">' + (typeof row.stat === "number" ? row.stat.toFixed(1) : "–") + '</span></div>';
-			} else {
-				bar = '<div class="paLadderFBar"><div class="paLadderTrack"></div>'
-					+ '<div class="paLadderFill" style="width:' + (row.proportion * 100) + '%"></div>'
-					+ (typeof nullP0 === "number" ? '<div class="paLadderQ95" style="left:' + (nullP0 * 100) + '%" title="p0 = ' + nullP0.toFixed(3) + '"></div>' : "")
-					+ '<span class="paLadderVal" style="left:' + (row.proportion * 100) + '%">' + row.k + '/' + row.n + '</span></div>';
-			}
-			var strip = (perm || classMapHasDirection) ? ladderStrip(row.eff, clamp) : '<div class="paLadderStrip" style="--pa-strip-n:1"><i></i></div>';
-			return '<div class="paLadderRowWrap">'
-				+ '<button type="button" class="paLadderRow' + (row.desc ? " paIsDesc" : "") + (classMapSelected === row.key ? " paIsSelected" : "")
-				+ '" aria-expanded="' + open + '" data-key="' + ladderEscape(row.key) + '">'
-				+ '<div class="paLadderName">' + (crumb ? '<span class="paLadderCrumb">' + ladderEscape(crumb) + '</span>' : "")
-				+ '<span class="paLadderTitle">' + ladderEscape(row.name) + ' <span class="paLadderChip' + (row.desc ? " paIsWarn" : "") + '">' + chip + '</span></span>'
-				+ '<span class="paLadderSub">' + sub + '</span></div>'
-				+ bar + strip
-				+ '<div class="paLadderNum">' + (typeof row.E === "number" ? row.E.toFixed(2) : "–") + '</div>'
-				+ '<div class="paLadderP"><span class="paLadderPill' + (row.significant ? "" : " paIsNs") + '">' + ladderFormatP(row.p) + '</span><small>BH ' + ladderFormatP(row.fdr) + '</small></div>'
-				+ '</button>' + (open ? ladderMembersHTML(row) : "") + '</div>';
-		}).join("");
-		if (!rows.length) {
-			body = '<p class="paEmptyNote" style="padding:16px">Every class at this level has fewer than 3 members.</p>';
-		}
-
-		/* What never reached a class. */
-		var excluded = classActivity.excluded || {};
-		var features = classActivity.features || {};
-		var unmatched = excluded.unmatched || [], unclassified = excluded.unclassified || [];
-		var excludedHTML = "";
-		if (unmatched.length || unclassified.length) {
-			var li = function (name, key) {
-				var f = key ? features[key] : null;
-				var sig = f && f.sig;
-				return '<li' + (sig ? ' class="paIsSig"' : "") + '>' + ladderEscape(name)
-					+ (f && typeof f.F === "number" ? ' <span class="paClassMapMuted">F ' + f.F.toFixed(1) + '</span>' : "") + '</li>';
-			};
-			excludedHTML = '<details class="paLadderExcluded"><summary data-guides="ignore">' + (unmatched.length + unclassified.length) + ' measured metabolites are in no class'
-				+ ' &mdash; ' + unmatched.length + ' matched no KEGG compound, ' + unclassified.length + ' are not in KEGG BRITE'
-				+ (perm ? '; bold = responds on its own (BH &lt; ' + ladderAlpha() + ')' : "") + '</summary>'
-				+ (unmatched.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">No KEGG match</div><ul data-guides="ignore">' + unmatched.map(function (n) { return li(n, null); }).join("") + '</ul>' : "")
-				+ (unclassified.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">Outside br08001</div><ul data-guides="ignore">' + unclassified.map(function (k) { return li((features[k] || {}).name || k, k); }).join("") + '</ul>' : "")
-				+ '</details>';
-		}
-
-		host.innerHTML = warnings + '<div class="paLadder">' + head + '<div id="classLadderRows">' + body + '</div></div>' + excludedHTML;
-
-		var keys = document.getElementById("classActivityKeys");
-		if (keys) {
-			var items = perm
-				? [['paKeySwatch', 'Bar: mean F of the class\'s members, log axis', "background:#4A6785"],
-				   ['paKeyGlyph', 'Thin line: F = 1, no effect', "width:1px;height:14px;background:#B5C1CE;border-radius:0"],
-				   ['paKeyGlyph', 'Tick: 95th percentile of the re-labelled null — a bar past it is significant at ≈ 0.05', "width:2px;height:14px;background:#B5761F;border-radius:0"],
-				   ['paKeySwatch', 'Strip: ' + ladderEffectHeader() + ', blue down · red up, full colour at ±2 log2', "background:linear-gradient(90deg,#0F59A9,#E8E8E8,#A51F1E);width:34px"]]
-				: [['paKeySwatch', 'share of the class in your relevant list', "background:#4A6785"],
-				   ['paKeyGlyph', 'p₀ the class is tested against', "width:2px;height:14px;background:#B5761F;border-radius:0"]];
-			keys.innerHTML = items.map(function (item) {
-				return '<li data-guides="ignore"><span class="' + item[0] + '" style="' + item[2] + '"></span>' + item[1] + '</li>';
-			}).join("");
-			keys.style.paddingLeft = "0";
-		}
-
-		var rowsHost = host.querySelector("#classLadderRows");
-		rowsHost.addEventListener("click", function (event) {
-			if (event.target.closest(".paLadderStrip")) return;
-			var button = event.target.closest(".paLadderRow");
-			if (!button) return;
-			var key = button.getAttribute("data-key");
-			if (ladderState.open[key]) delete ladderState.open[key]; else ladderState.open[key] = true;
-			me.drawClassMap();
-		});
-		ladderBindTooltip(host);
-
-		/* The compounds panel below follows the selected class, or the top
-		   row on first draw. */
-		if (classMapSelected && !all.some(function (r) { return r.key === classMapSelected; })) classMapSelected = null;
-		if (!classMapSelected && !classDetailDismissed && rows.length) classMapSelected = rows[0].key;
-		/* The rows were rendered before the selection was chosen, so light
-		   the selected one now; a level switch lands here too. */
-		Array.prototype.forEach.call(host.querySelectorAll(".paLadderRow"), function (node) {
-			node.classList.toggle("paIsSelected", node.getAttribute("data-key") === classMapSelected);
-		});
-		me.renderClassDetail();
-	};
-
-	/* "Ik − Ctr by stratum": the direction strip's own header, used wherever
-	   the strip is drawn so the two never disagree. */
-	function ladderEffectHeader() {
-		var design = classActivity.design || {};
-		if (ladderIsPermutation()) {
-			return ladderEscape(design.levels ? (design.levels[1] + " − " + design.levels[0]) : "Effect")
-				+ ' by ' + (classActivity.factors && classActivity.factors.length > 1 ? "stratum" : "condition");
-		}
-		return classMapHasDirection ? "Mean value by condition" : "";
-	}
-
-	function ladderMembersHTML(row) {
-		var perm = ladderIsPermutation();
-		var features = classActivity.features || {};
-		var members = row.members.map(function (k) { return Ext.apply({key: k}, features[k] || {name: k}); });
-		var note;
-		if (perm) {
-			members.sort(function (a, b) { return (b.F || 0) - (a.F || 0); });
-			var total = members.reduce(function (s, m) { return s + (m.F || 0); }, 0);
-			var top = members[0];
-			var share = total > 0 && top ? (top.F || 0) / total : 0;
-			note = members.length === 1
-				? '<p class="paLadderNote" data-guides="ignore">A one-member class: this is <b>' + ladderEscape(top.name) + '</b>\'s own test, not a class result.</p>'
-				: (share > 0.6
-					? '<p class="paLadderNote" data-guides="ignore"><b>' + ladderEscape(top.name) + '</b> carries ' + Math.round(share * 100) + '% of this class\'s F &mdash; read "' + ladderEscape(row.name) + ' responds" as "' + ladderEscape(top.name) + ' responds".</p>'
-					: '<p class="paLadderNote" data-guides="ignore">The effect is spread across members; ' + row.nsig + ' of ' + row.n + ' respond on their own.</p>');
-		} else {
-			members.sort(function (a, b) {
-				var ra = (a.relevant || [])[ladderState.condition] ? 1 : 0, rb = (b.relevant || [])[ladderState.condition] ? 1 : 0;
-				return rb - ra || String(a.name).localeCompare(String(b.name));
-			});
-			note = '<p class="paLadderNote" data-guides="ignore">' + row.k + ' of ' + row.n + ' members are in your relevant list' + (row.n < 3 ? ' &mdash; too few for a class-level statement' : "") + '.</p>';
-		}
-		var rowsHTML = members.map(function (m) {
-			var sig = perm ? !!m.sig : !!((m.relevant || [])[ladderState.condition]);
-			var stat;
-			if (perm) {
-				stat = '<td><div class="paLadderMBar"><div class="paLadderZero" style="left:' + (ladderFx(1) * 100) + '%"></div><div class="paLadderFill" style="width:' + (ladderFx(typeof m.F === "number" ? m.F : 0) * 100) + '%"></div></div></td>'
-					+ '<td class="paIsRight paLadderNum">' + (typeof m.F === "number" ? m.F.toFixed(1) : "–") + ' · ' + ladderFormatP(m.bh) + '</td>';
-			} else {
-				stat = '<td colspan="2">' + (sig ? 'relevant' : '<span class="paClassMapMuted">not relevant</span>') + '</td>';
-			}
-			var strip = perm ? ladderStrip(m.eff, 3) : (classMapHasDirection ? ladderStrip(m.values, 2) : "");
-			return '<tr class="' + (sig ? "" : "paIsNs") + '"><td>' + ladderEscape(m.name) + '</td>' + stat
-				+ '<td class="paLadderMini">' + strip + '</td><td class="paIsRight paLadderNum">' + ladderEscape((m.kegg || []).join(", ")) + '</td></tr>';
-		}).join("");
-		return '<div class="paLadderMembers">' + note
-			+ '<table><thead><tr><th>Metabolite</th><th colspan="2">' + (perm ? 'F · BH' : 'Relevant') + '</th><th>' + ladderEffectHeader() + '</th><th class="paIsRight">KEGG</th></tr></thead>'
-			+ '<tbody>' + rowsHTML + '</tbody></table>'
-			+ '</div>';
-	}
-
 	/* KEGG ids of the compounds behind a ladder entry, at the level shown.
 	   Computed from the entry every time it is needed: an id list remembered
 	   from the last click outlived a level switch and sat under the wrong
@@ -7183,51 +7069,6 @@ function PA_Step3MetaboliteView() {
 		return ids;
 	}
 
-	/* The ladder's selection reaches the compounds panel through the same
-	   two variables the ranking used, keyed by the class path so a name
-	   that BRITE reuses at level 3 ("Biogenic amines" under Amines and under
-	   Neurotransmitters) opens the right members. */
-	this.selectLadderClass = function (key) {
-		var entry = ((classActivity.levels || {})[String(ladderState.level)] || []).filter(function (e) { return e.key === key; })[0];
-		if (!entry) return;
-		classDetailDismissed = false;
-		classMapSelected = key;
-		Array.prototype.forEach.call(document.querySelectorAll(".paLadderRow"), function (node) {
-			node.classList.toggle("paIsSelected", node.getAttribute("data-key") === key);
-		});
-		classDetailKey = null;
-		me.renderClassDetail();
-		var detail = document.getElementById("classActivityDetail");
-		if (detail && detail.scrollIntoView) detail.scrollIntoView({block: "nearest", behavior: "smooth"});
-	};
-
-	function ladderBindTooltip(host) {
-		var tip = document.getElementById("classLadderTip");
-		if (!tip) {
-			tip = document.createElement("div");
-			tip.id = "classLadderTip"; tip.className = "paLadderTip";
-			document.body.appendChild(tip);
-		}
-		/* The host outlives every redraw (only its innerHTML is
-		   replaced), so bind once: each expand, sort, level click and
-		   resize used to add three more listeners that never went. */
-		if (host.__paLadderTipBound) return;
-		host.__paLadderTipBound = true;
-		host.addEventListener("mouseover", function (event) {
-			var cell = event.target.closest(".paLadderStrip i");
-			if (!cell || !cell.getAttribute("data-label")) { tip.style.display = "none"; return; }
-			var v = cell.getAttribute("data-v");
-			var value = v === "" ? null : Number(v);
-			tip.textContent = cell.getAttribute("data-label") + "  " + (value === null ? "no value" : ((value > 0 ? "+" : "") + value.toFixed(2)) + (ladderIsPermutation() ? " log2 FC" : ""));
-			tip.style.display = "block";
-		});
-		host.addEventListener("mousemove", function (event) {
-			if (tip.style.display !== "block") return;
-			tip.style.left = (event.clientX + 14) + "px";
-			tip.style.top = (event.clientY + 14) + "px";
-		});
-		host.addEventListener("mouseleave", function () { tip.style.display = "none"; });
-	}
 
 	this.initComponent = function () {
 		this.component = Ext.widget(

@@ -1200,8 +1200,8 @@
 
 [data-theme="dark"] #clusternumber_box div,
 [data-theme="dark"] #clusternumber_box span,
-[data-theme="dark"] #threshold_box div,
-[data-theme="dark"] #threshold_box span {
+[data-theme="dark"] #threshold_box div:not(.paClassPlan *):not(.paClassHow *),
+[data-theme="dark"] #threshold_box span:not(.paClassPlan *):not(.paClassHow *) {
 	background-color: var(--pa-surface) !important;
 }
 
@@ -1946,6 +1946,10 @@
    the light blue/red pair drops below 3:1 against #151D26. */
 :root[data-theme="dark"] .paClassMapBand { fill: #1B242E; }
 :root[data-theme="dark"] .paClassMapGrid { stroke: #28333F; }
+:root[data-theme="dark"] .paClassMapZeroLine { stroke: #3A4754; }
+:root[data-theme="dark"] .paClassMapQ95, :root[data-theme="dark"] .paKeyQ95 { stroke: #B8892B; background: #B8892B; }
+:root[data-theme="dark"] .paClassMapMark.paIsDesc .paClassMapLabel, :root[data-theme="dark"] .paClassMapMark.paIsDesc .paClassMapCount,
+:root[data-theme="dark"] .paClassMapMark.paIsDesc .paClassRankFdr { fill: #6F7F8E; }
 :root[data-theme="dark"] .paClassMapDisc { fill: #35424F; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapUp { fill: #4A8CD2; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapDown { fill: #C9524D; stroke: #151D26; }
@@ -1956,7 +1960,7 @@
 :root[data-theme="dark"] .paClassMapTick,
 :root[data-theme="dark"] .paClassMapAxis { fill: #8A99A9; }
 :root[data-theme="dark"] .paClassMapLabel { fill: #E3EAF2; }
-:root[data-theme="dark"] .paClassMapCount { fill: #A1B0C0; }
+:root[data-theme="dark"] .paClassMapCount { fill: #A1B0C0; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapSummary,
 :root[data-theme="dark"] .paClassMapWarn { color: #C9524D; }
 :root[data-theme="dark"] .paClassMapMuted { color: #6F7F8E; }
@@ -2001,40 +2005,27 @@
    the grey above (2.0:1 on that blue), so "class · 8" vanished. */
 :root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] small { color: rgba(15, 30, 48, 0.82); }
 :root[data-theme="dark"] .paLadderSwitch, :root[data-theme="dark"] .paLadderExcluded,
-:root[data-theme="dark"] .paLadderExcluded summary, :root[data-theme="dark"] .paLadderMembers .paLadderNote { color: #A1B0C0; }
+:root[data-theme="dark"] .paLadderExcluded summary { color: #A1B0C0; }
 :root[data-theme="dark"] .paLadderWarn { background: #2A2416; border-left-color: #B8892B; color: #C9D3DD; }
-:root[data-theme="dark"] .paLadder { background: #151D26; border-color: #28333F; }
-:root[data-theme="dark"] .paLadderHead { background: #1B242E; border-bottom-color: #28333F; color: #8A99A9; }
-:root[data-theme="dark"] .paLadderHead .paLadderAxis span { color: #8A99A9; }
-:root[data-theme="dark"] .paLadderHead .paLadderAxis span.paIsZero { color: #E3EAF2; }
-:root[data-theme="dark"] .paLadderRowWrap { border-bottom-color: #28333F; }
-:root[data-theme="dark"] .paLadderRow:hover, :root[data-theme="dark"] .paLadderRow[aria-expanded="true"] { background: #1B242E; }
-:root[data-theme="dark"] .paLadderRow.paIsSelected { background: #1E2C3B; }
-:root[data-theme="dark"] .paLadderTitle, :root[data-theme="dark"] .paLadderNum,
-:root[data-theme="dark"] .paLadderFBar .paLadderVal, :root[data-theme="dark"] .paLadderMembers td { color: #E3EAF2; }
-:root[data-theme="dark"] .paLadderCrumb, :root[data-theme="dark"] .paLadderSub,
-:root[data-theme="dark"] .paLadderP small, :root[data-theme="dark"] .paLadderMembers th { color: #6F7F8E; }
-:root[data-theme="dark"] .paLadderChip { border-color: #3A4754; color: #A1B0C0; }
-:root[data-theme="dark"] .paLadderChip.paIsWarn { border-color: #B8892B; color: #B8892B; }
-:root[data-theme="dark"] .paLadderRow.paIsDesc .paLadderName, :root[data-theme="dark"] .paLadderRow.paIsDesc .paLadderNum { color: #6F7F8E; }
-:root[data-theme="dark"] .paLadderFBar .paLadderTrack { background: #1B242E; }
-:root[data-theme="dark"] .paLadderFBar .paLadderFill, :root[data-theme="dark"] .paLadderMembers .paLadderMBar .paLadderFill { background: #7C93AD; }
-:root[data-theme="dark"] .paLadderRow.paIsDesc .paLadderFill, :root[data-theme="dark"] .paLadderMembers tr.paIsNs .paLadderFill { background: #35424F; }
-:root[data-theme="dark"] .paLadderFBar .paLadderZero, :root[data-theme="dark"] .paLadderMembers .paLadderMBar .paLadderZero { background: #3A4754; }
-:root[data-theme="dark"] .paLadderFBar .paLadderQ95 { background: #B8892B; }
-:root[data-theme="dark"] .paLadderFBar .paLadderQ95::after { border-top-color: #B8892B; }
-:root[data-theme="dark"] .paLadderStrip i { background: #2A3340; }
-:root[data-theme="dark"] .paLadderStrip i:hover { outline-color: #E3EAF2; }
-:root[data-theme="dark"] .paLadderPill { background: #E3EAF2; color: #151D26; }
-:root[data-theme="dark"] .paLadderPill.paIsNs { background: transparent; color: #6F7F8E; border-color: #3A4754; }
-:root[data-theme="dark"] .paLadderMembers { background: #131A22; border-top-color: #28333F; }
-:root[data-theme="dark"] .paLadderMembers th, :root[data-theme="dark"] .paLadderMembers td { border-bottom-color: #28333F; }
-:root[data-theme="dark"] .paLadderMembers tr.paIsNs td { color: #6F7F8E; }
 :root[data-theme="dark"] .paLadderExcluded li.paIsSig { color: #E3EAF2; }
-:root[data-theme="dark"] .paLadderTip { background: #E3EAF2; color: #151D26; }
 :root[data-theme="dark"] .paDesignNote { color: #A1B0C0; }
-:root[data-theme="dark"] #threshold_box .paClassPlan { background: var(--pa-surface-sunken) !important; }
-:root[data-theme="dark"] #threshold_box .paClassPlanName { color: #E3EAF2; }
-:root[data-theme="dark"] #threshold_box .paClassPlan-perm { border-left-color: #4CAF50 !important; }
-:root[data-theme="dark"] #threshold_box .paClassPlanFacts li > b { color: #E3EAF2; }
+:root[data-theme="dark"] {
+  --pa-fig-bar: #3A4756;
+  --pa-fig-bar-strong: #55657A;
+  --pa-fig-cell: #55657A;
+  --pa-fig-cell-strong: #A9B7C6;
+  --pa-fig-faint: #6F7F8E;
+  --pa-fig-ink: #E3EAF2;
+  --pa-fig-ink-muted: #8A98A8;
+  --pa-fig-tick: #151D26;
+}
+:root[data-theme="dark"] #threshold_box .paClassPlan { background: var(--pa-surface) !important; }
+:root[data-theme="dark"] #threshold_box .paClassHow { background: var(--pa-surface-sunken) !important; }
+:root[data-theme="dark"] #threshold_box .paClassPlanName,
+:root[data-theme="dark"] #threshold_box .paClassHowRow.paIsOn .paClassHowName,
+:root[data-theme="dark"] #threshold_box .paClassTile > b { color: #E3EAF2; }
+:root[data-theme="dark"] #threshold_box .paClassTile { background: var(--pa-surface-sunken) !important; }
+:root[data-theme="dark"] #threshold_box .paClassPill-on { background: rgba(76, 175, 80, 0.18) !important; color: #7DD87F; }
+:root[data-theme="dark"] #threshold_box .paClassPill-off { background: rgba(255, 255, 255, 0.08) !important; color: #A1B0C0; }
+:root[data-theme="dark"] #threshold_box .paClassPillDot { background: #7DD87F !important; }
 :root[data-theme="dark"] .metaboliteHead > h3.metaboliteTitle { color: #E3EAF2; }

@@ -3430,10 +3430,12 @@ div.contentbox p > #download_mapping_file {
 #dbs_message div {
 	padding: 0 var(--pa-card-inset) 10px;
 }
-/* The two column items of the class activity card are exempt: an hbox
-   cannot lay out two children that are both forced to 100%. */
+/* The class activity card's own blocks are exempt: an hbox cannot lay out
+   two children that are both forced to 100%, and the plan and the band
+   carry their own borders, pills and tiles. */
 #clusternumber_box div, #clusternumber_box span,
-#threshold_box div:not(.paClassMain):not(.paClassAsideBox), #threshold_box span {
+#threshold_box div:not(.paClassMain):not(.paClassPlanCol):not(.paClassControls):not(.paClassPlan *):not(.paClassHow *),
+#threshold_box span:not(.paClassPlan *):not(.paClassHow *) {
 	border: 0 !important;
 	background-color: white !important;
 	width: 100% !important;
@@ -9197,11 +9199,19 @@ div.repDetectionCard h3 {
 .paClassMapNeutral { fill: #4A6785; stroke: #FFFFFF; stroke-width: 1; }
 .paClassMapRing { fill: none; stroke: #141E2B; stroke-width: 1.8; }
 .paClassMapSigLine { stroke: #B5761F; stroke-width: 1.5; stroke-dasharray: 6 4; }
+/* The permutation route: F = 1 is the reference the stems grow from, and
+   each row's null 95th percentile is a tick on the row. */
+.paClassMapZeroLine { stroke: #9AA8B8; stroke-width: 1.2; }
+.paClassMapQ95 { stroke: #B5761F; stroke-width: 2; stroke-linecap: round; }
+/* Fewer than 3 members: drawn, labelled, but visibly not a class result. */
+.paClassMapMark.paIsDesc .paClassMapLabel, .paClassMapMark.paIsDesc .paClassMapCount,
+.paClassMapMark.paIsDesc .paClassRankFdr { fill: #8A98A8; }
 .paClassMapSigLabel { fill: #B5761F; font-size: 11px; font-weight: 600; }
 .paClassMapTick { fill: #78879A; font-size: 10.5px; }
 .paClassMapAxis { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
 .paClassMapLabel { fill: #141E2B; font-size: 11.5px; }
-.paClassMapCount { fill: #44556A; font-size: 10px; }
+/* A halo in the page colour: the count sits on the stem when the reading is at the axis end. */
+.paClassMapCount { fill: #44556A; font-size: 10px; paint-order: stroke; stroke: #FFFFFF; stroke-width: 3px; stroke-linejoin: round; }
 .paClassMapMark { cursor: pointer; }
 .paClassMapMark:hover .paClassMapDisc { stroke: #B5761F; }
 .paClassMapSummary { position: relative; margin: 2px 0 10px; color: #44556A; font-size: 13px; }
@@ -9240,6 +9250,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
    third wider than every other one while measuring the same. */
 .paKeyArea { background: #C4CFDA; }
 .paKeyRing { border: 1.8px solid #141E2B; }
+.paKeyQ95 { width: 2px; height: 14px; border-radius: 0; background: #B5761F; }
 
 /* Hover linkage. Pointing at a mark rings it and drops every other class to a
    fifth, which is what makes eight marks read as a set being compared rather
@@ -9341,78 +9352,11 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paLadderSwitch input { margin: 0; }
 .paLadderWarn { margin: 0 0 10px; padding: 8px 12px; border-left: 3px solid #B5761F; background: #FBF6EC;
                 color: #44556A; font-size: 13px; }
-.paLadder { border: 1px solid #E3E9EF; border-radius: 6px; overflow: hidden; background: #FFFFFF; }
-.paLadderHead, .paLadderRow { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(200px, 1.6fr) 150px 60px 112px;
-                              /* 25px + the box's 1px border = the card's 26px rail, where the
-                                 heading and the summary line above already sit. */
-                              gap: 14px; align-items: center; padding: 0 25px; }
-.paLadderHead { background: #F6F8FA; border-bottom: 1px solid #E3E9EF; height: 40px; font-size: 10.5px;
-                letter-spacing: .06em; text-transform: uppercase; color: #78879A; font-weight: 600; }
-.paLadderHead .paLadderAxis { position: relative; height: 100%; }
-.paLadderHead .paLadderAxis span { position: absolute; top: 50%; transform: translate(-50%, -50%); letter-spacing: 0;
-                                   text-transform: none; font-size: 10.5px; color: #78879A;
-                                   font-variant-numeric: tabular-nums; }
-/* The first and last labels stay inside the track instead of straddling its
-   ends, where the last one ran into the next column's header. */
-.paLadderHead .paLadderAxis span.paIsStart { transform: translate(0, -50%); }
-.paLadderHead .paLadderAxis span.paIsEnd { transform: translate(-100%, -50%); }
-.paLadderHead .paLadderAxis span.paIsZero { color: #141E2B; }
-.paLadderRowWrap { border-bottom: 1px solid #E3E9EF; }
-.paLadderRowWrap:last-child { border-bottom: 0; }
-.paLadderRow { width: 100%; background: transparent; border: 0; text-align: left; cursor: pointer; min-height: 54px;
-               padding-top: 8px; padding-bottom: 8px; font: inherit; color: inherit; }
-.paLadderRow:hover, .paLadderRow[aria-expanded="true"] { background: #F6F8FA; }
-.paLadderRow.paIsSelected { background: #E9F1F9; }
-.paLadderRow.paIsDesc .paLadderName, .paLadderRow.paIsDesc .paLadderNum { color: #8A98A8; }
-.paLadderRow.paIsDesc .paLadderFill { background: #C4CFDA; }
-.paLadderName { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.paLadderCrumb { font-size: 11px; color: #78879A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.paLadderTitle { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; color: #141E2B; }
-.paLadderChip { font-size: 10.5px; padding: 1px 6px; border-radius: 99px; border: 1px solid #B5C1CE; color: #44556A;
-                font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.paLadderChip.paIsWarn { border-color: #B5761F; color: #B5761F; }
-.paLadderSub { font-size: 12px; color: #78879A; }
-.paLadderFBar { position: relative; height: 26px; }
-.paLadderFBar .paLadderTrack { position: absolute; top: 8px; bottom: 8px; left: 0; right: 0; background: #F1F5F8; border-radius: 2px; }
-.paLadderFBar .paLadderFill { position: absolute; top: 8px; bottom: 8px; left: 0; background: #4A6785; border-radius: 2px; }
-.paLadderFBar .paLadderZero { position: absolute; top: 2px; bottom: 2px; width: 1px; background: #B5C1CE; }
-.paLadderFBar .paLadderQ95 { position: absolute; top: 0; bottom: 0; width: 2px; background: #B5761F; }
-.paLadderFBar .paLadderQ95::after { content: ""; position: absolute; left: -3px; top: -1px; border: 4px solid transparent;
-                                    border-top: 5px solid #B5761F; }
-.paLadderFBar .paLadderVal { position: absolute; top: 50%; transform: translateY(-50%); font-size: 11.5px; padding-left: 6px;
-                             color: #141E2B; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.paLadderStrip { display: grid; grid-template-columns: repeat(var(--pa-strip-n, 6), 1fr); gap: 2px; height: 26px; }
-.paLadderStrip i { display: block; border-radius: 2px; background: #E8E8E8; }
-.paLadderStrip i:hover { outline: 2px solid #141E2B; outline-offset: -1px; }
-.paLadderNum { font-size: 12.5px; color: #141E2B; font-variant-numeric: tabular-nums; text-align: right; }
-.paLadderP { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.paLadderPill { font-size: 11.5px; padding: 2px 8px; border-radius: 99px; background: #141E2B; color: #FFFFFF;
-                font-weight: 600; font-variant-numeric: tabular-nums; }
-.paLadderPill.paIsNs { background: transparent; color: #78879A; border: 1px solid #B5C1CE; font-weight: 400; }
-.paLadderP small { font-size: 10.5px; color: #78879A; font-variant-numeric: tabular-nums; }
-.paLadderMembers { background: #F9FBFC; border-top: 1px dashed #E3E9EF; padding: 10px 14px 12px 30px; }
-.paLadderMembers table { border-collapse: collapse; width: 100%; font-size: 13px; }
-.paLadderMembers th { text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: #78879A;
-                      font-weight: 600; padding: 4px 10px 6px 0; border-bottom: 1px solid #E3E9EF; }
-.paLadderMembers td { padding: 5px 10px 5px 0; border-bottom: 1px solid #E3E9EF; vertical-align: middle; color: #141E2B; }
-.paLadderMembers tr:last-child td { border-bottom: 0; }
-.paLadderMembers td.paIsRight, .paLadderMembers th.paIsRight { text-align: right; }
-.paLadderMembers .paLadderMini { width: 150px; }
-.paLadderMembers .paLadderMini .paLadderStrip { height: 18px; }
-.paLadderMembers .paLadderMBar { position: relative; height: 16px; width: 150px; }
-.paLadderMembers .paLadderMBar .paLadderFill { position: absolute; top: 4px; bottom: 4px; left: 0; background: #4A6785; border-radius: 2px; }
-.paLadderMembers .paLadderMBar .paLadderZero { position: absolute; top: 0; bottom: 0; width: 1px; background: #B5C1CE; }
-.paLadderMembers tr.paIsNs td { color: #8A98A8; }
-.paLadderMembers tr.paIsNs .paLadderFill { background: #C4CFDA; }
-.paLadderMembers .paLadderNote { font-size: 12.5px; color: #44556A; margin: 0 0 8px; }
-.paLadderMembers .paLadderNote b { color: #141E2B; }
 .paLadderExcluded { margin: 12px 26px 0; font-size: 12.5px; color: #44556A; }
 .paLadderExcluded summary { cursor: pointer; color: #44556A; }
 .paLadderExcluded ul { margin: 6px 0 0 18px; padding: 0; columns: 2; column-gap: 24px; }
 .paLadderExcluded li { padding: 1px 0; }
 .paLadderExcluded li.paIsSig { font-weight: 600; color: #141E2B; }
-.paLadderTip { position: fixed; z-index: 20000; pointer-events: none; background: #141E2B; color: #FFFFFF; font-size: 12px;
-               padding: 5px 8px; border-radius: 4px; white-space: nowrap; display: none; }
 /* Under the design field, on the input's rail: the label column is 150px
    (the panel's labelWidth) and the generic paragraph inset is cancelled --
    with it the note started 26px right of the input it annotates. The
@@ -9567,73 +9511,125 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 /* ==========================================================================
    Step 2 · the class activity card (2026-08-29)
 
-   A one-line lede, then a plan block that says which test will run and on
-   what, then the two controls on the card's rail, with how the two tests
-   work as a right-hand column. The old card put ~200 words of prose ahead
-   of the controls and centred the controls under none of it.
-
-   `#threshold_box div, #threshold_box span` zeroes borders and forces
-   width 100% on everything it matches, so these blocks are <section>,
-   <p> and <dl>, and the selectors carry the id to outrank
-   `#threshold_box p` (margin) and `div.contentbox p` (inset).
+   A one-line lede, then the plan (which test will run, on what) beside its
+   two controls, then how the two tests work as one comparison across the
+   card: the same three columns for both tests, one row each, the running
+   one in green. `#threshold_box div, span` forces width 100% and no border
+   on everything it matches, so the plan and the band are exempted by
+   subtree in that rule; their markup is free to use divs and spans.
    ========================================================================== */
+:root {
+  --pa-fig-bar: #D7DADF;
+  --pa-fig-bar-strong: #B8BCC2;
+  --pa-fig-cell: #B9B9B4;
+  --pa-fig-cell-strong: #8E8E88;
+  --pa-fig-faint: #A1A1AA;
+  --pa-fig-ink: #1A1A18;
+  --pa-fig-ink-muted: #6B6B66;
+  --pa-fig-tick: #FFFFFF;
+}
 #threshold_box .paClassLede {
-	margin: 12px 0 4px;
-	max-width: 680px;
+	margin: 12px 0 6px;
+	max-width: 720px;
+	font-size: 13.5px;
+	line-height: 1.55;
+}
+/* The controls on their own rail inside the controls column. The shared
+   rule further up centres every `.x-form-item` in this card with
+   `left: 50% !important`; the extra class outranks it. */
+#threshold_box .divForm .x-form-item {
+	left: 0 !important;
+	transform: none;
 }
 #threshold_box .paClassPlan {
-	/* 14px on the right, not the card inset: the block ends short of the
-	   column seam, not on it. */
-	margin: 4px 14px 14px var(--pa-card-inset);
-	padding: 12px 16px 12px 15px;
-	border-left: 3px solid var(--pa-accent-green);
-	border-radius: 0 var(--pa-radius) var(--pa-radius) 0;
-	background: var(--pa-surface-subtle);
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 4px 0 8px 26px;
+	padding: 16px 18px;
+	border: 1px solid var(--pa-border) !important;
+	border-radius: 10px;
+	background: var(--pa-surface);
+	color: var(--pa-ink-label);
 }
-#threshold_box .paClassPlan-binom { border-left-color: var(--pa-ink-muted); }
-#threshold_box .paClassPlanKicker {
-	margin: 0 0 3px;
+#threshold_box .paClassPlanKicker,
+#threshold_box .paClassHowTitle,
+#threshold_box .paClassHowCol {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0;
 	padding: 0;
-	font-size: 11px;
+	font-size: 10.5px;
 	font-weight: 700;
-	letter-spacing: 0.07em;
+	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--pa-ink-label);
 }
+#threshold_box .paClassPill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 10px;
+	border-radius: 999px;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	width: auto !important;
+}
+#threshold_box .paClassPill-on { background: rgba(36, 123, 33, 0.10); color: var(--pa-accent-green); }
+#threshold_box .paClassPill-off { background: rgba(24, 24, 27, 0.06); color: var(--pa-ink-label); }
+#threshold_box .paClassPillDot { width: 6px; height: 6px; border-radius: 999px; background: var(--pa-accent-green); }
 #threshold_box .paClassPlanName {
-	margin: 0 0 8px;
-	padding: 0;
-	font-size: 15px;
-	font-weight: 600;
-	line-height: 1.35;
-	color: #1A1A18;
-}
-#threshold_box .paClassPlanName > i {
-	margin-right: 7px;
-	color: var(--pa-accent-green);
-}
-#threshold_box .paClassPlan-binom .paClassPlanName > i { color: var(--pa-ink-muted); }
-#threshold_box .paClassPlanFacts {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 2px 18px;
-	margin: 0 0 8px;
-	padding: 0;
-	list-style: none;
-	font-size: 12.5px;
-	line-height: 1.5;
-	color: var(--pa-ink-muted);
-}
-#threshold_box .paClassPlanFacts li {
+	align-items: center;
+	gap: 9px;
 	margin: 0;
 	padding: 0;
+	font-size: 16px;
+	font-weight: 600;
+	letter-spacing: -0.008em;
+	line-height: 1.3;
+	color: #1A1A18;
+}
+#threshold_box .paClassPlanName > i { font-size: 17px; color: var(--pa-ink-muted); }
+#threshold_box .paClassPlanName > i.paIsOn { color: var(--pa-accent-green); }
+#threshold_box .paClassTiles {
+	display: flex;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+#threshold_box .paClassTile {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 10px 14px;
+	border-radius: 8px;
+	background: var(--pa-surface-subtle);
+	min-width: 0;
+}
+#threshold_box .paClassTile-wide { flex: 1 1 auto; }
+#threshold_box .paClassTile > b {
+	font-size: 18px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	color: #1A1A18;
+	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
 }
-#threshold_box .paClassPlanFacts li > b {
-	margin-left: 4px;
+#threshold_box .paClassTile > span {
+	font-size: 10.5px;
 	font-weight: 600;
-	font-variant-numeric: tabular-nums;
-	color: #1A1A18;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--pa-ink-muted);
+	white-space: nowrap;
 }
 #threshold_box .paClassPlanWhy {
 	margin: 0;
@@ -9642,38 +9638,87 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	line-height: 1.5;
 	color: var(--pa-ink-label);
 }
-/* The controls on the rail. The shared rule further up centres every
-   `.x-form-item` in this card with `left: 50% !important`; the extra class
-   in this selector outranks it, and !important is needed to beat the
-   inline `left: 0` ExtJS writes as well. */
-#threshold_box .divForm .x-form-item {
-	left: var(--pa-card-inset) !important;
-	transform: none;
+/* The band. */
+#threshold_box .paClassHow {
+	display: flex;
+	flex-direction: column;
+	margin: 0 26px 6px;
+	padding: 18px 24px 16px;
+	border: 1px solid var(--pa-border) !important;
+	border-radius: 10px;
+	background: #FBFBF9;
 }
-/* The right column. A hairline on its left is the seam between the two
-   columns; the kicker matches the plan block's so the card reads as one
-   system. The gap is padding on the <aside>, not margin on the ExtJS item,
-   because the hbox positions the item by its own arithmetic. */
-#threshold_box .paClassAside {
-	margin: 4px var(--pa-card-inset) 12px 0;
-	/* 12px top, the plan block's own padding, so the two kickers share a
-	   baseline across the seam. */
-	padding: 12px 0 0 26px;
-	border-left: 1px solid var(--pa-border);
-	font-size: 12.5px;
-	line-height: 1.5;
+#threshold_box .paClassHowHead,
+#threshold_box .paClassHowRow {
+	display: grid;
+	grid-template-columns: 224px repeat(3, minmax(0, 1fr));
+	gap: 0 28px;
+}
+#threshold_box .paClassHowHead {
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--pa-border);
+}
+#threshold_box .paClassHowTitle { color: var(--pa-fig-faint); }
+#threshold_box .paClassHowCol > i { font-size: 12px; color: var(--pa-fig-faint); }
+#threshold_box .paClassHowRow { padding: 20px 0; }
+#threshold_box .paClassHowRow + .paClassHowRow { border-top: 1px solid var(--pa-border); }
+#threshold_box .paClassHowWho {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	padding-right: 12px;
+}
+#threshold_box .paClassHowName {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: -0.005em;
 	color: var(--pa-ink-label);
 }
-#threshold_box .paClassAside > p {
-	margin: 0 0 9px;
+#threshold_box .paClassHowRow.paIsOn .paClassHowName { color: #1A1A18; }
+#threshold_box .paClassHowName > i { font-size: 16px; color: var(--pa-fig-faint); }
+#threshold_box .paClassHowRow.paIsOn .paClassHowName > i { color: var(--pa-accent-green); }
+#threshold_box .paClassHowNote {
+	margin: 2px 0 0;
 	padding: 0;
-	max-width: 62ch;
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--pa-ink-label);
+	text-wrap: pretty;
 }
-#threshold_box .paClassAside > p.paClassPlanKicker { margin-bottom: 6px; }
-/* Stacked (narrow viewport): the seam is a rule above, on the card rail. */
-#threshold_box .paClassColumns-stacked .paClassAside {
-	margin: 2px var(--pa-card-inset) 12px;
-	padding: 12px 0 0;
-	border-left: 0;
+#threshold_box .paClassFig {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 0;
+	min-width: 0;
+}
+#threshold_box .paClassFig > svg {
+	display: block;
+	width: 100%;
+	max-width: 236px;
+	height: auto;
+	overflow: visible;
+	font-family: inherit;
+}
+#threshold_box .paClassFig > figcaption {
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted);
+	text-wrap: pretty;
+}
+#threshold_box .paClassHowFoot {
+	margin: 0;
+	padding: 14px 0 0;
 	border-top: 1px solid var(--pa-border);
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted);
 }
+/* Stacked (narrow viewport): the controls sit under the plan, on its rail. */
+#threshold_box .paClassTop-stacked .paClassControls { margin-left: 26px; }
