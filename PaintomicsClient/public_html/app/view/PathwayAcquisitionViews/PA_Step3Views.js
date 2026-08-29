@@ -4446,12 +4446,14 @@ function PA_Step3PathwayDetailsView() {
 							events: {
 								mouseOver: function() {
 									var plot = $("#" + this.series.chart.renderTo.id.replace("heatmap", "plot")).highcharts();
+									if (!plot) { return; }
 									for (var i in plot.series) {
 										plot.series[i].setVisible(this.series.name.split("#")[0] === plot.series[i].name);
 									}
 								},
 								mouseOut: function() {
 									var plot = $("#" + this.series.chart.renderTo.id.replace("heatmap", "plot")).highcharts();
+									if (!plot) { return; }
 									for (var i in plot.series) {
 										plot.series[i].setVisible(true);
 									}
@@ -6138,6 +6140,16 @@ function PA_Step3MetaboliteView() {
 
 		var omicName = compoundOmicName;
 		var ladderOpen = (typeof classActivity !== "undefined" && classActivity);
+		/* With the ladder, a row expands in place into its member table; the
+		   panel that used to open down here repeated that table beside a
+		   heatmap of the same values, and was asked to go. The class map
+		   without a ladder keeps it: there, this is the only detail. */
+		if (ladderOpen) {
+			host.innerHTML = "";
+			host.classList.remove("paIsOpen");
+			classDetailKey = null;
+			return;
+		}
 		var ids = ladderOpen ? ladderIDsFor(row.key) : ((dataFinal[row.name] || {}).ID || []);
 		var values = [];
 		ids.forEach(function (id) {
@@ -6816,6 +6828,8 @@ function PA_Step3MetaboliteView() {
 		return toHex(A[0] + (B[0] - A[0]) * w, A[1] + (B[1] - A[1]) * w, A[2] + (B[2] - A[2]) * w);
 	}
 
+	/* The F axis. FMIN is fixed; FMAX is set per draw from the level's own
+	   values (drawClassMap), so the scale follows the dataset. */
 	var LADDER_FMIN = 0.25, LADDER_FMAX = 128;
 	function ladderFx(f) {
 		return Math.max(0, Math.min(1, Math.log2(Math.max(f, LADDER_FMIN) / LADDER_FMIN) / Math.log2(LADDER_FMAX / LADDER_FMIN)));
@@ -6886,6 +6900,13 @@ function PA_Step3MetaboliteView() {
 		var perm = ladderIsPermutation();
 		var rows = ladderRows();
 		var all = ((classActivity.levels || {})[String(ladderState.level)] || []).map(ladderRowOf);
+		/* The axis ends at the power of two above the level's largest mean F
+		   or null tick, plus 40% of headroom, so the last label stops well
+		   short of the next column. It was fixed at 128, which labelled
+		   space no bar reached and put "128" against the next header. */
+		var largest = 1;
+		all.forEach(function (r) { largest = Math.max(largest, r.stat || 0, r.q95 || 0); });
+		LADDER_FMAX = Math.pow(2, Math.ceil(Math.log2(Math.max(largest, 2)))) * 1.4;
 		classMapRowsCache = all;
 		var nullP0 = (classActivity.nullProportion || [])[ladderState.condition];
 		var clamp = perm ? 2 : 2;
@@ -6975,8 +6996,20 @@ function PA_Step3MetaboliteView() {
 		/* Head. */
 		var axis;
 		if (perm) {
-			axis = [0.5, 1, 2, 4, 8, 16, 32, 64].map(function (v) {
-				return '<span style="left:' + (ladderFx(v) * 100) + '%"' + (v === 1 ? ' class="paIsZero"' : "") + '>' + v + '</span>';
+			/* Every power of two the track holds. A fixed 0.5..64 stopped two
+			   ticks short of the track's end, so the header and the bars below
+			   it did not seem to share a scale. */
+			/* From the track's first value to its last, so the scale and the bars
+			   below it start and stop together: a bar that began left of the first
+			   label read as off the scale. The two edge labels sit inside the
+			   track (paIsStart / paIsEnd) instead of straddling its ends. */
+			var ticks = [];
+			for (var tv = LADDER_FMIN; tv <= LADDER_FMAX * 1.0001 && ticks.length < 14; tv *= 2) {
+				ticks.push({v: tv, fx: ladderFx(tv)});
+			}
+			axis = ticks.map(function (t) {
+				var cls = t.v === 1 ? "paIsZero" : (t.fx <= 0.001 ? "paIsStart" : (t.fx >= 0.999 ? "paIsEnd" : ""));
+				return '<span style="left:' + (t.fx * 100) + '%"' + (cls ? ' class="' + cls + '"' : "") + '>' + t.v + '</span>';
 			}).join("");
 		} else {
 			axis = [0, 0.25, 0.5, 0.75, 1].map(function (v) {
@@ -6984,9 +7017,8 @@ function PA_Step3MetaboliteView() {
 			}).join("");
 		}
 		var head = '<div class="paLadderHead"><div>Class</div><div class="paLadderAxis">' + axis + '</div>'
-			+ '<div>' + (perm ? ladderEscape((classActivity.design || {}).levels ? (classActivity.design.levels[1] + " − " + classActivity.design.levels[0]) : "Effect") + ' by ' + (classActivity.factors && classActivity.factors.length > 1 ? "stratum" : "condition")
-				: (classMapHasDirection ? "Mean value by condition" : "")) + '</div>'
-			+ '<div title="Mean absolute change across members and conditions">|FC|</div>'
+			+ '<div>' + ladderEffectHeader() + '</div>'
+			+ '<div class="paLadderNum" title="Mean absolute change across members and conditions">|FC|</div>'
 			+ '<div style="text-align:right">' + (perm ? "Permutation p" : "Binomial p") + '</div></div>';
 
 		var body = rows.map(function (row) {
@@ -7036,8 +7068,8 @@ function PA_Step3MetaboliteView() {
 				return '<li' + (sig ? ' class="paIsSig"' : "") + '>' + ladderEscape(name)
 					+ (f && typeof f.F === "number" ? ' <span class="paClassMapMuted">F ' + f.F.toFixed(1) + '</span>' : "") + '</li>';
 			};
-			excludedHTML = '<details class="paLadderExcluded"><summary data-guides="ignore">' + (unmatched.length + unclassified.length) + ' of the measured metabolites reach no class'
-				+ ' &mdash; ' + unmatched.length + ' matched no KEGG compound, ' + unclassified.length + ' matched one that KEGG BRITE does not classify'
+			excludedHTML = '<details class="paLadderExcluded"><summary data-guides="ignore">' + (unmatched.length + unclassified.length) + ' measured metabolites are in no class'
+				+ ' &mdash; ' + unmatched.length + ' matched no KEGG compound, ' + unclassified.length + ' are not in KEGG BRITE'
 				+ (perm ? '; bold = responds on its own (BH &lt; ' + ladderAlpha() + ')' : "") + '</summary>'
 				+ (unmatched.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">No KEGG match</div><ul data-guides="ignore">' + unmatched.map(function (n) { return li(n, null); }).join("") + '</ul>' : "")
 				+ (unclassified.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">Outside br08001</div><ul data-guides="ignore">' + unclassified.map(function (k) { return li((features[k] || {}).name || k, k); }).join("") + '</ul>' : "")
@@ -7049,10 +7081,10 @@ function PA_Step3MetaboliteView() {
 		var keys = document.getElementById("classActivityKeys");
 		if (keys) {
 			var items = perm
-				? [['paKeySwatch', 'mean F of the class (log axis)', "background:#4A6785"],
-				   ['paKeyGlyph', 'F = 1: no effect', "width:1px;height:14px;background:#B5C1CE;border-radius:0"],
-				   ['paKeyGlyph', '95th percentile of the re-labelled null — a bar past it is significant at ≈0.05', "width:2px;height:14px;background:#B5761F;border-radius:0"],
-				   ['paKeySwatch', 'strip: mean change per condition, blue down · red up (±2 log2)', "background:linear-gradient(90deg,#0F59A9,#E8E8E8,#A51F1E);width:34px"]]
+				? [['paKeySwatch', 'Bar: mean F of the class\'s members, log axis', "background:#4A6785"],
+				   ['paKeyGlyph', 'Thin line: F = 1, no effect', "width:1px;height:14px;background:#B5C1CE;border-radius:0"],
+				   ['paKeyGlyph', 'Tick: 95th percentile of the re-labelled null — a bar past it is significant at ≈ 0.05', "width:2px;height:14px;background:#B5761F;border-radius:0"],
+				   ['paKeySwatch', 'Strip: ' + ladderEffectHeader() + ', blue down · red up, full colour at ±2 log2', "background:linear-gradient(90deg,#0F59A9,#E8E8E8,#A51F1E);width:34px"]]
 				: [['paKeySwatch', 'share of the class in your relevant list', "background:#4A6785"],
 				   ['paKeyGlyph', 'p₀ the class is tested against', "width:2px;height:14px;background:#B5761F;border-radius:0"]];
 			keys.innerHTML = items.map(function (item) {
@@ -7064,12 +7096,6 @@ function PA_Step3MetaboliteView() {
 		var rowsHost = host.querySelector("#classLadderRows");
 		rowsHost.addEventListener("click", function (event) {
 			if (event.target.closest(".paLadderStrip")) return;
-			var openLink = event.target.closest("[data-open-class]");
-			if (openLink) {
-				event.preventDefault();
-				me.selectLadderClass(openLink.getAttribute("data-open-class"));
-				return;
-			}
 			var button = event.target.closest(".paLadderRow");
 			if (!button) return;
 			var key = button.getAttribute("data-key");
@@ -7090,6 +7116,17 @@ function PA_Step3MetaboliteView() {
 		me.renderClassDetail();
 	};
 
+	/* "Ik − Ctr by stratum": the direction strip's own header, used wherever
+	   the strip is drawn so the two never disagree. */
+	function ladderEffectHeader() {
+		var design = classActivity.design || {};
+		if (ladderIsPermutation()) {
+			return ladderEscape(design.levels ? (design.levels[1] + " − " + design.levels[0]) : "Effect")
+				+ ' by ' + (classActivity.factors && classActivity.factors.length > 1 ? "stratum" : "condition");
+		}
+		return classMapHasDirection ? "Mean value by condition" : "";
+	}
+
 	function ladderMembersHTML(row) {
 		var perm = ladderIsPermutation();
 		var features = classActivity.features || {};
@@ -7101,16 +7138,16 @@ function PA_Step3MetaboliteView() {
 			var top = members[0];
 			var share = total > 0 && top ? (top.F || 0) / total : 0;
 			note = members.length === 1
-				? '<p class="paLadderNote">A one-member class: this is <b>' + ladderEscape(top.name) + '</b>\'s own test, not a class result.</p>'
+				? '<p class="paLadderNote" data-guides="ignore">A one-member class: this is <b>' + ladderEscape(top.name) + '</b>\'s own test, not a class result.</p>'
 				: (share > 0.6
-					? '<p class="paLadderNote"><b>' + ladderEscape(top.name) + '</b> carries ' + Math.round(share * 100) + '% of this class\'s F &mdash; read "' + ladderEscape(row.name) + ' responds" as "' + ladderEscape(top.name) + ' responds".</p>'
-					: '<p class="paLadderNote">The effect is spread across members; ' + row.nsig + ' of ' + row.n + ' respond on their own.</p>');
+					? '<p class="paLadderNote" data-guides="ignore"><b>' + ladderEscape(top.name) + '</b> carries ' + Math.round(share * 100) + '% of this class\'s F &mdash; read "' + ladderEscape(row.name) + ' responds" as "' + ladderEscape(top.name) + ' responds".</p>'
+					: '<p class="paLadderNote" data-guides="ignore">The effect is spread across members; ' + row.nsig + ' of ' + row.n + ' respond on their own.</p>');
 		} else {
 			members.sort(function (a, b) {
 				var ra = (a.relevant || [])[ladderState.condition] ? 1 : 0, rb = (b.relevant || [])[ladderState.condition] ? 1 : 0;
 				return rb - ra || String(a.name).localeCompare(String(b.name));
 			});
-			note = '<p class="paLadderNote">' + row.k + ' of ' + row.n + ' members are in your relevant list' + (row.n < 3 ? ' &mdash; too few for a class-level statement' : "") + '.</p>';
+			note = '<p class="paLadderNote" data-guides="ignore">' + row.k + ' of ' + row.n + ' members are in your relevant list' + (row.n < 3 ? ' &mdash; too few for a class-level statement' : "") + '.</p>';
 		}
 		var rowsHTML = members.map(function (m) {
 			var sig = perm ? !!m.sig : !!((m.relevant || [])[ladderState.condition]);
@@ -7126,9 +7163,8 @@ function PA_Step3MetaboliteView() {
 				+ '<td class="paLadderMini">' + strip + '</td><td class="paIsRight paLadderNum">' + ladderEscape((m.kegg || []).join(", ")) + '</td></tr>';
 		}).join("");
 		return '<div class="paLadderMembers">' + note
-			+ '<table><thead><tr><th>Metabolite</th><th colspan="2">' + (perm ? 'F · BH' : 'Relevant') + '</th><th>' + (perm ? 'Change by condition' : (classMapHasDirection ? 'Value by condition' : "")) + '</th><th class="paIsRight">KEGG</th></tr></thead>'
+			+ '<table><thead><tr><th>Metabolite</th><th colspan="2">' + (perm ? 'F · BH' : 'Relevant') + '</th><th>' + ladderEffectHeader() + '</th><th class="paIsRight">KEGG</th></tr></thead>'
 			+ '<tbody>' + rowsHTML + '</tbody></table>'
-			+ '<p class="paLadderOpen"><a href="javascript:void(0)" data-open-class="' + ladderEscape(row.key) + '">Open these compounds below (heatmap and profiles)</a></p>'
 			+ '</div>';
 	}
 

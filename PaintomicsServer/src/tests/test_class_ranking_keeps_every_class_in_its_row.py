@@ -303,6 +303,8 @@ class RankingGeometryTest(unittest.TestCase):
         self.assertTrue(self.result["open"], "the detail did not open with the chart")
         self.assertIn("<h4>Amino acids</h4>", self.result["detail"])
         self.assertIn("classDetail_hm", self.result["detail"])
+        # No ladder in this harness, so the heatmap's companion is the line
+        # chart; with a ladder it is the member table (checked in the browser).
         self.assertIn("classDetail_pl", self.result["detail"])
         selected = [r["name"] for r in self.result["rows"] if r["selected"]]
         self.assertEqual(selected, ["Amino acids"])
