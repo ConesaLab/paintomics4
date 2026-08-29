@@ -65,11 +65,13 @@ class GlobalExpressionCarriesSampleMeansTest(unittest.TestCase):
         entry = self.data["inputGene"]["11606"]
         self.assertEqual(12, len(entry["sampleValues"]))
 
-    def test_an_ungrouped_feature_says_so_rather_than_failing(self):
+    def test_an_ungrouped_feature_keeps_the_payload_it_always_had(self):
+        # tests/baseline compares this payload byte for byte for the example
+        # jobs, none of which carry a mapping: no new keys for them.
         entry = self.data["inputCompound"]["C00187"]
         self.assertEqual(6, len(entry["values"]))
-        self.assertIsNone(entry["sampleValues"])
-        self.assertIsNone(entry["sampleRelevant"])
+        self.assertNotIn("sampleValues", entry)
+        self.assertNotIn("sampleRelevant", entry)
 
 
 if __name__ == "__main__":

@@ -9212,7 +9212,9 @@ div.repDetectionCard h3 {
    card edge. Each li is one nowrap flex child, so a narrow card wraps BETWEEN
    keys instead of mid-phrase. */
 .paClassMapKeys { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
-                  margin: 12px 0 4px; padding: 0; list-style: none;
+                  /* 26px sides: the card's rail, where the heading, the toolbar and
+                     the ladder's first column sit. It hung at the box edge. */
+                  margin: 12px 26px 4px; padding: 0; list-style: none;
                   color: #44556A; font-size: 12px; }
 .paClassMapKeys li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 /* No own indent: the ul carries the chart's padL, and `div.contentbox li`
@@ -9263,7 +9265,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
                       margin: 4px 0 12px; }
 .paClassMapControlLabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
                           color: #78879A; font-weight: 600; }
-.paClassMapSelect { padding: 4px 8px; border: 1px solid #B5C1CE; border-radius: 4px;
+.paClassMapSelect { height: 32px; padding: 0 8px; border: 1px solid #B5C1CE; border-radius: 6px;
                     background: #FFFFFF; color: #141E2B; font-size: 13px; }
 .paClassMapControlNote { color: #78879A; font-size: 12px; }
 
@@ -9314,13 +9316,22 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
    Colours come from the same tokens as the class map above; the direction
    strip is painted by JS on the app's own bwr ramp.
    --------------------------------------------------------------------------- */
-.paLadderBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 4px 0 12px; }
+/* 26px sides: the card's rail, shared with the heading, the summary line
+   and (24px + border) the ladder's first column. */
+.paLadderBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 4px 0 12px; padding: 0 26px; }
 .paLadderBar .paClassMapControlLabel { margin-right: 2px; }
-.paLadderSeg { display: inline-flex; border: 1px solid #B5C1CE; border-radius: 6px; overflow: hidden; background: #FFFFFF; }
-.paLadderSeg button { border: 0; background: transparent; padding: 5px 12px; cursor: pointer; color: #44556A;
-                      font: inherit; font-size: 13px; line-height: 1.2; border-right: 1px solid #E3E9EF; }
+/* Three equal cells on one line, the height of the select beside them: a
+   segmented control reads as one control only when its parts match. */
+.paLadderSeg { display: inline-grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #B5C1CE;
+               border-radius: 6px; overflow: hidden; background: #FFFFFF; }
+.paLadderSeg button { display: inline-flex; align-items: baseline; justify-content: center; gap: 6px; min-width: 124px;
+                      height: 32px; border: 0; background: transparent; padding: 0 12px; cursor: pointer; color: #44556A;
+                      font: inherit; font-size: 13px; line-height: 1; border-right: 1px solid #E3E9EF; white-space: nowrap; }
 .paLadderSeg button:last-child { border-right: 0; }
-.paLadderSeg button small { display: block; font-size: 10.5px; color: #78879A; }
+/* color: inherit -- the card paints every <b> in the accent blue, which on the
+   pressed (blue) segment made the level number vanish. */
+.paLadderSeg button b { font-weight: 600; color: inherit; }
+.paLadderSeg button small { font-size: 11px; color: #78879A; }
 .paLadderSeg button[aria-pressed="true"] { background: #19589E; color: #FFFFFF; }
 .paLadderSeg button[aria-pressed="true"] small { color: rgba(255, 255, 255, .8); }
 .paLadderSwitch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #44556A; cursor: pointer; }
@@ -9329,7 +9340,9 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
                 color: #44556A; font-size: 13px; }
 .paLadder { border: 1px solid #E3E9EF; border-radius: 6px; overflow: hidden; background: #FFFFFF; }
 .paLadderHead, .paLadderRow { display: grid; grid-template-columns: minmax(200px, 1.4fr) minmax(200px, 1.6fr) 150px 60px 112px;
-                              gap: 14px; align-items: center; padding: 0 14px; }
+                              /* 25px + the box's 1px border = the card's 26px rail, where the
+                                 heading and the summary line above already sit. */
+                              gap: 14px; align-items: center; padding: 0 25px; }
 .paLadderHead { background: #F6F8FA; border-bottom: 1px solid #E3E9EF; height: 40px; font-size: 10.5px;
                 letter-spacing: .06em; text-transform: uppercase; color: #78879A; font-weight: 600; }
 .paLadderHead .paLadderAxis { position: relative; height: 100%; }
@@ -9388,7 +9401,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paLadderMembers .paLadderNote b { color: #141E2B; }
 .paLadderMembers .paLadderOpen { margin: 8px 0 0; }
 .paLadderMembers .paLadderOpen a { font-size: 12.5px; }
-.paLadderExcluded { margin: 12px 0 0; font-size: 12.5px; color: #44556A; }
+.paLadderExcluded { margin: 12px 26px 0; font-size: 12.5px; color: #44556A; }
 .paLadderExcluded summary { cursor: pointer; color: #44556A; }
 .paLadderExcluded ul { margin: 6px 0 0 18px; padding: 0; columns: 2; column-gap: 24px; }
 .paLadderExcluded li { padding: 1px 0; }

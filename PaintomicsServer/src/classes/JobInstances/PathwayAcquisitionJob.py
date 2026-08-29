@@ -3197,6 +3197,23 @@ class PathwayAcquisitionJob(Job):
         self.compoundRegulateFeatures = result
         return self.compoundRegulateFeatures
 
+    @staticmethod
+    def _addSampleMeans(expressionDetail, omicValue):
+        """Copy the per-condition means onto a globalExpressionData entry.
+
+        A design or the replicate detector leaves ``sampleValues`` /
+        ``sampleRelevant`` on the omic value (applyReplicateMappingForOmic),
+        and every Step 3 chart prefers them in "samples" mode. Built without
+        them, the class activity members' heatmap drew one cell per replicate
+        -- 36 columns of "Condition n" on a job whose design names 12. Only
+        set when present: a job without a mapping keeps the payload it always
+        had, byte for byte (tests/baseline compares it).
+        """
+        for field in ("sampleValues", "sampleRelevant"):
+            value = getattr(omicValue, field, None)
+            if value is not None:
+                expressionDetail[field] = value
+
     def getGlobalExpressionData(self):
         globalExpressionDataGene = defaultdict(dict)
         globalExpressionDataComp = defaultdict(dict)
@@ -3217,16 +3234,9 @@ class PathwayAcquisitionJob(Job):
                 'originalName': self.inputCompoundsData[j].omicsValues[0].originalName,
                 'relevant': self.inputCompoundsData[j].omicsValues[0].relevant,
                 'relevantAssociation': self.inputCompoundsData[j].omicsValues[0].relevantAssociation,
-                'values': self.inputCompoundsData[j].omicsValues[0].values,
-                # The per-condition means a design or the replicate detector
-                # produced. The store carries them (applyReplicateMappingForOmic)
-                # and every Step 3 chart prefers them in "samples" mode; built
-                # without them, the class activity members' heatmap drew one
-                # cell per replicate -- 36 columns of "Condition n" on a job
-                # whose design names 12.
-                'sampleValues': getattr(self.inputCompoundsData[j].omicsValues[0], 'sampleValues', None),
-                'sampleRelevant': getattr(self.inputCompoundsData[j].omicsValues[0], 'sampleRelevant', None)
+                'values': self.inputCompoundsData[j].omicsValues[0].values
             }
+            self._addSampleMeans(expressionDetail, self.inputCompoundsData[j].omicsValues[0])
             globalExpressionDataComp[expressionID] = expressionDetail
 
         for i in self.inputGenesData:
@@ -3243,16 +3253,9 @@ class PathwayAcquisitionJob(Job):
                 'originalName': self.inputGenesData[i].omicsValues[0].originalName,
                 'relevant': self.inputGenesData[i].omicsValues[0].relevant,
                 'relevantAssociation': self.inputGenesData[i].omicsValues[0].relevantAssociation,
-                'values': self.inputGenesData[i].omicsValues[0].values,
-                # The per-condition means a design or the replicate detector
-                # produced. The store carries them (applyReplicateMappingForOmic)
-                # and every Step 3 chart prefers them in "samples" mode; built
-                # without them, the class activity members' heatmap drew one
-                # cell per replicate -- 36 columns of "Condition n" on a job
-                # whose design names 12.
-                'sampleValues': getattr(self.inputGenesData[i].omicsValues[0], 'sampleValues', None),
-                'sampleRelevant': getattr(self.inputGenesData[i].omicsValues[0], 'sampleRelevant', None)
+                'values': self.inputGenesData[i].omicsValues[0].values
             }
+            self._addSampleMeans(expressionDetail, self.inputGenesData[i].omicsValues[0])
             globalExpressionDataGene[expressionID] = expressionDetail
 
         globalExpressionData["inputGene"] = globalExpressionDataGene

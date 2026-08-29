@@ -6897,12 +6897,14 @@ function PA_Step3MetaboliteView() {
 			var levelNames = classActivity.levelNames || {"1": "category", "2": "class", "3": "subclass"};
 			var seg = [1, 2, 3].map(function (l) {
 				var count = ((classActivity.levels || {})[String(l)] || []).length;
+				/* One line per button, all the same width (CSS): three different
+				   widths read as three unrelated buttons, not one control. */
 				return '<button type="button" data-level="' + l + '" aria-pressed="' + (l === ladderState.level) + '">'
-					+ l + ' <small>' + ladderEscape(levelNames[String(l)] || "") + ' · ' + count + '</small></button>';
+					+ '<b>' + l + '</b><small>' + ladderEscape(levelNames[String(l)] || "") + ' · ' + count + '</small></button>';
 			}).join("");
 			var condSel = "";
 			if (!perm && (classActivity.nConditions || 1) > 1) {
-				condSel = '<label class="paClassMapControlLabel" for="classLadderCondition">Condition</label>'
+				condSel = '<label class="paClassMapControlLabel" for="classLadderCondition" data-guides="ignore">Condition</label>'
 					+ '<select id="classLadderCondition" class="paClassMapSelect">'
 					+ (classActivity.conditions || []).map(function (name, i) {
 						return '<option value="' + i + '"' + (i === ladderState.condition ? " selected" : "") + '>' + ladderEscape(name) + '</option>';
@@ -6910,14 +6912,16 @@ function PA_Step3MetaboliteView() {
 			}
 			controls.innerHTML = '<div class="paLadderBar">'
 				+ '<span class="paClassMapControlLabel">Level</span><div class="paLadderSeg" id="classLadderLevel">' + seg + '</div>'
-				+ '<label class="paClassMapControlLabel" for="classLadderSort">Order by</label>'
+				/* data-guides="ignore" on the mid-row labels: their rail is the
+				   select they name, not the card's. */
+				+ '<label class="paClassMapControlLabel" for="classLadderSort" data-guides="ignore">Order by</label>'
 				+ '<select id="classLadderSort" class="paClassMapSelect">'
 				+ '<option value="effect"' + (ladderState.sort === "effect" ? " selected" : "") + '>' + (perm ? "Effect (mean F)" : "Share in relevant list") + '</option>'
 				+ '<option value="p"' + (ladderState.sort === "p" ? " selected" : "") + '>p-value</option>'
 				+ '<option value="n"' + (ladderState.sort === "n" ? " selected" : "") + '>Class size</option>'
 				+ '<option value="name"' + (ladderState.sort === "name" ? " selected" : "") + '>Name</option></select>'
 				+ condSel
-				+ '<label class="paLadderSwitch"><input type="checkbox" id="classLadderHideSmall"' + (ladderState.hideSmall ? " checked" : "")
+				+ '<label class="paLadderSwitch" data-guides="ignore"><input type="checkbox" id="classLadderHideSmall"' + (ladderState.hideSmall ? " checked" : "")
 				+ '> Hide classes with fewer than 3 members</label></div>';
 			controls.querySelector("#classLadderLevel").addEventListener("click", function (event) {
 				var button = event.target.closest("button");
@@ -7032,11 +7036,11 @@ function PA_Step3MetaboliteView() {
 				return '<li' + (sig ? ' class="paIsSig"' : "") + '>' + ladderEscape(name)
 					+ (f && typeof f.F === "number" ? ' <span class="paClassMapMuted">F ' + f.F.toFixed(1) + '</span>' : "") + '</li>';
 			};
-			excludedHTML = '<details class="paLadderExcluded"><summary>' + (unmatched.length + unclassified.length) + ' of the measured metabolites reach no class'
+			excludedHTML = '<details class="paLadderExcluded"><summary data-guides="ignore">' + (unmatched.length + unclassified.length) + ' of the measured metabolites reach no class'
 				+ ' &mdash; ' + unmatched.length + ' matched no KEGG compound, ' + unclassified.length + ' matched one that KEGG BRITE does not classify'
 				+ (perm ? '; bold = responds on its own (BH &lt; ' + ladderAlpha() + ')' : "") + '</summary>'
-				+ (unmatched.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">No KEGG match</div><ul>' + unmatched.map(function (n) { return li(n, null); }).join("") + '</ul>' : "")
-				+ (unclassified.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">Outside br08001</div><ul>' + unclassified.map(function (k) { return li((features[k] || {}).name || k, k); }).join("") + '</ul>' : "")
+				+ (unmatched.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">No KEGG match</div><ul data-guides="ignore">' + unmatched.map(function (n) { return li(n, null); }).join("") + '</ul>' : "")
+				+ (unclassified.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">Outside br08001</div><ul data-guides="ignore">' + unclassified.map(function (k) { return li((features[k] || {}).name || k, k); }).join("") + '</ul>' : "")
 				+ '</details>';
 		}
 
@@ -7052,7 +7056,7 @@ function PA_Step3MetaboliteView() {
 				: [['paKeySwatch', 'share of the class in your relevant list', "background:#4A6785"],
 				   ['paKeyGlyph', 'p₀ the class is tested against', "width:2px;height:14px;background:#B5761F;border-radius:0"]];
 			keys.innerHTML = items.map(function (item) {
-				return '<li><span class="' + item[0] + '" style="' + item[2] + '"></span>' + item[1] + '</li>';
+				return '<li data-guides="ignore"><span class="' + item[0] + '" style="' + item[2] + '"></span>' + item[1] + '</li>';
 			}).join("");
 			keys.style.paddingLeft = "0";
 		}

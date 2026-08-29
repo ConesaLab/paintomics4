@@ -271,3 +271,35 @@ test_vendored_assets_are_present	5.5
 test_verification_parsing	0.1
 test_versioned_assets_are_bumped	0.4
 test_where_citations_are_born	1.2
+
+# Suites added since the table above, measured on GitHub run 33256914603
+# (both shards; the worse of the two observations where a suite appears
+# twice). Same instrument as the rows above, not a laptop.
+test_a_blank_identifier_is_refused	0.9
+test_an_empty_id_is_not_a_join_key	3.7
+test_class_activity_job	2.2
+test_class_activity_stats	1.5
+test_class_map_hover_keeps_its_caption	0.4
+test_class_ranking_keeps_every_class_in_its_row	1.4
+test_conditions_file_is_held_to_r_rules	0.2
+test_converted_file_goes_back_to_its_slot	0.2
+test_duplicate_identifiers_are_refused	2.8
+test_error_report_carries_no_empty_extra	0.2
+test_exp_design_draft_reads_every_panel	0.2
+test_global_expression_carries_sample_means	1.4
+test_harmonise_grader	0.2
+test_harmonise_prompt	0.1
+test_input_check_covers_every_omic_slot	2.7
+test_metabolite_class_activity	1.2
+test_metagene_charts_collapse_replicates	0.3
+test_mixed_width_omics_are_named	2.1
+test_more_reads_a_hash_header	0.9
+test_no_association_without_an_identifier	0.0
+test_omic_card_sizes_itself	0.4
+test_preparation_failure_says_why	0.1
+test_repair_clears_the_submit_block	0.2
+test_replicate_design_takes_both_shapes	0.5
+test_run_failure_reaches_the_agent	0.0
+test_step1_drops_empty_omic_panels	0.1
+test_step1_invalid_form_names_the_field	0.3
+test_zero_matched_omic_says_so	1.5
