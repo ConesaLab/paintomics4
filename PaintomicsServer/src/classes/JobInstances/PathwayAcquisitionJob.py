@@ -2876,10 +2876,19 @@ class PathwayAcquisitionJob(Job):
     # Class activity at every BRITE level
     # ------------------------------------------------------------------
     def _compoundOmicForClassActivity(self):
-        """The compound omic whose values the class test reads, or None."""
+        """The compound omic whose values the class test reads, or None.
+
+        The omic that carries a replicate design comes first: it is the one
+        the permutation test can read, and which file the user uploaded
+        first must not decide whether their design is honoured. Without a
+        design anywhere, the omic of the first parsed compound, as before.
+        """
         omics = getattr(self, "compoundBasedInputOmics", None) or []
         if not omics:
             return None
+        for omic in omics:
+            if self._replicateDesignFor(omic) is not None:
+                return omic
         for compound in self.inputCompoundsData.values():
             if compound.omicsValues:
                 name = getattr(compound.omicsValues[0], "omicName", None)
@@ -2964,9 +2973,16 @@ class PathwayAcquisitionJob(Job):
         from src.common import ClassActivity as CA
 
         brite = CA.loadBrite()
+        inputOmic = self._compoundOmicForClassActivity()
+        testedOmicName = (inputOmic or {}).get("omicName")
         compoundIDsByFeature = defaultdict(list)
         valuesByFeature = {}
         namesByFeature = {}
+        # The omics each feature was measured in. The permutation test reads
+        # ONE omic's columns under ONE design, so only that omic's features
+        # may have a row in Y: a second panel of the same width would
+        # otherwise be fitted under labels that are not its own.
+        omicsByFeature = defaultdict(set)
         for compoundID, compound in self.inputCompoundsData.items():
             if not compound.omicsValues:
                 continue
@@ -2976,7 +2992,13 @@ class PathwayAcquisitionJob(Job):
             # is its fields, and the older class-activity tests drive this
             # method with bare stand-ins that carry the fields and no getters.
             omicValue = compound.omicsValues[0]
-            valuesByFeature.setdefault(key, list(getattr(omicValue, "values", None) or []))
+            omicName = getattr(omicValue, "omicName", None)
+            omicsByFeature[key].add(omicName)
+            if omicName == testedOmicName:
+                # The tested omic's values win for a name measured in both.
+                valuesByFeature[key] = list(getattr(omicValue, "values", None) or [])
+            else:
+                valuesByFeature.setdefault(key, list(getattr(omicValue, "values", None) or []))
             namesByFeature.setdefault(key, getattr(omicValue, "originalName", None)
                                       or getattr(omicValue, "inputName", None) or key)
             relevant = getattr(omicValue, "relevant", [])
@@ -2987,7 +3009,6 @@ class PathwayAcquisitionJob(Job):
             classified |= entry["members"]
         unclassified = sorted(k for k in compoundIDsByFeature if k not in classified)
 
-        inputOmic = self._compoundOmicForClassActivity()
         matchedNames = {k.lower() for k in compoundIDsByFeature}
         unmatched = [n for n in self._measuredCompoundNames(inputOmic) if n not in matchedNames]
 
@@ -3053,13 +3074,13 @@ class PathwayAcquisitionJob(Job):
                           if o is not inputOmic and o.get("omicName") != inputOmic.get("omicName")]
                 if others:
                     # One design, one omic: the test reads this omic's columns
-                    # and a second compound omic's features have no row here,
-                    # so its classes carry the binomial result only.
+                    # and only its features get a row in Y below, so a second
+                    # compound omic's classes carry the binomial result only.
                     result["warnings"].append(
                         "The permutation test reads %s; %s carries its own columns and was not "
                         "tested -- its classes show the binomial result only."
                         % (inputOmic.get("omicName"), ", ".join(str(o) for o in others)))
-                keys = sorted(compoundIDsByFeature)
+                keys = sorted(k for k in compoundIDsByFeature if testedOmicName in omicsByFeature[k])
                 rows = {k: i for i, k in enumerate(keys)}
                 width = len(mapping)
                 Y = np.full((len(keys), width), np.nan)

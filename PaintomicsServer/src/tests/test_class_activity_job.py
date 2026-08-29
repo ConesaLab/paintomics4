@@ -69,8 +69,13 @@ def _relevantNames():
         return {l.strip().lower() for l in handle if l.strip()}
 
 
-def _job(withDesign=True, thinDesign=False, oneCondition=False, secondOmic=False):
-    """A bare PathwayAcquisitionJob carrying the example's compounds."""
+def _job(withDesign=True, thinDesign=False, oneCondition=False, secondOmic=False,
+         secondOmicWidth=6, secondOmicFirst=False):
+    """A bare PathwayAcquisitionJob carrying the example's compounds.
+
+    secondOmic adds a Lipidomics panel of `secondOmicWidth` columns and no
+    design; secondOmicFirst parses it BEFORE the metabolomics, as a job does
+    when it was the first file uploaded."""
     header, rows = _readValues()
     relevant = _relevantNames()
     job = PathwayAcquisitionJob.__new__(PathwayAcquisitionJob)
@@ -78,7 +83,26 @@ def _job(withDesign=True, thinDesign=False, oneCondition=False, secondOmic=False
     job.organism = "mmu"
     job.compoundRegulateFeatures = None
     job.inputCompoundsData = {}
+
+    def _lipidomics():
+        # Cholesterol under Steroids. Six ratio columns by default; at width
+        # 36 it is the metabolomics panel's own width with the columns in
+        # another order, which is what a second panel of the same assay is.
+        compound = Compound("C00187")
+        omicValue = OmicValue("cholesterol")
+        omicValue.setOriginalName("Cholesterol")
+        omicValue.setOmicName("Lipidomics")
+        omicValue.setValues(list(rows["Cholesterol"])[::-1] if secondOmicWidth == 36
+                            else [0.1 * (i + 1) for i in range(secondOmicWidth)])
+        omicValue.setRelevant([True])
+        compound.addOmicValue(omicValue)
+        return compound
+
+    if secondOmic and secondOmicFirst:
+        job.inputCompoundsData["C00187"] = _lipidomics()
     for name, ids in KEGG.items():
+        if secondOmic and name == "Cholesterol":
+            continue        # C00187 is the Lipidomics panel's own compound then
         for cid in ids:
             compound = Compound(cid)
             omicValue = OmicValue(name.lower())
@@ -90,17 +114,8 @@ def _job(withDesign=True, thinDesign=False, oneCondition=False, secondOmic=False
             job.inputCompoundsData[cid] = compound
     omic = {"omicName": "Metabolomics", "inputDataFile": VALUES, "isExample": True,
             "omicHeader": list(header)}
-    if secondOmic:
-        # A lipidomics panel of its own width: cholesterol under Steroids,
-        # six ratio columns, no design.
-        compound = Compound("C00187")
-        omicValue = OmicValue("cholesterol")
-        omicValue.setOriginalName("Cholesterol")
-        omicValue.setOmicName("Lipidomics")
-        omicValue.setValues([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
-        omicValue.setRelevant([True])
-        compound.addOmicValue(omicValue)
-        job.inputCompoundsData["C00187"] = compound
+    if secondOmic and not secondOmicFirst:
+        job.inputCompoundsData["C00187"] = _lipidomics()
     if withDesign:
         with open(DESIGN, "r") as handle:
             body = handle.read()
@@ -116,8 +131,12 @@ def _job(withDesign=True, thinDesign=False, oneCondition=False, secondOmic=False
         omic["replicateSource"] = "manual"
     job.compoundBasedInputOmics = [omic]
     if secondOmic:
-        job.compoundBasedInputOmics.append({"omicName": "Lipidomics", "inputDataFile": VALUES,
-                                            "isExample": True, "omicHeader": ["ID"] + ["c%d" % i for i in range(6)]})
+        lipid = {"omicName": "Lipidomics", "inputDataFile": VALUES, "isExample": True,
+                 "omicHeader": ["ID"] + ["c%d" % i for i in range(secondOmicWidth)]}
+        if secondOmicFirst:
+            job.compoundBasedInputOmics.insert(0, lipid)
+        else:
+            job.compoundBasedInputOmics.append(lipid)
     job.geneBasedInputOmics = []
     return job
 
@@ -251,6 +270,36 @@ class BinomialRouteTest(unittest.TestCase):
         self.assertEqual(steroids["tested"], 0)
         self.assertIsNone(steroids["p"])
         self.assertEqual(steroids["k"], [1])            # the binomial still counts it
+
+    def test_a_same_width_second_omic_is_not_fitted_under_the_first_omics_design(self):
+        """Two panels of one assay share a column count. The second has no
+        design, and its columns are in another order, so an F computed on
+        them under the first panel's labels is a number about nothing -- and
+        the warning says it was not tested, which must be true."""
+        job = _run(_job(withDesign=True, secondOmic=True, secondOmicWidth=36),
+                   {"thresholdMetaboliteClass": "0.05"})
+        a = job.classActivity
+        self.assertEqual(a["test"], "permutation")
+        self.assertTrue(any("Lipidomics" in w and "not" in w for w in a["warnings"]), a["warnings"])
+        steroids = [e for e in a["levels"]["2"] if e["name"] == "27-Carbon atoms"][0]
+        self.assertEqual(steroids["tested"], 0)
+        self.assertIsNone(steroids["meanF"])
+        self.assertIsNone(steroids["p"])
+        self.assertIsNone(a["features"]["Cholesterol"].get("F"))
+        self.assertEqual(steroids["k"], [1])            # the binomial still counts it
+
+    def test_the_omic_with_a_design_is_tested_whichever_was_uploaded_first(self):
+        """Parse order is upload order; it must not decide which omic the
+        class test reads. The Lipidomics (no design) is parsed first here."""
+        job = _run(_job(withDesign=True, secondOmic=True, secondOmicFirst=True),
+                   {"thresholdMetaboliteClass": "0.05"})
+        a = job.classActivity
+        self.assertEqual(a["test"], "permutation", a["warnings"])
+        self.assertEqual(a["factor"], "factor0")
+        self.assertEqual(a["design"]["samples"], 36)
+        self.assertEqual(a["conditions"], ["0H", "2H", "6H", "12H", "18H", "24H"])
+        amines = {e["key"]: e for e in a["levels"]["2"]}["Peptides > Amines"]
+        self.assertEqual(amines["tested"], 4)
 
     def test_measured_names_skip_a_leading_blank_line(self):
         job = _job(withDesign=False)
