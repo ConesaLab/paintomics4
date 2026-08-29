@@ -80,8 +80,10 @@
         secondaryAssociationFileSelector: "relevant-associations",
         conditionsFileSelector: "design",
         /* The metabolomics panel's experimental design: column -> condition,
-           long form or the MORE indicator matrix. */
-        designFileSelector: "design"
+           long form or the MORE indicator matrix. NOT `design`: that role is
+           MORE's conditions file under runMORE.R's rules, which refuse the
+           long form (text labels), so the two slots cannot share one. */
+        designFileSelector: "replicates"
     };
 
     /* The omic-name field a card would actually submit.
@@ -880,6 +882,16 @@
         if (counts.NOT_INDICATOR) {
             return "A conditions file holds a number (1 or 0) in every " +
                    "group column; this one holds text there.";
+        }
+        if (counts.TEXT_IN_DESIGN_MATRIX) {
+            return "A design wider than two columns is read as the 0/1 matrix, " +
+                   "a number in every condition column, and this one holds text " +
+                   "there. To name conditions in words, use two columns: the " +
+                   "value column, then its condition.";
+        }
+        if (counts.NO_CONDITION) {
+            return "Every row of a replicate design names a value column and " +
+                   "the condition it belongs to; at least one row has no condition.";
         }
         if (counts.NOT_ONE_CONDITION) {
             return "Every sample must belong to exactly one condition — one 1 per row.";

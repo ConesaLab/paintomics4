@@ -90,9 +90,9 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
         "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "3.4", "e4c6730dc001795927c595e7e8de37a689cc0f224b31a94b24a91186a7c19ce8"),
+        "3.6", "534b5695f730d42028e63e2a8589613444b92f7b8da8a4c40205280ceb6c8201"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
-        "0.6", "b412e54acdc790e27b1e388028efea5bc3daa4da4c76566ebdea211e55b95e83"),
+        "0.8", "c150e5858c4b5a33c1bde34489b7a25f3c25fe1100be8fe512e94fe2a93d8e34"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
         "0.3", "d7f2846c58226fdfe334fefc68c8d6519cc4eae393265e15dd047e5babded4f3"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-agent.js": (

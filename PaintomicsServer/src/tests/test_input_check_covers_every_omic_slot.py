@@ -118,7 +118,9 @@ EXAMPLE_ROLES = {
     "mmu_mirBase_to_ensembl.tab": "regulator-targets",   # same three-column shape
     # MORE's associations slot takes 2 or 3 columns (runMORE.R), so it is the
     # regulator-targets contract too; the two-column rule refused a third.
-    "experimental_design.tab": "design",
+    # The metabolomics replicate design: long form, its own role (MORE's
+    # `design` refuses text labels).
+    "experimental_design.tab": "replicates",
     "synthetic_mmu.gtf": None,          # not a delimited contract; never checked
 }
 
@@ -241,7 +243,7 @@ class InputCheckCoversEverySlotTest(unittest.TestCase):
         for slot, role in self.roles.items():
             self.assertIn(role, ("values", "relevant", "associations",
                                  "relevant-associations", "regulator-targets",
-                                 "design"),
+                                 "design", "replicates"),
                           "%s has role %r" % (slot, role))
 
     def test_every_example_file_has_a_declared_role(self):

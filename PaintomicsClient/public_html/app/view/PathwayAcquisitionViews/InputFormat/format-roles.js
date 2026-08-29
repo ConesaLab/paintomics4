@@ -158,32 +158,6 @@
            MOREServlet._designPatternNames handles on purpose), and numeric
            levels such as Time 0/24/48. The design-matrix advice stays as
            advice; only what R rejects is refused here. */
-        /* Long form -- `column<TAB>condition`, one row per sample column, an
-           optional header -- is the other shape a design comes in. It is what
-           src/common/DesignFile.py parse_design reads for a metabolomics
-           design (and the Step-2 upload box accepts), so refusing it here
-           blocked a file the server takes. Every row two cells: unique
-           samples, no blank condition label. */
-        var longForm = body.every(function (r) { return r.length === 2; });
-        if (longForm) {
-            var seenSample = {};
-            body.forEach(function (r, i) {
-                var sample = String(r[0]).trim(), label = String(r[1]).trim();
-                if (!sample) {
-                    problems.push(problem("BLANK_IDENTIFIER", i, "A design row needs the sample column's name."));
-                    return;
-                }
-                if (!label) {
-                    problems.push(problem("NOT_ONE_CONDITION", i, "Sample " + JSON.stringify(sample) + " has no condition."));
-                }
-                if (seenSample[sample]) {
-                    problems.push(problem("DUPLICATE_IDENTIFIER", i, "Sample " + JSON.stringify(sample) + " appears twice."));
-                }
-                seenSample[sample] = true;
-            });
-            return { ok: problems.length === 0, problems: problems.slice(0, 10),
-                     summary: { nRows: body.length, nCols: 2, longForm: true } };
-        }
         var header = body[0];
         var samples = body.slice(1);
         var wide = samples.length && samples.every(function (r) { return r.length === header.length + 1; });
@@ -212,8 +186,62 @@
                  summary: { nRows: samples.length, nCols: width, conditions: conditions } };
     }
 
+
+    /*
+     * The metabolomics panel's replicate design: which condition each value
+     * column belongs to, so the class activity test can use the variance
+     * between replicates. It is what src/common/DesignFile.py parse_design
+     * reads, and that reader takes two shapes: the long form --
+     * `column<TAB>condition`, one row per value column, an optional `#`
+     * header -- or MORE's indicator matrix, judged by validateDesign.
+     *
+     * This is its own role and not a looser `design` on purpose. The first
+     * cut widened `design` to take the long form, and CI caught what that
+     * meant: `s1 control / s2 treated` -- the exact file runMORE.R must
+     * REFUSE, because as.numeric turns a text label into NA -- started
+     * passing for MORE's Conditions slot (test_conditions_file_is_held_to_r_rules).
+     */
+    function validateReplicates(rows) {
+        var body = nonEmptyRows(rows).filter(function (r) {
+            return String(r[0]).trim().charAt(0) !== "#";
+        });
+        var longForm = body.every(function (r) { return r.length === 2; });
+        if (body.length < 2 || !longForm) {
+            /* The matrix shape, under the matrix's rules -- but a text cell
+               here is not "a conditions file holding text": the user of THIS
+               slot has a second shape open to them, and the sentence should
+               say so. Its own code, so describeProblems can. */
+            var report = validateDesign(rows);
+            (report.problems || []).forEach(function (p) {
+                if (p.code === "NOT_INDICATOR") p.code = "TEXT_IN_DESIGN_MATRIX";
+            });
+            return report;
+        }
+        var problems = [];
+        var seen = {}, labels = [], seenLabel = {};
+        body.forEach(function (r, i) {
+            var sample = String(r[0]).trim(), label = String(r[1]).trim();
+            if (!sample) {
+                problems.push(problem("BLANK_IDENTIFIER", i, "A design row needs the value column's name."));
+                return;
+            }
+            if (!label) {
+                problems.push(problem("NO_CONDITION", i, "Column " + JSON.stringify(sample) + " has no condition."));
+            } else if (!seenLabel[label]) {
+                seenLabel[label] = true;
+                labels.push(label);
+            }
+            if (seen[sample]) {
+                problems.push(problem("DUPLICATE_IDENTIFIER", i, "Column " + JSON.stringify(sample) + " appears twice."));
+            }
+            seen[sample] = true;
+        });
+        return { ok: problems.length === 0, problems: problems.slice(0, 10),
+                 summary: { nRows: body.length, nCols: 2, longForm: true, conditions: labels } };
+    }
+
     var ROLES = ["values", "relevant", "associations", "relevant-associations",
-                 "regulator-targets", "design"];
+                 "regulator-targets", "design", "replicates"];
 
     /*
      * A LAST-RESORT guess at a file's contract from its name.
@@ -403,7 +431,7 @@
      * The association roles are deliberately absent: many regulators to one
      * target is the whole point of those files, and a repeated identifier
      * there is the file working as intended. */
-    var UNIQUE_KEY_ROLES = { values: true, design: true };
+    var UNIQUE_KEY_ROLES = { values: true, design: true, replicates: true };
 
     /* options.strictKeys: the file is bound for a MORE slot, whose R/Rust
        matrix readers refuse a repeated key. Anywhere else a repeated
@@ -421,6 +449,7 @@
         else if (role === "relevant-associations") report = validateRelevantAssociations(rows);
         else if (role === "relevant") report = validateRelevant(rows, conditions);
         else if (role === "design") report = validateDesign(rows);
+        else if (role === "replicates") report = validateReplicates(rows);
         else report = validateValuesWithRegionCheck(rows);
 
         var blank = blankIdentifiers(rows, role);
@@ -439,7 +468,7 @@
             if (dup.count) {
                 var detail = { ids: dup.count, rows: dup.rows,
                                worst: dup.worst, worstCount: dup.worstCount };
-                if (role === "design" || options.strictKeys) {
+                if (role === "design" || role === "replicates" || options.strictKeys) {
                     report.problems = (report.problems || []).concat([
                         problem("DUPLICATE_IDENTIFIER", 0, detail)
                     ]);
@@ -460,6 +489,7 @@
         validateRelevantAssociations: validateRelevantAssociations,
         validateRelevant: validateRelevant,
         validateDesign: validateDesign,
+        validateReplicates: validateReplicates,
         roleForFileName: roleForFileName,
         rolesFromManifest: rolesFromManifest,
         ROLES: ROLES,

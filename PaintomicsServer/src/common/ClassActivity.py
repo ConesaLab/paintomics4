@@ -314,8 +314,6 @@ def factorTest(Y, columnLevel, strata):
     P = np.full(m, np.nan)
     DF1 = np.full(m, np.nan)
     DF2 = np.full(m, np.nan)
-    nLevels = int(columnLevel.max()) + 1 if n else 0
-    nStrata = int(strata.max()) + 1 if n else 0
 
     masks = ~np.isnan(Y)
     patterns = defaultdict(list)
