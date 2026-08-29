@@ -38,9 +38,22 @@ it, and ``pathwayAcquisitionStep2`` remains the only writer of a selection.
 
 import json
 import logging
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from src.classes.CompoundDisambiguation import prompts
+
+# Defensive: a deployment whose serverconf predates these settings must not
+# lose the servlet to an ImportError (see adding-a-serverconf-setting).
+try:
+    from src.conf.serverconf import COMPOUND_SUGGESTION_WORKERS
+except ImportError:
+    COMPOUND_SUGGESTION_WORKERS = int(os.getenv("COMPOUND_SUGGESTION_WORKERS", "3"))
+try:
+    from src.conf.serverconf import COMPOUND_SUGGESTION_MAX_SETS
+except ImportError:
+    COMPOUND_SUGGESTION_MAX_SETS = int(os.getenv("COMPOUND_SUGGESTION_MAX_SETS", "90"))
 
 #: Residual sets per gateway call. Sets are independent, so this trades prompt
 #: size against round trips: the STATegra example's 18 residuals are one call,
@@ -51,6 +64,22 @@ DEFAULT_BATCH_SIZE = 30
 #: watching a spinner; this call must give up and say so rather than hold a
 #: queue slot until the gateway decides to.
 DEFAULT_BATCH_BUDGET_SECONDS = 180
+
+#: Batches in flight at once. A run holds ONE of the site's few queue workers
+#: -- the same workers every user's step 1/2/3 run on -- and that worker is
+#: idle on I/O for the whole gateway call, so the batches, which are
+#: independent (an answer is matched by input name, never by position), go
+#: out together instead of one after another. Three, like the interpreter's
+#: own fan-out, so the gateway sees no more parallel calls than it already
+#: does.
+DEFAULT_WORKERS = max(1, int(COMPOUND_SUGGESTION_WORKERS))
+
+#: Residual sets one run will send. Without a ceiling a job with 300
+#: ambiguous names was ten sequential calls, up to half an hour on a queue
+#: worker, and PySiQ does not enforce the timeout it is handed; with one the
+#: worst case is ceil(MAX_SETS / BATCH_SIZE / WORKERS) rounds of one batch
+#: budget. The sets past it are left to the user, and told so.
+DEFAULT_MAX_SETS = max(1, int(COMPOUND_SUGGESTION_MAX_SETS))
 
 #: A selection that changes which pathways a user publishes should not change
 #: between two runs of the same job if it can be helped.
@@ -224,17 +253,36 @@ def buildClient():
     return LLMClient(AI_PROVIDERS.get(AI_LLM_PROVIDER, {}), AI_LLM_PROVIDER)
 
 
+def _leftToUser(decision, detail):
+    """The abstention entry for a set this run did not decide."""
+    return {"title": decision["title"], "keggID": None, "confidence": "", "reason": "",
+            "detail": detail, "tier": "ai", "candidates": decision.get("candidates", [])}
+
+
 def suggestCompounds(decisions, context, client=None, batchSize=DEFAULT_BATCH_SIZE,
-                     budgetSeconds=DEFAULT_BATCH_BUDGET_SECONDS, jobID=""):
+                     budgetSeconds=DEFAULT_BATCH_BUDGET_SECONDS, jobID="",
+                     workers=None, maxSets=None):
     """Ask the model to choose for every residual set, batched.
 
     @param {List} decisions, residual decisions from the ranker
     @param {Dict} context, as accepted by :func:`prompts.buildContextBlock`
     @param client, an LLMClient; built from configuration when omitted
+    @param {int} workers, batches in flight at once (DEFAULT_WORKERS)
+    @param {int} maxSets, sets this run will send (DEFAULT_MAX_SETS); the
+                 rest are returned as abstained, with a detail that says so
     @returns {Dict} {"accepted", "abstained", "rejected", "model", "batches"}
     """
     if not decisions:
         return {"accepted": [], "abstained": [], "rejected": [], "model": "", "batches": 0}
+
+    workers = max(1, int(workers if workers is not None else DEFAULT_WORKERS))
+    maxSets = max(1, int(maxSets if maxSets is not None else DEFAULT_MAX_SETS))
+    deferred = decisions[maxSets:]
+    decisions = decisions[:maxSets]
+    if deferred:
+        logging.info("COMPOUND DISAMBIGUATION - job %s: %d residual set(s); this run "
+                     "chooses for the first %d and leaves %d to the user",
+                     jobID, len(decisions) + len(deferred), maxSets, len(deferred))
 
     if client is None:
         try:
@@ -259,11 +307,8 @@ def suggestCompounds(decisions, context, client=None, batchSize=DEFAULT_BATCH_SI
 
     from src.classes.AIInterpret.llm_client import json_schema_format
 
-    accepted, abstained, rejected = [], [], []
-    batches = 0
-
-    for batch in _chunk(decisions, batchSize):
-        batches += 1
+    def runBatch(batch):
+        """One gateway call; (accepted, abstained, rejected) for its sets."""
         messages = [
             {"role": "system", "content": prompts.SYSTEM_PROMPT},
             {"role": "user", "content": prompts.buildBatchPrompt(batch, context)},
@@ -283,17 +328,26 @@ def suggestCompounds(decisions, context, client=None, batchSize=DEFAULT_BATCH_SI
             logging.warning("COMPOUND DISAMBIGUATION - batch of %d failed for job "
                             "%s (%s); those names are left to the user",
                             len(batch), jobID, ex)
-            for decision in batch:
-                abstained.append({"title": decision["title"], "keggID": None,
-                                  "confidence": "", "reason": "",
-                                  "detail": "the AI service could not be reached",
-                                  "tier": "ai", "candidates": decision.get("candidates", [])})
-            continue
+            return [], [_leftToUser(d, "the AI service could not be reached") for d in batch], []
+        return applyChoices(batch, parseChoices(reply))
 
-        batchAccepted, batchAbstained, batchRejected = applyChoices(batch, parseChoices(reply))
+    # Every batch goes out together, up to `workers` at a time, and the
+    # results are read back in the order the batches were made: the audit
+    # log below and the browser both see the sets as they were sent, however
+    # the gateway ordered its replies.
+    batchList = list(_chunk(decisions, batchSize))
+    batches = len(batchList)
+    with ThreadPoolExecutor(max_workers=min(workers, batches)) as pool:
+        results = list(pool.map(runBatch, batchList))
+
+    accepted, abstained, rejected = [], [], []
+    for batchAccepted, batchAbstained, batchRejected in results:
         accepted.extend(batchAccepted)
         abstained.extend(batchAbstained)
         rejected.extend(batchRejected)
+    for decision in deferred:
+        abstained.append(_leftToUser(
+            decision, "left for you: this run chooses for the first %d ambiguous names" % maxSets))
 
     # The audit trail. Nothing about these choices is written to the job, so
     # the log is where "which compound did the model pick for job X, and what
