@@ -6714,6 +6714,14 @@ function PA_Step3MetaboliteView() {
 	}
 
 	function ladderIsPermutation() { return !!(classActivity && classActivity.test === "permutation"); }
+	/* The cut-off behind "responds on its own": the server counts nsig and
+	   flags each member at the reader's own threshold when they set one. The
+	   class-level pill stays at 0.05, the level the null's 95th percentile
+	   line is drawn for. */
+	function ladderAlpha() {
+		var a = classActivity && classActivity.alpha;
+		return (typeof a === "number" && a > 0 && a < 1) ? a : 0.05;
+	}
 
 	/* One row's numbers, whichever test ran. */
 	function ladderRowOf(entry) {
@@ -6904,7 +6912,7 @@ function PA_Step3MetaboliteView() {
 			};
 			excludedHTML = '<details class="paLadderExcluded"><summary>' + (unmatched.length + unclassified.length) + ' of the measured metabolites reach no class'
 				+ ' &mdash; ' + unmatched.length + ' matched no KEGG compound, ' + unclassified.length + ' matched one that KEGG BRITE does not classify'
-				+ (perm ? '; bold = responds on its own (BH &lt; 0.05)' : "") + '</summary>'
+				+ (perm ? '; bold = responds on its own (BH &lt; ' + ladderAlpha() + ')' : "") + '</summary>'
 				+ (unmatched.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">No KEGG match</div><ul>' + unmatched.map(function (n) { return li(n, null); }).join("") + '</ul>' : "")
 				+ (unclassified.length ? '<div class="paClassMapControlLabel" style="margin-top:8px">Outside br08001</div><ul>' + unclassified.map(function (k) { return li((features[k] || {}).name || k, k); }).join("") + '</ul>' : "")
 				+ '</details>';
