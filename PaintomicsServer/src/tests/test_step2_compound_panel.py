@@ -88,7 +88,7 @@ sandbox.globalThis = sandbox;
 
 vm.createContext(sandbox);
 vm.runInContext(source + "\n;globalThis.__api = {" +
-    "foundCountLabel: foundCountLabel," +
+    "countLabel: countLabel," +
     "renderCompoundCandidate: renderCompoundCandidate," +
     "mappingSummaryCaption: mappingSummaryCaption," +
     "PA_Step2CompoundSetView: PA_Step2CompoundSetView," +
@@ -171,14 +171,14 @@ var out = {
     otherCompoundsHTML: setView(withAlts).renderOtherCompounds(),
 
     countLabels: {
-        one: api.foundCountLabel(1, "compound"),
-        four: api.foundCountLabel(4, "compound"),
-        oneAlt: api.foundCountLabel(1, "alternative compound"),
-        manyAlt: api.foundCountLabel(101, "alternative compound")
+        one: api.countLabel(1, "KEGG match", "KEGG matches"),
+        four: api.countLabel(4, "KEGG match", "KEGG matches"),
+        oneAlt: api.countLabel(1, "more match", "more matches"),
+        manyAlt: api.countLabel(101, "more match", "more matches")
     },
 
     escaping: api.renderCompoundCandidate(
-        compound("C00001", '<img src=x onerror="alert(1)">', false), 200),
+        compound("C00001", '<img src=x onerror="alert(1)">', false)),
 
     captions: {
         partial: api.mappingSummaryCaption(890, 110),
@@ -351,7 +351,7 @@ class Step2BehaviourTest(unittest.TestCase):
     def test_the_show_control_only_appears_when_there_are_alternatives(self):
         self.assertIn("showOtherCompoundsButton", self.out["cardWithAlternatives"])
         self.assertNotIn("showOtherCompoundsButton", self.out["cardNoAlternatives"])
-        self.assertNotIn("alternative compound", self.out["cardNoAlternatives"])
+        self.assertNotIn("more match", self.out["cardNoAlternatives"])
 
     def test_alternatives_are_not_rendered_until_asked_for(self):
         self.assertIn('class="otherCompoundsPanel"', self.out["cardWithAlternatives"])
@@ -362,11 +362,13 @@ class Step2BehaviourTest(unittest.TestCase):
 
     def test_counts_read_as_english(self):
         labels = self.out["countLabels"]
-        self.assertEqual("1 compound found", labels["one"])
-        self.assertEqual("4 compounds found", labels["four"])
-        self.assertEqual("1 alternative compound found", labels["oneAlt"])
-        self.assertEqual("101 alternative compounds found", labels["manyAlt"])
-        self.assertIn("1 compound found", self.out["cardSingle"])
+        self.assertEqual("1 KEGG match", labels["one"])
+        self.assertEqual("4 KEGG matches", labels["four"])
+        self.assertEqual("1 more match", labels["oneAlt"])
+        self.assertEqual("101 more matches", labels["manyAlt"])
+        self.assertIn("1 KEGG match", self.out["cardSingle"])
+        # The id is on the row: it is how a reader tells the three alanines apart.
+        self.assertIn('<code class="metaboliteId">C00065</code>', self.out["cardWithAlternatives"])
 
     def test_compound_names_are_escaped(self):
         # Compound titles come from the user's input file; the old markup

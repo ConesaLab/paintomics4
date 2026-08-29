@@ -986,7 +986,7 @@ function PA_Step1JobView() {
 				 "Metabolomics", "Gene expression"];
 			omicNames.forEach(function(omicName) {
 				var panel = me.addNewOmicSubmittingPanel(examplePanelTypeFor(omicName));
-				if (panel) { panel.setExampleMode(omicName); }
+				if (panel) { panel.setExampleMode(omicName, ((scenario && scenario.designOmics) || []).indexOf(omicName) > -1); }
 			});
 		} else {
 			// A pre-processing pipeline: regions-to-genes, miRNA-to-genes or
@@ -1245,11 +1245,10 @@ function PA_Step1JobView() {
 			html: '<p data-guides="ignore" style="margin:0 10px 10px;padding:8px 12px;border-left:4px solid var(--pa-accent-blue);' +
 				'background:rgba(38,132,255,0.08);font-size:12px;line-height:1.5;">' +
 				'<b>This example dataset is fixed.</b> Its omics, organism and databases come from ' +
-				'the server&rsquo;s example catalogue' +
+				'the server&rsquo;s catalogue' +
 				(pipeline === "pathway-acquisition" ? "" : " for this pre-processing step") +
-				', so the panels below are shown read-only: changes made here would not reach the ' +
-				'analysis. Press <b>Reset</b> to go back to an upload form, or ' +
-				'<b>Load another example</b> to switch dataset.</p>'
+				', so the panels are read-only. <b>Reset</b> returns to an upload form; ' +
+				'<b>Load another example</b> switches dataset.</p>'
 		});
 	};
 
@@ -2475,12 +2474,25 @@ function OmicSubmittingPanel(nElem, options) {
 	*
 	* @param {string} [omicName] the manifest's name for this omic.
 	*/
-	this.setExampleMode = function(omicName){
-		var label = omicName || this.type || "example";
+	/* hasDesign: the scenario ships an experimental design for this omic
+	   (the catalogue's designOmics). Every Metabolomics example used to get
+	   the "experimental design" label, including the ones that carry none
+	   and then run the binomial test. */
+	this.setExampleMode = function(omicName, hasDesign){
 		var component = this.getComponent();
-		setExampleLabel(component.queryById("mainFileSelector"), label + " — values");
+		setExampleLabel(component.queryById("mainFileSelector"), "values");
 		setExampleLabel(component.queryById("secondaryFileSelector"),
-			label + " — relevant features");
+			"relevant features");
+		var design = component.queryById("designFileSelector");
+		var note = component.queryById("designFileNote");
+		if (design && !design.hidden) {
+			if (hasDesign) {
+				setExampleLabel(design, "experimental design");
+			} else {
+				design.setVisible(false);
+				if (note) note.setVisible(false);
+			}
+		}
 	};
 	/*********************************************************************
 	* COMPONENT DECLARATION
@@ -2600,6 +2612,33 @@ function OmicSubmittingPanel(nElem, options) {
 							}),
 							helpTip: "Specify the type of data for uploaded file (Relevant Genes list, Relevant proteins list,...)."
 						}, {
+							/* Metabolomics only. A values file with one column per
+							   SAMPLE plus this design (column -> condition) is what
+							   lets the class activity test run on the replicates:
+							   it asks whether a chemical class responds at all, on
+							   the data's own noise, instead of whether it is more
+							   changed than the rest of a panel picked to change.
+							   Without it the test is a binomial on the relevant
+							   list against the significance threshold used to
+							   build that list. Optional, and the panel is still
+							   valid without it. */
+							xtype: "myFilesSelectorButton",
+							fieldLabel: 'Experimental design',
+							namePrefix: this.namePrefix + '_design',
+							itemId: "designFileSelector",
+							hidden: this.mapTo !== "Compound",
+							helpTip: "Optional. A two-column file mapping each sample column of the data file to its condition " +
+								"(e.g. Ctr_0H_B1<tab>Ctr_0H), or a MORE-style 0/1 design matrix. Upload it together with a " +
+								"data file that has one column per sample."
+						}, {
+							xtype: 'box',
+							itemId: "designFileNote",
+							hidden: this.mapTo !== "Compound",
+							/* data-guides="ignore": the note sits on the INPUT rail (150px
+							   in, under the field it annotates), which the overlay lists as a
+							   rail but judges this paragraph against the label column. */
+							html: '<p class="paDesignNote" data-guides="ignore">Optional &mdash; runs the class test on your replicates.</p>'
+						}, {
 							xtype: 'combo',
 							fieldLabel: 'Can be mapped to',
 							name: this.namePrefix + '_match_type',
@@ -2610,6 +2649,19 @@ function OmicSubmittingPanel(nElem, options) {
 							value: this.mapTo,
 							editable: false,
 							allowBlank: false,
+							listeners: {
+								/* The design file is a compound omic's. `hidden` above was read
+								   once at build time, so a panel switched to Metabolites afterwards
+								   never showed it and a second compound omic could carry no design. */
+								change: function (combo, value) {
+									var owner = combo.ownerCt;
+									var isCompound = String(value || "").toLowerCase() === "compound";
+									["designFileSelector", "designFileNote"].forEach(function (id) {
+										var item = owner && owner.queryById(id);
+										if (item) item.setVisible(isCompound);
+									});
+								}
+							},
 							store: Ext.create('Ext.data.ArrayStore', {
 								fields: ['name', 'value'],
 								data: [
@@ -2753,9 +2805,9 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 			"Region-based omic";
 
 		setExampleLabel(component.queryById("mainFileSelector"),
-			omicName + " — region values");
+			"region values");
 		setExampleLabel(component.queryById("secondaryFileSelector"),
-			omicName + " — relevant regions");
+			"relevant regions");
 		setExampleLabel(component.queryById("tertiaryFileSelector"),
 			"genome annotation (GTF)");
 
@@ -3552,11 +3604,11 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 		var regulator = omicNames[0];
 
 		setExampleLabel(component.queryById("mainFileSelector"),
-			regulator + " — values");
+			"values");
 		setExampleLabel(component.queryById("secondaryFileSelector"),
-			regulator + " — relevant features");
+			"relevant features");
 		setExampleLabel(component.queryById("mirnaTargetsFileSelector"),
-			regulator + " — target predictions");
+			"target predictions");
 		setExampleLabel(component.queryById("rnaseqauxFileSelector"),
 			"target gene expression");
 

@@ -1200,8 +1200,8 @@
 
 [data-theme="dark"] #clusternumber_box div,
 [data-theme="dark"] #clusternumber_box span,
-[data-theme="dark"] #threshold_box div,
-[data-theme="dark"] #threshold_box span {
+[data-theme="dark"] #threshold_box div:not(.paClassPlan *):not(.paClassHow *),
+[data-theme="dark"] #threshold_box span:not(.paClassPlan *):not(.paClassHow *) {
 	background-color: var(--pa-surface) !important;
 }
 
@@ -1946,6 +1946,10 @@
    the light blue/red pair drops below 3:1 against #151D26. */
 :root[data-theme="dark"] .paClassMapBand { fill: #1B242E; }
 :root[data-theme="dark"] .paClassMapGrid { stroke: #28333F; }
+:root[data-theme="dark"] .paClassMapZeroLine { stroke: #3A4754; }
+:root[data-theme="dark"] .paClassMapQ95, :root[data-theme="dark"] .paKeyQ95 { stroke: #B8892B; background: #B8892B; }
+:root[data-theme="dark"] .paClassMapMark.paIsDesc .paClassMapLabel, :root[data-theme="dark"] .paClassMapMark.paIsDesc .paClassMapCount,
+:root[data-theme="dark"] .paClassMapMark.paIsDesc .paClassRankFdr { fill: #6F7F8E; }
 :root[data-theme="dark"] .paClassMapDisc { fill: #35424F; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapUp { fill: #4A8CD2; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapDown { fill: #C9524D; stroke: #151D26; }
@@ -1956,7 +1960,7 @@
 :root[data-theme="dark"] .paClassMapTick,
 :root[data-theme="dark"] .paClassMapAxis { fill: #8A99A9; }
 :root[data-theme="dark"] .paClassMapLabel { fill: #E3EAF2; }
-:root[data-theme="dark"] .paClassMapCount { fill: #A1B0C0; }
+:root[data-theme="dark"] .paClassMapCount { fill: #A1B0C0; stroke: #151D26; }
 :root[data-theme="dark"] .paClassMapSummary,
 :root[data-theme="dark"] .paClassMapWarn { color: #C9524D; }
 :root[data-theme="dark"] .paClassMapMuted { color: #6F7F8E; }
@@ -1991,3 +1995,37 @@
 :root[data-theme="dark"] .paClassDetailClose { color: #8A99A9; }
 :root[data-theme="dark"] .paClassDetailTools { color: #A1B0C0; }
 :root[data-theme="dark"] .paClassDetailClose:hover { color: #E3EAF2; }
+
+/* Class activity ladder (Step 3). Additive, same tokens as the class map. */
+:root[data-theme="dark"] .paLadderSeg { background: #151D26; border-color: #3A4754; }
+:root[data-theme="dark"] .paLadderSeg button { color: #A1B0C0; border-right-color: #28333F; }
+:root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] { background: #4A8CD2; color: #0F1E30; }
+:root[data-theme="dark"] .paLadderSeg button small { color: #6F7F8E; }
+/* The pressed segment is a light blue with dark ink; its small text was still
+   the grey above (2.0:1 on that blue), so "class · 8" vanished. */
+:root[data-theme="dark"] .paLadderSeg button[aria-pressed="true"] small { color: rgba(15, 30, 48, 0.82); }
+:root[data-theme="dark"] .paLadderSwitch, :root[data-theme="dark"] .paLadderExcluded,
+:root[data-theme="dark"] .paLadderExcluded summary { color: #A1B0C0; }
+:root[data-theme="dark"] .paLadderWarn { background: #2A2416; border-left-color: #B8892B; color: #C9D3DD; }
+:root[data-theme="dark"] .paLadderExcluded li.paIsSig { color: #E3EAF2; }
+:root[data-theme="dark"] .paDesignNote { color: #A1B0C0; }
+:root[data-theme="dark"] {
+  --pa-fig-bar: #3A4756;
+  --pa-fig-bar-strong: #55657A;
+  --pa-fig-cell: #55657A;
+  --pa-fig-cell-strong: #A9B7C6;
+  --pa-fig-faint: #6F7F8E;
+  --pa-fig-ink: #E3EAF2;
+  --pa-fig-ink-muted: #8A98A8;
+  --pa-fig-tick: #151D26;
+}
+:root[data-theme="dark"] #threshold_box .paClassPlan { background: var(--pa-surface) !important; }
+:root[data-theme="dark"] #threshold_box .paClassHow { background: var(--pa-surface-sunken) !important; }
+:root[data-theme="dark"] #threshold_box .paClassPlanName,
+:root[data-theme="dark"] #threshold_box .paClassHowRow.paIsOn .paClassHowName,
+:root[data-theme="dark"] #threshold_box .paClassTile > b { color: #E3EAF2; }
+:root[data-theme="dark"] #threshold_box .paClassTile { background: var(--pa-surface-sunken) !important; }
+:root[data-theme="dark"] #threshold_box .paClassPill-on { background: rgba(76, 175, 80, 0.18) !important; color: #7DD87F; }
+:root[data-theme="dark"] #threshold_box .paClassPill-off { background: rgba(255, 255, 255, 0.08) !important; color: #A1B0C0; }
+:root[data-theme="dark"] #threshold_box .paClassPillDot { background: #7DD87F !important; }
+:root[data-theme="dark"] .metaboliteHead > h3.metaboliteTitle { color: #E3EAF2; }

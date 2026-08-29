@@ -640,6 +640,9 @@ function JobController() {
 						if (response.classificationMeta) {
 							jobModel.setClassificationMeta(response.classificationMeta)
 						}
+						if (response.classActivity !== undefined) {
+							jobModel.setClassActivity(response.classActivity)
+						}
 						if (response.featureSummary) {
 							jobModel.setFeatureSummary(response.featureSummary)
 						}
@@ -860,8 +863,17 @@ function JobController() {
 			// $(omicNames).each(function(omic) {
 			// 		omicValues[omic] = Ext.ComponentQuery.query('[name="customslider_' + omic + '"]')[0].getValues();
 			// });
-			var form = jobView.getComponent().down("form");
-			var formData = $.extend(form ? form.getForm().getValues() : {}, {
+			/* EVERY form on the step, not the first one. Step 2 carries two:
+			   the cluster-number form and the metabolite class activity form.
+			   `down("form")` posted only whichever came first, so on any job
+			   with a gene omic the class activity threshold (and now the
+			   factor to test) never left the browser -- the server saw no
+			   value and silently ran the automatic, competitive null. */
+			var formData = {};
+			Ext.Array.forEach(jobView.getComponent().query("form") || [], function (form) {
+				$.extend(formData, form.getForm().getValues());
+			});
+			$.extend(formData, {
 				jobID: jobView.getModel().getJobID(),
 				selectedCompounds: jobView.getSelectedCompounds()
 			});
@@ -969,6 +981,9 @@ function JobController() {
 
 						if (response.classificationMeta) {
 							jobModel.setClassificationMeta(response.classificationMeta)
+						}
+						if (response.classActivity !== undefined) {
+							jobModel.setClassActivity(response.classActivity)
 						}
 						if (response.featureSummary) {
 							jobModel.setFeatureSummary(response.featureSummary)
@@ -1310,6 +1325,9 @@ function JobController() {
 
 						if (response.classificationMeta) {
 							jobModel.setClassificationMeta(response.classificationMeta)
+						}
+						if (response.classActivity !== undefined) {
+							jobModel.setClassActivity(response.classActivity)
 						}
 						if (response.featureSummary) {
 							jobModel.setFeatureSummary(response.featureSummary)
@@ -1763,6 +1781,14 @@ function JobController() {
 		if (data != null) {
 			try {
 				serialised = JSON.stringify(data, replacerFn);
+				/* The job model is stamped with the cache contract it was written
+				   under (PA_JOB_CACHE_SCHEMA in app.js); the boot refuses a stale
+				   stamp and recovers the job from the server instead. */
+				if (data.jobID && typeof PA_JOB_CACHE_SCHEMA !== "undefined") {
+					var stamped = JSON.parse(serialised);
+					stamped.cacheSchema = PA_JOB_CACHE_SCHEMA;
+					serialised = JSON.stringify(stamped);
+				}
 			} catch (err) {
 				console.warn("Could not serialise " + key + " for storage.", err);
 			}

@@ -3430,7 +3430,12 @@ div.contentbox p > #download_mapping_file {
 #dbs_message div {
 	padding: 0 var(--pa-card-inset) 10px;
 }
-#clusternumber_box div, #clusternumber_box span, #threshold_box div, #threshold_box span {
+/* The class activity card's own blocks are exempt: an hbox cannot lay out
+   two children that are both forced to 100%, and the plan and the band
+   carry their own borders, pills and tiles. */
+#clusternumber_box div, #clusternumber_box span,
+#threshold_box div:not(.paClassMain):not(.paClassPlanCol):not(.paClassControls):not(.paClassPlan *):not(.paClassHow *),
+#threshold_box span:not(.paClassPlan *):not(.paClassHow *) {
 	border: 0 !important;
 	background-color: white !important;
 	width: 100% !important;
@@ -4017,7 +4022,9 @@ div.contentbox li {
 i.classificationNameBox {
 	margin-right: 10px;
 	border-radius: 50%;
-	line-height: 24px;
+	/* 20px, the content box inside the 2px borders (24px border-box). At
+	   24px the line box overran the circle and the letter sat 2px low. */
+	line-height: 20px;
 	display: inline-block;
 	border: 2px solid;
 	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
@@ -9192,11 +9199,19 @@ div.repDetectionCard h3 {
 .paClassMapNeutral { fill: #4A6785; stroke: #FFFFFF; stroke-width: 1; }
 .paClassMapRing { fill: none; stroke: #141E2B; stroke-width: 1.8; }
 .paClassMapSigLine { stroke: #B5761F; stroke-width: 1.5; stroke-dasharray: 6 4; }
+/* The permutation route: F = 1 is the reference the stems grow from, and
+   each row's null 95th percentile is a tick on the row. */
+.paClassMapZeroLine { stroke: #9AA8B8; stroke-width: 1.2; }
+.paClassMapQ95 { stroke: #B5761F; stroke-width: 2; stroke-linecap: round; }
+/* Fewer than 3 members: drawn, labelled, but visibly not a class result. */
+.paClassMapMark.paIsDesc .paClassMapLabel, .paClassMapMark.paIsDesc .paClassMapCount,
+.paClassMapMark.paIsDesc .paClassRankFdr { fill: #8A98A8; }
 .paClassMapSigLabel { fill: #B5761F; font-size: 11px; font-weight: 600; }
 .paClassMapTick { fill: #78879A; font-size: 10.5px; }
 .paClassMapAxis { fill: #78879A; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
 .paClassMapLabel { fill: #141E2B; font-size: 11.5px; }
-.paClassMapCount { fill: #44556A; font-size: 10px; }
+/* A halo in the page colour: the count sits on the stem when the reading is at the axis end. */
+.paClassMapCount { fill: #44556A; font-size: 10px; paint-order: stroke; stroke: #FFFFFF; stroke-width: 3px; stroke-linejoin: round; }
 .paClassMapMark { cursor: pointer; }
 .paClassMapMark:hover .paClassMapDisc { stroke: #B5761F; }
 .paClassMapSummary { position: relative; margin: 2px 0 10px; color: #44556A; font-size: 13px; }
@@ -9209,7 +9224,9 @@ div.repDetectionCard h3 {
    card edge. Each li is one nowrap flex child, so a narrow card wraps BETWEEN
    keys instead of mid-phrase. */
 .paClassMapKeys { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center;
-                  margin: 12px 0 4px; padding: 0; list-style: none;
+                  /* 26px sides: the card's rail, where the heading, the toolbar and
+                     the ladder's first column sit. It hung at the box edge. */
+                  margin: 12px 26px 4px; padding: 0; list-style: none;
                   color: #44556A; font-size: 12px; }
 .paClassMapKeys li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 /* No own indent: the ul carries the chart's padL, and `div.contentbox li`
@@ -9233,6 +9250,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
    third wider than every other one while measuring the same. */
 .paKeyArea { background: #C4CFDA; }
 .paKeyRing { border: 1.8px solid #141E2B; }
+.paKeyQ95 { width: 2px; height: 14px; border-radius: 0; background: #B5761F; }
 
 /* Hover linkage. Pointing at a mark rings it and drops every other class to a
    fifth, which is what makes eight marks read as a set being compared rather
@@ -9260,7 +9278,7 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
                       margin: 4px 0 12px; }
 .paClassMapControlLabel { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
                           color: #78879A; font-weight: 600; }
-.paClassMapSelect { padding: 4px 8px; border: 1px solid #B5C1CE; border-radius: 4px;
+.paClassMapSelect { height: 32px; padding: 0 8px; border: 1px solid #B5C1CE; border-radius: 6px;
                     background: #FFFFFF; color: #141E2B; font-size: 13px; }
 .paClassMapControlNote { color: #78879A; font-size: 12px; }
 
@@ -9302,3 +9320,405 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paClassDetailFigure { display: flex; align-items: flex-start; }
 .paClassDetailFigure .PA_step5_heatmapContainer { flex: none; }
 .paClassDetailFigure .PA_step5_plotContainer { flex: 1 1 320px; min-width: 320px; position: sticky; top: 8px; }
+
+/* ---------------------------------------------------------------------------
+   Metabolite class activity ladder (PA_Step3Views.drawClassLadder).
+   One row per class at the chosen BRITE level: name and size, the mean-F bar
+   with the permutation null's 95th percentile as a tick (or the k/n bar under
+   the binomial), the direction strip over conditions, |FC| and the p pill.
+   Colours come from the same tokens as the class map above; the direction
+   strip is painted by JS on the app's own bwr ramp.
+   --------------------------------------------------------------------------- */
+/* 26px sides: the card's rail, shared with the heading, the summary line
+   and (24px + border) the ladder's first column. */
+.paLadderBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 4px 0 12px; padding: 0 26px; }
+.paLadderBar .paClassMapControlLabel { margin-right: 2px; }
+/* Three equal cells on one line, the height of the select beside them: a
+   segmented control reads as one control only when its parts match. */
+.paLadderSeg { display: inline-grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #B5C1CE;
+               border-radius: 6px; overflow: hidden; background: #FFFFFF; }
+.paLadderSeg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 124px;
+                      height: 32px; border: 0; background: transparent; padding: 0 12px; cursor: pointer; color: #44556A;
+                      font: inherit; font-size: 13px; line-height: 1; border-right: 1px solid #E3E9EF; white-space: nowrap; }
+.paLadderSeg button:last-child { border-right: 0; }
+/* color: inherit -- the card paints every <b> in the accent blue, which on the
+   pressed (blue) segment made the level number vanish. */
+.paLadderSeg button b { font-weight: 600; color: inherit; }
+.paLadderSeg button small { font-size: 11px; line-height: 1; color: #78879A; }
+.paLadderSeg button b { line-height: 1; }
+.paLadderSeg button[aria-pressed="true"] { background: #19589E; color: #FFFFFF; }
+.paLadderSeg button[aria-pressed="true"] small { color: rgba(255, 255, 255, .8); }
+.paLadderSwitch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #44556A; cursor: pointer; }
+.paLadderSwitch input { margin: 0; }
+.paLadderWarn { margin: 0 0 10px; padding: 8px 12px; border-left: 3px solid #B5761F; background: #FBF6EC;
+                color: #44556A; font-size: 13px; }
+.paLadderExcluded { margin: 12px 26px 0; font-size: 12.5px; color: #44556A; }
+.paLadderExcluded summary { cursor: pointer; color: #44556A; }
+.paLadderExcluded ul { margin: 6px 0 0 18px; padding: 0; columns: 2; column-gap: 24px; }
+.paLadderExcluded li { padding: 1px 0; }
+.paLadderExcluded li.paIsSig { font-weight: 600; color: #141E2B; }
+/* Under the design field, on the input's rail: the label column is 150px
+   (the panel's labelWidth) and the generic paragraph inset is cancelled --
+   with it the note started 26px right of the input it annotates. The
+   parent selector outranks `div.contentbox p`. */
+.x-box-item > p.paDesignNote { margin: 0 0 6px 150px; padding: 0; font-size: 12px; color: #52525B; max-width: 78ch; }
+
+/* ==========================================================================
+   Step 2 · the compound cards, redrawn (2026-08-29)
+
+   The cards were 49%-wide floats with a 230px floor, so a two-candidate
+   card was two lines of content over 150px of white, and the candidates
+   were 200px cells with their KEGG ids hidden. Now: a grid whose cards
+   size to their content, the name and its count on one line, the id on
+   every candidate row, and the AI's reason printed on the card instead
+   of hidden in a tooltip.
+   ========================================================================== */
+.compoundsGrid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	/* The gutter the floated cards had (100% - 2 x 49% at this width). */
+	gap: 10px 22px;
+	/* Default stretch: the two cards of a row share one bottom edge. */
+	clear: both;
+}
+@media (max-width: 900px) {
+	.compoundsGrid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Undo the float grid for cards that live in the CSS grid. The float rules
+   stay for any other caller of .metaboliteBox. */
+.compoundsGrid > .contentbox.metaboliteBox {
+	float: none;
+	width: auto;
+	min-width: 0;
+	min-height: 0;
+	margin: 0;
+	padding-bottom: 14px;
+}
+/* An opened card takes the row: 100 alternatives want the width, and the
+   old `.expandedBox { width: 100% }` did the same for the floats. */
+.compoundsGrid > .contentbox.metaboliteBox.expandedBox {
+	grid-column: 1 / -1;
+	width: auto;
+}
+.metaboliteHead {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 15px var(--pa-card-inset) 8px;
+}
+/* Opts out of `div.contentbox h3` (its inset and size belong to a heading
+   that stands alone; this one shares a line with its count). */
+.metaboliteHead > h3.metaboliteTitle {
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.35;
+	color: #1A1A18;
+}
+.metaboliteHead > .aiBadge {
+	flex: 0 0 auto;
+	margin-left: 0;
+	align-self: center;
+}
+.metaboliteHead > .metaboliteCount {
+	flex: 0 0 auto;
+	margin-left: auto;
+	font-size: 12px;
+	color: var(--pa-ink-muted);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+/* Candidates: two columns of rows, each row a checkbox, the name and its
+   id. The name ellipsises; the id never does, because it is the part that
+   disambiguates. */
+.metaboliteBox .mainCompoundsPanel,
+.metaboliteBox .otherCompoundsPanel {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 5px 16px;
+	padding: 0 var(--pa-card-inset);
+}
+.metaboliteBox .otherCompoundsPanel {
+	margin-top: 8px;
+	padding-top: 10px;
+	border-top: 1px dashed var(--pa-border);
+}
+.metaboliteBox .metaboliteCompound {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	font-size: 13px;
+	line-height: 1.4;
+}
+.metaboliteBox .metaboliteCompound > input[type="checkbox"] {
+	flex: 0 0 auto;
+	margin: 0;
+}
+.metaboliteBox .metaboliteCompound > a {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.metaboliteBox .metaboliteCompound > code.metaboliteId {
+	flex: 0 0 auto;
+	padding: 0;
+	font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+	font-size: 11px;
+	color: var(--pa-ink-muted);
+	background: transparent;
+}
+/* The AI's reason, under the candidates. Muted ink with the mark in the AI
+   colour: the sentence is the machine's, the decision is still the reader's. */
+.contentbox .aiReason {
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
+	margin: 9px 0 0;
+	padding: 0 var(--pa-card-inset);
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted);
+}
+.contentbox .aiReason > svg.po-ai-mark,
+.contentbox .aiReason > i {
+	flex: 0 0 auto;
+	margin-top: 0.2em;
+	color: var(--pa-ai-blue);
+}
+.contentbox .aiReason-unsure > i { color: var(--pa-accent-orange); }
+.contentbox .aiReason-auto > i { color: var(--pa-ink-muted); }
+/* "102 more matches" is a quiet disclosure, not a red "Show". */
+.metaboliteBox .showOtherCompoundsButton,
+.metaboliteBox .showOtherCompoundsButton.visible {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 10px var(--pa-card-inset) 0;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--pa-link);
+}
+.metaboliteBox .showOtherCompoundsButton > i {
+	font-size: 10px;
+	color: var(--pa-ink-muted);
+}
+
+/* ==========================================================================
+   Step 2 · the class activity card (2026-08-29)
+
+   A one-line lede, then the plan (which test will run, on what) beside its
+   two controls, then how the two tests work as one comparison across the
+   card: the same three columns for both tests, one row each, the running
+   one in green. `#threshold_box div, span` forces width 100% and no border
+   on everything it matches, so the plan and the band are exempted by
+   subtree in that rule; their markup is free to use divs and spans.
+   ========================================================================== */
+:root {
+  --pa-fig-bar: #D7DADF;
+  --pa-fig-bar-strong: #B8BCC2;
+  --pa-fig-cell: #B9B9B4;
+  --pa-fig-cell-strong: #8E8E88;
+  --pa-fig-faint: #A1A1AA;
+  --pa-fig-ink: #1A1A18;
+  --pa-fig-ink-muted: #6B6B66;
+  --pa-fig-tick: #FFFFFF;
+}
+#threshold_box .paClassLede {
+	margin: 12px 0 6px;
+	max-width: 720px;
+	font-size: 13.5px;
+	line-height: 1.55;
+}
+/* The controls on their own rail inside the controls column. The shared
+   rule further up centres every `.x-form-item` in this card with
+   `left: 50% !important`; the extra class outranks it. */
+#threshold_box .divForm .x-form-item {
+	left: 0 !important;
+	transform: none;
+}
+#threshold_box .paClassPlan {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 4px 0 8px 26px;
+	padding: 16px 18px;
+	border: 1px solid var(--pa-border) !important;
+	border-radius: 10px;
+	background: var(--pa-surface);
+	color: var(--pa-ink-label);
+}
+#threshold_box .paClassPlanKicker,
+#threshold_box .paClassHowTitle,
+#threshold_box .paClassHowCol {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0;
+	padding: 0;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--pa-ink-label);
+}
+#threshold_box .paClassPill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 10px;
+	border-radius: 999px;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	width: auto !important;
+}
+#threshold_box .paClassPill-on { background: rgba(36, 123, 33, 0.10); color: var(--pa-accent-green); }
+#threshold_box .paClassPill-off { background: rgba(24, 24, 27, 0.06); color: var(--pa-ink-label); }
+#threshold_box .paClassPillDot { width: 6px; height: 6px; border-radius: 999px; background: var(--pa-accent-green); }
+#threshold_box .paClassPlanName {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	margin: 0;
+	padding: 0;
+	font-size: 16px;
+	font-weight: 600;
+	letter-spacing: -0.008em;
+	line-height: 1.3;
+	color: #1A1A18;
+}
+#threshold_box .paClassPlanName > i { font-size: 17px; color: var(--pa-ink-muted); }
+#threshold_box .paClassPlanName > i.paIsOn { color: var(--pa-accent-green); }
+#threshold_box .paClassTiles {
+	display: flex;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+#threshold_box .paClassTile {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 10px 14px;
+	border-radius: 8px;
+	background: var(--pa-surface-subtle);
+	min-width: 0;
+}
+#threshold_box .paClassTile-wide { flex: 1 1 auto; }
+#threshold_box .paClassTile > b {
+	font-size: 18px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	color: #1A1A18;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+#threshold_box .paClassTile > span {
+	font-size: 10.5px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--pa-ink-muted);
+	white-space: nowrap;
+}
+#threshold_box .paClassPlanWhy {
+	margin: 0;
+	padding: 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--pa-ink-label);
+}
+/* The band. */
+#threshold_box .paClassHow {
+	display: flex;
+	flex-direction: column;
+	margin: 0 26px 6px;
+	padding: 18px 24px 16px;
+	border: 1px solid var(--pa-border) !important;
+	border-radius: 10px;
+	background: #FBFBF9;
+}
+#threshold_box .paClassHowHead,
+#threshold_box .paClassHowRow {
+	display: grid;
+	grid-template-columns: 224px repeat(3, minmax(0, 1fr));
+	gap: 0 28px;
+}
+#threshold_box .paClassHowHead {
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--pa-border);
+}
+#threshold_box .paClassHowTitle { color: var(--pa-fig-faint); }
+#threshold_box .paClassHowCol > i { font-size: 12px; color: var(--pa-fig-faint); }
+#threshold_box .paClassHowRow { padding: 20px 0; }
+#threshold_box .paClassHowRow + .paClassHowRow { border-top: 1px solid var(--pa-border); }
+#threshold_box .paClassHowWho {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	padding-right: 12px;
+}
+#threshold_box .paClassHowName {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: -0.005em;
+	color: var(--pa-ink-label);
+}
+#threshold_box .paClassHowRow.paIsOn .paClassHowName { color: #1A1A18; }
+#threshold_box .paClassHowName > i { font-size: 16px; color: var(--pa-fig-faint); }
+#threshold_box .paClassHowRow.paIsOn .paClassHowName > i { color: var(--pa-accent-green); }
+#threshold_box .paClassHowNote {
+	margin: 2px 0 0;
+	padding: 0;
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--pa-ink-label);
+	text-wrap: pretty;
+}
+#threshold_box .paClassFig {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 0;
+	min-width: 0;
+}
+#threshold_box .paClassFig > svg {
+	display: block;
+	width: 100%;
+	max-width: 236px;
+	height: auto;
+	overflow: visible;
+	font-family: inherit;
+}
+#threshold_box .paClassFig > figcaption {
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted);
+	text-wrap: pretty;
+}
+#threshold_box .paClassHowFoot {
+	margin: 0;
+	padding: 14px 0 0;
+	border-top: 1px solid var(--pa-border);
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted);
+}
+/* Stacked (narrow viewport): the controls sit under the plan, on its rail. */
+#threshold_box .paClassTop-stacked .paClassControls { margin-left: 26px; }

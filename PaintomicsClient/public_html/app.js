@@ -41,6 +41,17 @@ if (debugging === true)
  * Reading a cached job and throwing it away must agree on the schema, or the
  * discard silently targets a different database and the poison survives.
  */
+/**
+ * The contract the cached job model was written under. Bump it when the
+ * server starts sending something the cached copy lacks: a row stamped with
+ * an older number is one that cannot be restored, so the boot drops it from
+ * both caches and the ?jobID= path recovers the job from the server. Without
+ * this a browser that opened a job before an upgrade never asked again --
+ * the hub view's checkSchema() learned that the hard way.
+ *   2: globalExpressionData carries sampleValues / sampleRelevant.
+ */
+var PA_JOB_CACHE_SCHEMA = 2;
+
 function openPaintomicsDB() {
     var db = new Dexie("paintomics");
     db.version(1).stores({
@@ -220,6 +231,15 @@ function Application() {
      * same: report the real exception, drop the cache, boot clean.
      */
     this.restoreCachedModel = function (jobInstanceModel, sessionJobJSON) {
+        if (!sessionJobJSON || sessionJobJSON.cacheSchema !== PA_JOB_CACHE_SCHEMA) {
+            console.info(Date.logFormat() + "app.js : the cached job model (" +
+                ((sessionJobJSON && sessionJobJSON.jobID) || "unknown jobID") +
+                ") predates cache schema " + PA_JOB_CACHE_SCHEMA + "; discarding it and recovering from the server.");
+            if (sessionJobJSON && typeof discardCachedJobModel === "function") {
+                discardCachedJobModel(sessionJobJSON.jobID, function () {});
+            }
+            return false;
+        }
         try {
             jobInstanceModel.loadFromJSON(sessionJobJSON);
             return true;

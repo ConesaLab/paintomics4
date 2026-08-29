@@ -90,9 +90,9 @@ PUBLISHED = {
     "app/view/PathwayAcquisitionViews/InputFormat/format-repair.js": (
         "0.1", "944c929f1496258aba56f026e7c30e4affb7052dcbc127b06982eaadff205cd2"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-panel.js": (
-        "3.3", "995e88fbe45955de2991e51aecd814d624d22371b66afaf5ce20795a4284d7f2"),
+        "3.6", "534b5695f730d42028e63e2a8589613444b92f7b8da8a4c40205280ceb6c8201"),
     "app/view/PathwayAcquisitionViews/InputFormat/format-roles.js": (
-        "0.5", "02fca3cace94756275993739d36deb728b1870c21be9ec5477f853828e7a67b6"),
+        "0.8", "c150e5858c4b5a33c1bde34489b7a25f3c25fe1100be8fe512e94fe2a93d8e34"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-profiler.js": (
         "0.3", "d7f2846c58226fdfe334fefc68c8d6519cc4eae393265e15dd047e5babded4f3"),
     "app/view/PathwayAcquisitionViews/InputFormat/convert-agent.js": (
@@ -202,7 +202,7 @@ PUBLISHED = {
     # upstream number is both the more informative marker and the one that
     # cannot drift from what is on disk.
     "js/libs/cytoscape/cytoscape.min.js": ("3.34.0", None),
-    "app.js": ("0.3", None),
+    "app.js": ("0.4", None),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

@@ -505,6 +505,40 @@ function JobInstance(jobID) {
 		return this.classificationMeta == null ? {} : this.classificationMeta;
 	}
 
+	/* Class activity at BRITE levels 1-3 with the test that ran ("permutation"
+	   on replicates, or "binomial" on the relevant list), per-class statistics,
+	   per-metabolite F/p and the metabolites that reached no class. null on a
+	   job stored before the field existed; the Step 3 view then falls back to
+	   the level-2 ranking it always drew. */
+	/* A recovered job comes back through DAO.adaptBSON, which turns every
+	   None leaf into the STRING "None": an untestable metabolite's F, an
+	   absent alpha, a missing value in a strip. The ladder reads those as
+	   numbers ((b.F || 0) is NaN, the tooltip says "NaN log2 FC"), so they
+	   are put back to null here, once, at the only entry point. Text-bearing
+	   keys are left alone: a metabolite really could be called "None". */
+	var CLASS_ACTIVITY_TEXT_KEYS = {name: 1, key: 1, parent: 1, path: 1, members: 1, kegg: 1,
+		conditions: 1, warnings: 1, unmatched: 1, unclassified: 1, levels: 1, samples: 1,
+		strata: 1, labels: 1, label: 1, id: 1, test: 1, nullKind: 1, levelNames: 1};
+	function classActivityUnNone(value, key) {
+		if (value === "None") return null;
+		if (Array.isArray(value)) {
+			return CLASS_ACTIVITY_TEXT_KEYS[key] ? value : value.map(function (v) { return classActivityUnNone(v, null); });
+		}
+		if (value && typeof value === "object") {
+			var out = {};
+			Object.keys(value).forEach(function (k) {
+				out[k] = (CLASS_ACTIVITY_TEXT_KEYS[k] && typeof value[k] === "string") ? value[k] : classActivityUnNone(value[k], k);
+			});
+			return out;
+		}
+		return value;
+	}
+	this.setClassActivity = function (classActivity) {
+		this.classActivity = (classActivity && typeof classActivity === "object") ? classActivityUnNone(classActivity, null) : null;
+	}
+	this.getClassActivity = function () {
+		return this.classActivity == null ? null : this.classActivity;
+	}
 	this.setClassificationDict = function (classificationDict) {
 		this.classificationDict = classificationDict;
 	}

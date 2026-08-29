@@ -91,6 +91,7 @@ EXAMPLE_ROLES = {
     "gene_expression_values.tab": "values",
     "metabolomics_by_name_values.tab": "values",
     "metabolomics_values.tab": "values",
+    "metabolomics_replicates.tab": "values",
     "mirna_regulators.tab": "values",
     "mirna_unmapped_values.tab": "values",
     "mirna_values.tab": "values",
@@ -117,8 +118,18 @@ EXAMPLE_ROLES = {
     "mmu_mirBase_to_ensembl.tab": "regulator-targets",   # same three-column shape
     # MORE's associations slot takes 2 or 3 columns (runMORE.R), so it is the
     # regulator-targets contract too; the two-column rule refused a third.
-    "experimental_design.tab": "design",
+    # The metabolomics replicate design: long form, its own role (MORE's
+    # `design` refuses text labels). The MORE examples ship a file of the
+    # same NAME for the Conditions slot; EXAMPLE_ROLES_BY_PATH keeps those
+    # under `design`, so R's contract still has shipped files exercising it.
+    "experimental_design.tab": "replicates",
     "synthetic_mmu.gtf": None,          # not a delimited contract; never checked
+}
+
+# Files whose role depends on the dataset they ship in, by path under DATASETS.
+EXAMPLE_ROLES_BY_PATH = {
+    "06-regulatory-more/data/experimental_design.tab": "design",
+    "11-stategra-more/data/experimental_design.tab": "design",
 }
 
 
@@ -240,7 +251,7 @@ class InputCheckCoversEverySlotTest(unittest.TestCase):
         for slot, role in self.roles.items():
             self.assertIn(role, ("values", "relevant", "associations",
                                  "relevant-associations", "regulator-targets",
-                                 "design"),
+                                 "design", "replicates"),
                           "%s has role %r" % (slot, role))
 
     def test_every_example_file_has_a_declared_role(self):
@@ -264,7 +275,7 @@ class InputCheckCoversEverySlotTest(unittest.TestCase):
         cases = []
         for path in sorted(glob.glob(os.path.join(DATASETS, "*", "data", "*"))):
             name = os.path.basename(path)
-            role = EXAMPLE_ROLES.get(name)
+            role = EXAMPLE_ROLES_BY_PATH.get(os.path.relpath(path, DATASETS), EXAMPLE_ROLES.get(name))
             if role is None:
                 continue
             cases.append({"file": os.path.relpath(path, DATASETS), "role": role, "path": path})

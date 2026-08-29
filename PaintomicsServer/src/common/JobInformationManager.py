@@ -104,7 +104,7 @@ class JobInformationManager(metaclass=Singleton):
                     daoInstance.update(jobInstance, {"fieldList": ["summary", "lastStep",
                          "mappingComp", "classificationDict", "pValueInDict",
                          "adjustPvalue", "totalRelevantFeaturesInCategory",
-                         "featureSummary", "classificationMeta",
+                         "featureSummary", "classificationMeta", "classActivity",
                          "aiConsent", "experimentDesign",
                          "regulationPerConditionData", "hubAnalysisResult",
                          "exprssionMetabolites"]})
@@ -346,7 +346,7 @@ class JobInformationManager(metaclass=Singleton):
         for uploadedFileName in uploadedFiles.keys():
             #IF THE FILE IS NOT A RELEVANT FEATURES FILE
             fields = {}
-            if (uploadedFileName is not None and uploadedFileName.find("_relevant") == -1  and uploadedFileName.find("_annotations_file") == -1   and uploadedFileName.find("_associations_file") == -1):
+            if (uploadedFileName is not None and uploadedFileName.find("_relevant") == -1  and uploadedFileName.find("_annotations_file") == -1   and uploadedFileName.find("_associations_file") == -1 and uploadedFileName.find("_design_file") == -1):
                 ##GET THE MATCHING TYPE: GENE OR COMPOUND
                 # Default matching type: gene
                 matchingType = formFields.get(uploadedFileName.replace("file","match_type"), "gene")
@@ -383,6 +383,9 @@ class JobInformationManager(metaclass=Singleton):
             uploadedAssociationDataFile = uploadedFiles.get(uploadedFileName.replace("file", "associations_file"), None)
 
             uploadedAssociationRelevantFile = uploadedFiles.get(uploadedFileName.replace("file", "relevant_associations_file"), None)
+            # Experimental design (column -> condition) for a values file with
+            # one column per sample. Optional; read by the job at step 1.
+            uploadedDesignFile = uploadedFiles.get(uploadedFileName.replace("file", "design_file"), None)
 
             configValues = formFields.get(uploadedFileName.replace("file", "config_args"), None)
             enrichment = formFields.get(uploadedFileName.replace("file", "enrichment"), 'genes')
@@ -577,11 +580,33 @@ class JobInformationManager(metaclass=Singleton):
             else:
                 relevantAssociationsFileName = associationsFileName = None
 
+            #SAVE THE EXPERIMENTAL DESIGN FILE (IF ANY). Same empty-part guard
+            # as the relevant-features branch; a design can also come by
+            # reference from My Data.
+            designFileName = None
+            if (uploadedDesignFile is not None and (uploadedDesignFile.filename or "") != "") \
+                    or self._fileByReference(formFields, uploadedFileName, "design"):
+                designOrigin = self._requiredOrigin(
+                    formFields, uploadedFileName.replace("file", "design") + "_origin",
+                    "experimental design file")
+                fieldsDesign = {"omicType": omicType, "dataType": "Experimental design",
+                                "description": formFields.get(uploadedFileName.replace("file", "description"), "Uploaded using the submission form.")}
+                if designOrigin == 'client':
+                    designFileName = uploadedDesignFile.filename
+                    if userID is None:
+                        designFileName = jobInstance.getJobID() + '_' + designFileName
+                    designFileName = saveFile(userID, designFileName, fieldsDesign, uploadedDesignFile, CLIENT_TMP_DIR)
+                else:
+                    designFileName = self._requiredFileLocation(
+                        formFields, uploadedFileName.replace("file", "design_filelocation"),
+                        "experimental design file").replace("[MyData]/", "")
+                logging.info("STEP1 - EXPERIMENTAL DESIGN FOR %s IS %s", omicType, designFileName)
+
             if(jobInstance != None):
                 if(matchingType.lower() == "gene"):
-                    jobInstance.addGeneBasedInputOmic({"omicName": omicType, "inputDataFile": dataFileName, "relevantFeaturesFile": relevantFileName, "associationsFile": associationsFileName, "relevantAssociationsFile": relevantAssociationsFileName, "configOptions": configValues, "enrichment": enrichment})
+                    jobInstance.addGeneBasedInputOmic({"omicName": omicType, "inputDataFile": dataFileName, "relevantFeaturesFile": relevantFileName, "associationsFile": associationsFileName, "relevantAssociationsFile": relevantAssociationsFileName, "configOptions": configValues, "enrichment": enrichment, "designFile": designFileName})
                 elif(matchingType.lower() == "compound"):
-                    jobInstance.addCompoundBasedInputOmic({"omicName": omicType, "inputDataFile": dataFileName, "relevantFeaturesFile": relevantFileName, "configOptions": configValues, "enrichment": enrichment})
+                    jobInstance.addCompoundBasedInputOmic({"omicName": omicType, "inputDataFile": dataFileName, "relevantFeaturesFile": relevantFileName, "configOptions": configValues, "enrichment": enrichment, "designFile": designFileName})
                 elif(matchingType.lower() == "reference_file"):
                     jobInstance.addReferenceInput({"omicName": omicType, "fileType": dataType, "inputDataFile": dataFileName})
 
