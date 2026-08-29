@@ -187,6 +187,9 @@ function PA_Step2JobView() {
 		var numberOfClusters = [];
 		var thresholdMetaboliteClass = [];
 
+		/* The compound omic the class activity test reads: the server takes the
+		   first with values, which is the first listed. */
+		var classActivityOmic = ((me.getModel().getCompoundBasedInputOmics() || [])[0] || {}).omicName || compoundOmics[0];
 		for (var omicName in dataDistribution) {
 			var isCompoundBased = (compoundOmics.indexOf(omicName) > -1);
 
@@ -249,91 +252,23 @@ function PA_Step2JobView() {
 				});
 			}
 
-			if (isCompoundBased) {
-				/* The class activity test this omic can support. With a design
-				   applied (replicate columns collapsed to conditions) the
-				   permutation test runs on the replicates and the threshold
-				   below is only the fallback; without one, the binomial on the
-				   relevant list runs against that threshold. */
-				var compoundOmic = (me.getModel().getCompoundBasedInputOmics() || []).filter(function (o) {
-					return o.omicName === omicName;
-				})[0] || {};
-				var design = paClassActivityDesign(compoundOmic);
-				if (design) {
-					thresholdMetaboliteClass.push({
-						xtype: 'box',
-						cls: 'paClassTestDesign',
-						html: '<p class="paClassTestDesign"><i class="fa fa-check-circle"></i> <b>' + Ext.String.htmlEncode(omicName)
-							+ '</b> carries ' + design.columns + ' sample columns in ' + design.conditions
-							+ ' conditions. The class activity test will be a <b>permutation test on your replicates</b>'
-							+ ' (' + design.replicates + ' per condition): for each class, the mean F of its metabolites for the'
-							+ ' factor chosen below, against re-labellings of that factor inside the other factors.'
-							+ ' The threshold below is used only if the permutation test cannot run.</p>'
-					});
-					if (design.factors.length > 1) {
-						thresholdMetaboliteClass.push({
-							xtype: 'combo',
-							fieldLabel: 'Factor to test',
-							name: 'thresholdMetaboliteClassFactor',
-							value: design.factors[0].id,
-							displayField: 'name', valueField: 'value',
-							editable: false, allowBlank: false,
-							labelAlign: 'left', labelWidth: 240, width: 460,
-							store: Ext.create('Ext.data.ArrayStore', {
-								fields: ['name', 'value'],
-								data: design.factors.map(function (f) { return [f.label, f.id]; })
-							}),
-							helpTip: "Your condition names encode more than one factor. The test asks whether each class responds to this one; the others are held as strata."
-						});
-					}
-				}
+			if (isCompoundBased && omicName === classActivityOmic) {
+				/* One box per JOB, not per omic. The server runs the test on one
+				   compound omic (_compoundOmicForClassActivity: the first with
+				   values), and two boxes posted two fields under one name, which
+				   jQuery sent as thresholdMetaboliteClass[] and the servlet's
+				   .get() never found -- the competitive null ran while the form
+				   showed 0.05. */
 				thresholdMetaboliteClass.push({
-					xtype: 'combo',
-					fieldLabel: design ? 'Fallback: significance threshold of your relevant list'
-					                   : 'Significance threshold of your relevant list',
-					name: 'thresholdMetaboliteClass',
-					value: 0.05,
-					displayField: 'name', valueField: 'value',
-					editable: true,
-					allowBlank: false,
-					/* The field is editable, and until this validator existed
-					   anything outside (0,1) was accepted here and then quietly
-					   discarded by the server: compundsClassification only honours
-					   the value when `0 < threshold < 1`, so "30", "0", "-0.5" and
-					   "abc" all fell back to the automatic null. That is not a
-					   harmless fallback -- it swaps a self-contained test against
-					   the number you typed for a competitive test against the rest
-					   of your job, which is a different hypothesis, and nothing in
-					   the results said so. */
-					validator: function (value) {
-						if (value === 'default' || value === 'Relative to this job (automatic)'
-							|| value === '' || value === null || value === undefined) {
-							return true;
-						}
-						var proportion = Number(value);
-						if (isNaN(proportion) || proportion <= 0 || proportion >= 1) {
-							return '"' + value + '" is not a threshold between 0 and 1. '
-								+ 'Enter the p-value or FDR cut-off you used, such as 0.05, or choose "Relative to this job".';
-						}
-						return true;
-					},
-					/* Same rail as the cluster combo above. */
-					labelAlign: 'left',
-					labelWidth: 240,
-					width: 460,
-					store: Ext.create('Ext.data.ArrayStore', {
-						fields: ['name', 'value'],
-						data: [['0.01', 0.01],
-							['0.05', 0.05],
-							['0.10', 0.10],
-							['Relative to this job (automatic)', 'default']]
-						/* No 1.0. A null of 1.0 says "expect every compound in the
-						   class to be significant", which makes the one-sided
-						   binomial p = 1.0 for every class. */
-					}),
-					helpTip: "The p-value or FDR cut-off you used to build the relevant-features list. Under \"no member of this class changed\" each member is flagged only by a type-I error, at that rate, so 3 of 4 flagged is p = 0.0005 at 0.05. \"Relative to this job\" instead compares the class with the rest of your panel."
+					xtype: 'container',
+					itemId: 'classActivityBox',
+					omicName: omicName,
+					/* The same layout as the form around it: under the default
+					   autocontainer layout a form item is placed by its INPUT,
+					   and the 240px label hung off the card to the left. */
+					layout: {type: 'vbox', align: 'stretch'},
+					items: paClassActivityItems(me.getModel(), omicName)
 				});
-
 			}
 			omicSummaryPanelComponents.push(new PA_OmicSummaryPanel(omicName, dataDistribution[omicName], isCompoundBased).getComponent());
 		}
@@ -1190,6 +1125,112 @@ function paClassActivityDesign(omic) {
 * sampleValues/sampleRelevant on each OmicValue. Step-4 reads those when
 * the visualisation toggle flips to "samples" mode.
 ***********************************************************************/
+/* The items of the metabolite class activity box for ONE omic: the design
+   note and factor choice when a replicate mapping is applied, and the
+   threshold combo always. A function, not inline markup, because the
+   replicate-detection card on the same page can apply or clear a mapping
+   after the box was drawn. */
+function paClassActivityItems(model, omicName) {
+	var items = [];
+	/* The class activity test this omic can support. With a design
+	   applied (replicate columns collapsed to conditions) the
+	   permutation test runs on the replicates and the threshold
+	   below is only the fallback; without one, the binomial on the
+	   relevant list runs against that threshold. */
+	var compoundOmic = (model.getCompoundBasedInputOmics() || []).filter(function (o) {
+		return o.omicName === omicName;
+	})[0] || {};
+	var design = paClassActivityDesign(compoundOmic);
+	if (design) {
+		items.push({
+			xtype: 'box',
+			cls: 'paClassTestDesign',
+			html: '<p class="paClassTestDesign"><i class="fa fa-check-circle"></i> <b>' + Ext.String.htmlEncode(omicName)
+				+ '</b> carries ' + design.columns + ' sample columns in ' + design.conditions
+				+ ' conditions. The class activity test will be a <b>permutation test on your replicates</b>'
+				+ ' (' + design.replicates + ' per condition): for each class, the mean F of its metabolites for the'
+				+ ' factor chosen below, against re-labellings of that factor inside the other factors.'
+				+ ' The threshold below is used only if the permutation test cannot run.</p>'
+		});
+		if (design.factors.length > 1) {
+			items.push({
+				xtype: 'combo',
+				fieldLabel: 'Factor to test',
+				name: 'thresholdMetaboliteClassFactor',
+				value: design.factors[0].id,
+				displayField: 'name', valueField: 'value',
+				/* The label is built from the design's condition tokens,
+				   which come from a user file; BoundList's default
+				   template prints the display field raw. */
+				listConfig: {
+					getInnerTpl: function (displayField) { return '{' + displayField + ':htmlEncode}'; }
+				},
+				editable: false, allowBlank: false,
+				labelAlign: 'left', labelWidth: 240, width: 460,
+				store: Ext.create('Ext.data.ArrayStore', {
+					fields: ['name', 'value'],
+					data: design.factors.map(function (f) { return [f.label, f.id]; })
+				}),
+				helpTip: "Your condition names encode more than one factor. The test asks whether each class responds to this one; the others are held as strata."
+			});
+		}
+	}
+	items.push({
+		xtype: 'combo',
+		fieldLabel: design ? 'Fallback: significance threshold of your relevant list'
+		                   : 'Significance threshold of your relevant list',
+		name: 'thresholdMetaboliteClass',
+		value: 0.05,
+		displayField: 'name', valueField: 'value',
+		editable: true,
+		allowBlank: false,
+		/* The field is editable, and until this validator existed
+		   anything outside (0,1) was accepted here and then quietly
+		   discarded by the server: compundsClassification only honours
+		   the value when `0 < threshold < 1`, so "30", "0", "-0.5" and
+		   "abc" all fell back to the automatic null. That is not a
+		   harmless fallback -- it swaps a self-contained test against
+		   the number you typed for a competitive test against the rest
+		   of your job, which is a different hypothesis, and nothing in
+		   the results said so. */
+		validator: function (value) {
+			if (value === 'default' || value === 'Relative to this job (automatic)'
+				|| value === '' || value === null || value === undefined) {
+				return true;
+			}
+			var proportion = Number(value);
+			if (isNaN(proportion) || proportion <= 0 || proportion >= 1) {
+				return '"' + value + '" is not a threshold between 0 and 1. '
+					+ 'Enter the p-value or FDR cut-off you used, such as 0.05, or choose "Relative to this job".';
+			}
+			return true;
+		},
+		/* Same rail as the cluster combo above. */
+		labelAlign: 'left',
+		labelWidth: 240,
+		width: 460,
+		store: Ext.create('Ext.data.ArrayStore', {
+			fields: ['name', 'value'],
+			data: [['0.01', 0.01],
+				['0.05', 0.05],
+				['0.10', 0.10],
+				['Relative to this job (automatic)', 'default']]
+			/* No 1.0. A null of 1.0 says "expect every compound in the
+			   class to be significant", which makes the one-sided
+			   binomial p = 1.0 for every class. */
+		}),
+		helpTip: "The p-value or FDR cut-off you used to build the relevant-features list. Under \"no member of this class changed\" each member is flagged only by a type-I error, at that rate, so 3 of 4 flagged is p = 0.0005 at 0.05. \"Relative to this job\" instead compares the class with the rest of your panel."
+	});
+	return items;
+}
+
+function paRefreshClassActivityBox(model, omicName) {
+	var box = Ext.ComponentQuery.query("#classActivityBox")[0];
+	if (!box || box.omicName !== omicName) return;
+	box.removeAll();
+	box.add(paClassActivityItems(model, omicName));
+}
+
 function PA_Step2ReplicateDetectionView() {
 	this.name = "PA_Step2ReplicateDetectionView";
 	this.omics = [];
@@ -1372,6 +1413,9 @@ function PA_Step2ReplicateDetectionView() {
 							omic.sampleHeader     = response.sampleHeader;
 							omic.replicateMapping = response.mapping;
 							omic.replicateSource  = response.mode;
+							/* The class activity box above promised a test on
+							   the mapping as it was; redraw it for the new one. */
+							paRefreshClassActivityBox(this.model, omicName);
 						}
 					} else {
 						$status.addClass("repDetectionError");

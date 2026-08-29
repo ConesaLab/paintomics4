@@ -489,7 +489,12 @@ def pathwayAcquisitionStep2_PART1(REQUEST, RESPONSE, QUEUE_INSTANCE, ROOT_DIRECT
         # Retrieve the number of cluster on a per omic basis
         # Note: this will contain the omic name transformed to remove spaces and special chars
         clusterNumber = {key.replace("clusterNumber:", ""): value for key, value in formFields.items() if key.startswith("clusterNumber:")}
-        metaboliteClassThreshold = {key.replace("clusterNumber:", ""): value for key, value in formFields.items() if key.startswith("thresholdMetaboliteClass")}
+        # A field the form held twice reaches jQuery as an array and is posted
+        # as `name[]`; the job reads `name`. One box per job now, but an older
+        # client still open in a browser tab posts the bracketed form.
+        metaboliteClassThreshold = {(key[:-2] if key.endswith("[]") else key): value
+                                    for key, value in formFields.items()
+                                    if key.startswith("thresholdMetaboliteClass")}
 
         #************************************************************************
         # Step 3. Queue job

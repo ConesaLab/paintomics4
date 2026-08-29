@@ -5839,7 +5839,6 @@ function PA_Step3MetaboliteView() {
 	   whenever the payload exists. */
 	let classActivity = null;
 	let ladderState = {level: 2, sort: "effect", hideSmall: false, open: {}, condition: 0};
-	let ladderSelectedIDs = null;
 	let me = this;
 
 
@@ -5962,7 +5961,6 @@ function PA_Step3MetaboliteView() {
 		classActivity = (typeof this.model.getClassActivity === "function") ? this.model.getClassActivity() : null;
 		if (classActivity && !(classActivity.levels && classActivity.levels["2"])) classActivity = null;
 		ladderState = {level: 2, sort: "effect", hideSmall: false, open: {}, condition: 0};
-		ladderSelectedIDs = null;
 	}
 
 
@@ -5981,7 +5979,6 @@ function PA_Step3MetaboliteView() {
 
 	this.selectClass = function (className) {
 		classMapSelected = className || null;
-		if (!className && typeof ladderSelectedIDs !== "undefined") ladderSelectedIDs = null;
 		classDetailDismissed = !className;
 		me.markSelectedClass();
 		me.renderClassDetail();
@@ -6013,13 +6010,13 @@ function PA_Step3MetaboliteView() {
 			return;
 		}
 
-		var key = [row.name, classMapCondition, classDetailOnlyRelevant ? 1 : 0].join("|");
+		var key = [row.key || row.name, classMapCondition, classDetailOnlyRelevant ? 1 : 0].join("|");
 		if (key === classDetailKey && host.firstChild) return;
 		classDetailKey = key;
 
 		var omicName = compoundOmicName;
-		var ladderOpen = (typeof classActivity !== "undefined" && classActivity && typeof ladderSelectedIDs !== "undefined" && ladderSelectedIDs);
-		var ids = ladderOpen ? ladderSelectedIDs : ((dataFinal[row.name] || {}).ID || []);
+		var ladderOpen = (typeof classActivity !== "undefined" && classActivity);
+		var ids = ladderOpen ? ladderIDsFor(row.key) : ((dataFinal[row.name] || {}).ID || []);
 		var values = [];
 		ids.forEach(function (id) {
 			var omicValue = globalExpressionComp ? globalExpressionComp[id] : null;
@@ -6270,8 +6267,12 @@ function PA_Step3MetaboliteView() {
 	   The two views are one instrument: hovering a class anywhere highlights it
 	   everywhere and dims the rest, so it is obvious that the marks above and
 	   the rows below are the same eight classes. */
+	/* Text AND attribute values: metabolite names, condition labels and
+	   class paths come from the user's files and from KEGG, and the ladder's
+	   strip puts a label in data-label="…", so the quotes are encoded too. */
 	function classMapEscape(value) {
-		return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 	}
 
 	function classMapConditionLabel(index) {
@@ -6947,6 +6948,11 @@ function PA_Step3MetaboliteView() {
 		   row on first draw. */
 		if (classMapSelected && !all.some(function (r) { return r.key === classMapSelected; })) classMapSelected = null;
 		if (!classMapSelected && !classDetailDismissed && rows.length) classMapSelected = rows[0].key;
+		/* The rows were rendered before the selection was chosen, so light
+		   the selected one now; a level switch lands here too. */
+		Array.prototype.forEach.call(host.querySelectorAll(".paLadderRow"), function (node) {
+			node.classList.toggle("paIsSelected", node.getAttribute("data-key") === classMapSelected);
+		});
 		me.renderClassDetail();
 	};
 
@@ -6992,6 +6998,21 @@ function PA_Step3MetaboliteView() {
 			+ '</div>';
 	}
 
+	/* KEGG ids of the compounds behind a ladder entry, at the level shown.
+	   Computed from the entry every time it is needed: an id list remembered
+	   from the last click outlived a level switch and sat under the wrong
+	   heading, and dataFinal (keyed by level-2 class NAME) has nothing for a
+	   level-1 or level-3 row. */
+	function ladderIDsFor(key) {
+		var entry = ((classActivity.levels || {})[String(ladderState.level)] || []).filter(function (e) { return e.key === key; })[0];
+		var features = classActivity.features || {};
+		var ids = [];
+		((entry && entry.members) || []).forEach(function (m) {
+			((features[m] || {}).kegg || []).forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
+		});
+		return ids;
+	}
+
 	/* The ladder's selection reaches the compounds panel through the same
 	   two variables the ranking used, keyed by the class path so a name
 	   that BRITE reuses at level 3 ("Biogenic amines" under Amines and under
@@ -6999,12 +7020,6 @@ function PA_Step3MetaboliteView() {
 	this.selectLadderClass = function (key) {
 		var entry = ((classActivity.levels || {})[String(ladderState.level)] || []).filter(function (e) { return e.key === key; })[0];
 		if (!entry) return;
-		var features = classActivity.features || {};
-		var ids = [];
-		(entry.members || []).forEach(function (m) {
-			((features[m] || {}).kegg || []).forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
-		});
-		ladderSelectedIDs = ids;
 		classDetailDismissed = false;
 		classMapSelected = key;
 		Array.prototype.forEach.call(document.querySelectorAll(".paLadderRow"), function (node) {
@@ -7023,6 +7038,11 @@ function PA_Step3MetaboliteView() {
 			tip.id = "classLadderTip"; tip.className = "paLadderTip";
 			document.body.appendChild(tip);
 		}
+		/* The host outlives every redraw (only its innerHTML is
+		   replaced), so bind once: each expand, sort, level click and
+		   resize used to add three more listeners that never went. */
+		if (host.__paLadderTipBound) return;
+		host.__paLadderTipBound = true;
 		host.addEventListener("mouseover", function (event) {
 			var cell = event.target.closest(".paLadderStrip i");
 			if (!cell || !cell.getAttribute("data-label")) { tip.style.display = "none"; return; }
@@ -7091,6 +7111,14 @@ function PA_Step3MetaboliteView() {
 										}, 200);
 									};
 									window.addEventListener('resize', me._classMapResizeHandler);
+									/* The ladder paints its ramp and legend inline (an OKLab
+									   interpolation per cell), which dark.css cannot reach, so a
+									   theme flip after the draw left light cells on a dark card
+									   until the next resize. Same pattern as the network view. */
+									if (window.MutationObserver !== undefined) {
+										me._classMapThemeObserver = new MutationObserver(function () { me.drawClassMap(); });
+										me._classMapThemeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
+									}
 								}
 							},
 							/* Unbound with the box. clearSubViews() destroys the

@@ -742,6 +742,10 @@ def catalogueForClient(exampleFilesDir, resolveDatabases=None):
             "simulated": bool(scenario.get("simulated")),
             "omicNames": [omic.get("omicName")
                           for omic in scenario.get("omics", [])],
+            # The omics that ship an experimental design, so Step 1 labels the
+            # design field only where the example really carries one.
+            "designOmics": [omic.get("omicName")
+                            for omic in scenario.get("omics", []) if omic.get("designFile")],
         })
     return {
         "defaultScenario": manifest.get("defaultScenario", LEGACY_DEFAULT),

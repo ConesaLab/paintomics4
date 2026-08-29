@@ -986,7 +986,7 @@ function PA_Step1JobView() {
 				 "Metabolomics", "Gene expression"];
 			omicNames.forEach(function(omicName) {
 				var panel = me.addNewOmicSubmittingPanel(examplePanelTypeFor(omicName));
-				if (panel) { panel.setExampleMode(omicName); }
+				if (panel) { panel.setExampleMode(omicName, ((scenario && scenario.designOmics) || []).indexOf(omicName) > -1); }
 			});
 		} else {
 			// A pre-processing pipeline: regions-to-genes, miRNA-to-genes or
@@ -2475,15 +2475,25 @@ function OmicSubmittingPanel(nElem, options) {
 	*
 	* @param {string} [omicName] the manifest's name for this omic.
 	*/
-	this.setExampleMode = function(omicName){
+	/* hasDesign: the scenario ships an experimental design for this omic
+	   (the catalogue's designOmics). Every Metabolomics example used to get
+	   the "experimental design" label, including the ones that carry none
+	   and then run the binomial test. */
+	this.setExampleMode = function(omicName, hasDesign){
 		var label = omicName || this.type || "example";
 		var component = this.getComponent();
 		setExampleLabel(component.queryById("mainFileSelector"), label + " — values");
 		setExampleLabel(component.queryById("secondaryFileSelector"),
 			label + " — relevant features");
 		var design = component.queryById("designFileSelector");
+		var note = component.queryById("designFileNote");
 		if (design && !design.hidden) {
-			setExampleLabel(design, label + " — experimental design");
+			if (hasDesign) {
+				setExampleLabel(design, label + " — experimental design");
+			} else {
+				design.setVisible(false);
+				if (note) note.setVisible(false);
+			}
 		}
 	};
 	/*********************************************************************
@@ -2642,6 +2652,19 @@ function OmicSubmittingPanel(nElem, options) {
 							value: this.mapTo,
 							editable: false,
 							allowBlank: false,
+							listeners: {
+								/* The design file is a compound omic's. `hidden` above was read
+								   once at build time, so a panel switched to Metabolites afterwards
+								   never showed it and a second compound omic could carry no design. */
+								change: function (combo, value) {
+									var owner = combo.ownerCt;
+									var isCompound = String(value || "").toLowerCase() === "compound";
+									["designFileSelector", "designFileNote"].forEach(function (id) {
+										var item = owner && owner.queryById(id);
+										if (item) item.setVisible(isCompound);
+									});
+								}
+							},
 							store: Ext.create('Ext.data.ArrayStore', {
 								fields: ['name', 'value'],
 								data: [
