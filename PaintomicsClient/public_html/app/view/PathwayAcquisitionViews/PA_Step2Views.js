@@ -263,10 +263,15 @@ function PA_Step2JobView() {
 					xtype: 'container',
 					itemId: 'classActivityBox',
 					omicName: omicName,
-					/* The same layout as the form around it: under the default
-					   autocontainer layout a form item is placed by its INPUT,
-					   and the 240px label hung off the card to the left. */
-					layout: {type: 'vbox', align: 'stretch'},
+					/* A vbox, not the default autocontainer layout, under which a
+					   form item is placed by its INPUT and the label hung off the
+					   card. `left`, not `stretch`: every item carries its own
+					   width (660 / 634), because a width that is only known
+					   after the layout resolves is a width the plan block's text
+					   gets measured WITHOUT -- wrapped in a sliver, 901px tall,
+					   and the card published that before the second pass
+					   corrected it. Measured, not theorised. */
+					layout: {type: 'vbox', align: 'left'},
 					items: paClassActivityItems(me.getModel(), omicName)
 				});
 			}
@@ -374,25 +379,40 @@ function PA_Step2JobView() {
 					html: '<h2 style="width: 100%;">Metabolite class activity test</h2>'
 				}, {
 					/* One line. Which test will run, and on what, is the plan
-					   block inside the form below; how the two tests work is
-					   behind the disclosure after it. The old version put all of
-					   that here, ahead of the controls, and read as a wall. */
+					   block in the left column below; how the two tests work is
+					   the right column. The old version put all of that here,
+					   ahead of the controls, and read as a wall. */
 					html: '<p class="paClassLede">Asks whether each KEGG BRITE class <b>responds as a whole</b>, '
 						+ 'at three levels of the hierarchy, with p-values corrected within each level.</p>'
 				}, {
-					xtype: 'form',
-					bodyCls: "divForm",
-					/* On the card's rail, like the prose. It used to be centred
-					   (margin auto), which put the controls under nothing on a
-					   1360px card. maxWidth is what keeps the vbox from stretching
-					   the two combos to the card's full width. */
-					maxWidth: 660,
-					style: "margin: 0 0 4px 0;",
-					layout: {type: 'vbox', align: 'stretch'},
-					defaults: {labelAlign: "right", border: false},
-					items: thresholdMetaboliteClass
-				}, {
-					html: paClassActivityHowItWorks()
+					/* Two columns under the lede: the plan and its controls on
+					   the left, how the tests work on the right -- the shape
+					   Step 1's HELP column gives a form. Stacked, the card's
+					   right half was empty. The hbox only lays out because
+					   main.css exempts .paClassMain / .paClassAsideBox from
+					   `#threshold_box div { width: 100% !important }`. */
+					xtype: 'container',
+					/* An hbox cannot wrap, so a narrow viewport stacks the two
+					   at build time instead. Decided once, like the rest of
+					   this step's layout. */
+					cls: 'paClassColumns' + (paClassColumnsSideBySide() ? '' : ' paClassColumns-stacked'),
+					layout: {type: paClassColumnsSideBySide() ? 'hbox' : 'vbox', align: 'stretch'},
+					items: [{
+						xtype: 'form',
+						cls: 'paClassMain',
+						/* Configured, not flexed: see the note on #classActivityBox. */
+						width: 660,
+						bodyCls: "divForm",
+						style: "margin: 0 0 4px 0;",
+						layout: {type: 'vbox', align: 'stretch'},
+						defaults: {labelAlign: "right", border: false},
+						items: thresholdMetaboliteClass
+					}, Ext.apply({
+						xtype: 'box',
+						cls: 'paClassAsideBox',
+						html: paClassActivityHowItWorks()
+					/* Configured too, for the same reason. */
+					}, paClassColumnsSideBySide() ? {width: 440} : {})]
 				}]
 			}, {xtype: 'container', cls: 'paLayoutPad', html:'<div style="display: none;"></div>'});
 		}
@@ -1177,35 +1197,43 @@ function paClassActivityPlan(omicName, design) {
 * @returns {String}
 */
 /**
-* Re-measure the class activity card after its disclosure opens or closes.
+* How the two tests work, as the card's right-hand column. Muted and beside
+* the controls rather than ahead of them: the difference has to be available
+* because the two tests can give opposite answers on the same job, and this
+* is the one place a reader looks for it while choosing.
+*
+* <aside>/<p> rather than <div>/<span>, for the reason paClassActivityPlan
+* gives.
+*
+* @returns {String}
 */
-function paRelayoutThresholdBox() {
-	var box = Ext.getCmp("threshold_box");
-	if (box && box.rendered) {
-		box.updateLayout();
-	}
+/**
+* Whether the class activity card can hold its plan and its aside side by
+* side. Measured once per build of the step, from the body: the hbox that
+* places them does not wrap.
+*
+* @returns {Boolean}
+*/
+function paClassColumnsSideBySide() {
+	// 660 + 440 of columns inside the card, plus the sidebar and gutters
+	// (a 1470px viewport gives the card 1132px inside).
+	return Ext.getBody().getViewSize().width >= 1440;
 }
 
 function paClassActivityHowItWorks() {
-	// ontoggle: the card is an ExtJS vbox that measured this box closed, and
-	// it clips whatever the disclosure reveals until it is asked to measure
-	// again (see extjs-panel-clips-revealed-messages). `toggle` does not
-	// bubble, so a delegated handler cannot catch it.
-	return '<details class="paHowItWorks" ontoggle="paRelayoutThresholdBox()">' +
-		'<summary>How the two tests work</summary>' +
-		'<ul>' +
-		'<li><b>Permutation test on replicates</b> &mdash; needs one column per sample and a design. ' +
+	return '<aside class="paClassAside">' +
+		'<p class="paClassPlanKicker">How the two tests work</p>' +
+		'<p><b>Permutation test on replicates</b> &mdash; one column per sample plus a design. ' +
 		'Per metabolite, an F-test for the chosen factor; per class, the mean F of its members against ' +
-		're-labellings of that factor. Self-contained, and it keeps the correlation between metabolites of a class.</li>' +
-		'<li><b>Binomial test on the relevant list</b> &mdash; runs when only ratios and a relevant list were ' +
-		'uploaded. Counts the members of each class that are in the list, against the threshold used to build it, ' +
-		'so it is valid when the list came from a statistical test; a fold-change cut-off has no such rate. ' +
-		'&ldquo;Relative to this job&rdquo; instead asks whether the class is <i>more</i> relevant than the rest ' +
-		'of your panel, which can never be significant when most of a targeted panel moves.</li>' +
-		'<li>P-values are corrected across the classes of each level. Classes with fewer than three measured ' +
-		'members are reported but marked descriptive.</li>' +
-		'</ul>' +
-		'</details>';
+		're-labellings of that factor. Self-contained, and it keeps the correlation between metabolites of a class.</p>' +
+		'<p><b>Binomial test on the relevant list</b> &mdash; ratios and a relevant list only. Counts the members ' +
+		'of each class that are in the list, against the threshold used to build it, so it is valid when the list ' +
+		'came from a statistical test; a fold-change cut-off has no such rate. &ldquo;Relative to this job&rdquo; ' +
+		'compares the class with the rest of your panel instead, which can never be significant when most of a ' +
+		'targeted panel moves.</p>' +
+		'<p>P-values are corrected across the classes of each level. Classes with fewer than three measured ' +
+		'members are reported but marked descriptive.</p>' +
+		'</aside>';
 }
 
 function paClassActivityItems(model, omicName) {
@@ -1219,7 +1247,8 @@ function paClassActivityItems(model, omicName) {
 		return o.omicName === omicName;
 	})[0] || {};
 	var design = paClassActivityDesign(compoundOmic);
-	items.push({xtype: 'box', html: paClassActivityPlan(omicName, design)});
+	// 634 + its 26px rail = the form's 660. See the layout note on #classActivityBox.
+	items.push({xtype: 'box', width: 634, html: paClassActivityPlan(omicName, design)});
 	if (design) {
 		if (design.factors.length > 1) {
 			items.push({
@@ -1235,7 +1264,7 @@ function paClassActivityItems(model, omicName) {
 					getInnerTpl: function (displayField) { return '{' + displayField + ':htmlEncode}'; }
 				},
 				editable: false, allowBlank: false,
-				labelAlign: 'left', labelWidth: 170, width: 420,
+				labelAlign: 'left', labelWidth: 170, width: 600,
 				store: Ext.create('Ext.data.ArrayStore', {
 					fields: ['name', 'value'],
 					data: design.factors.map(function (f) { return [f.label, f.id]; })
@@ -1275,7 +1304,7 @@ function paClassActivityItems(model, omicName) {
 		},
 		labelAlign: 'left',
 		labelWidth: 170,
-		width: 420,
+		width: 600,
 		store: Ext.create('Ext.data.ArrayStore', {
 			fields: ['name', 'value'],
 			data: [['0.01', 0.01],

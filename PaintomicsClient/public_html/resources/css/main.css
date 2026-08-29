@@ -3430,7 +3430,10 @@ div.contentbox p > #download_mapping_file {
 #dbs_message div {
 	padding: 0 var(--pa-card-inset) 10px;
 }
-#clusternumber_box div, #clusternumber_box span, #threshold_box div, #threshold_box span {
+/* The two column items of the class activity card are exempt: an hbox
+   cannot lay out two children that are both forced to 100%. */
+#clusternumber_box div, #clusternumber_box span,
+#threshold_box div:not(.paClassMain):not(.paClassAsideBox), #threshold_box span {
 	border: 0 !important;
 	background-color: white !important;
 	width: 100% !important;
@@ -9547,9 +9550,9 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
    Step 2 · the class activity card (2026-08-29)
 
    A one-line lede, then a plan block that says which test will run and on
-   what, then the two controls on the card's rail, then the mechanics of
-   the two tests behind a disclosure. The old card put ~200 words of prose
-   ahead of the controls and centred the controls under none of it.
+   what, then the two controls on the card's rail, with how the two tests
+   work as a right-hand column. The old card put ~200 words of prose ahead
+   of the controls and centred the controls under none of it.
 
    `#threshold_box div, #threshold_box span` zeroes borders and forces
    width 100% on everything it matches, so these blocks are <section>,
@@ -9561,9 +9564,10 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	max-width: 680px;
 }
 #threshold_box .paClassPlan {
-	margin: 4px var(--pa-card-inset) 14px;
+	/* 14px on the right, not the card inset: the block ends short of the
+	   column seam, not on it. */
+	margin: 4px 14px 14px var(--pa-card-inset);
 	padding: 12px 16px 12px 15px;
-	max-width: 680px;
 	border-left: 3px solid var(--pa-accent-green);
 	border-radius: 0 var(--pa-radius) var(--pa-radius) 0;
 	background: var(--pa-surface-subtle);
@@ -9628,17 +9632,30 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	left: var(--pa-card-inset) !important;
 	transform: none;
 }
-#threshold_box details.paHowItWorks {
-	margin: 2px var(--pa-card-inset) 14px;
-	max-width: 680px;
+/* The right column. A hairline on its left is the seam between the two
+   columns; the kicker matches the plan block's so the card reads as one
+   system. The gap is padding on the <aside>, not margin on the ExtJS item,
+   because the hbox positions the item by its own arithmetic. */
+#threshold_box .paClassAside {
+	margin: 4px var(--pa-card-inset) 12px 0;
+	/* 12px top, the plan block's own padding, so the two kickers share a
+	   baseline across the seam. */
+	padding: 12px 0 0 26px;
+	border-left: 1px solid var(--pa-border);
 	font-size: 12.5px;
 	line-height: 1.5;
 	color: var(--pa-ink-label);
 }
-#threshold_box details.paHowItWorks > summary {
-	cursor: pointer;
-	font-weight: 600;
-	color: var(--pa-link);
+#threshold_box .paClassAside > p {
+	margin: 0 0 9px;
+	padding: 0;
+	max-width: 62ch;
 }
-#threshold_box details.paHowItWorks ul { margin: 8px 0 0 18px; padding: 0; }
-#threshold_box details.paHowItWorks li { margin: 0 0 6px; padding: 0; }
+#threshold_box .paClassAside > p.paClassPlanKicker { margin-bottom: 6px; }
+/* Stacked (narrow viewport): the seam is a rule above, on the card rail. */
+#threshold_box .paClassColumns-stacked .paClassAside {
+	margin: 2px var(--pa-card-inset) 12px;
+	padding: 12px 0 0;
+	border-left: 0;
+	border-top: 1px solid var(--pa-border);
+}
