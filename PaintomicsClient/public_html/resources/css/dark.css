@@ -2030,4 +2030,8 @@
 :root[data-theme="dark"] .paLadderExcluded li.paIsSig { color: #E3EAF2; }
 :root[data-theme="dark"] .paLadderTip { background: #E3EAF2; color: #151D26; }
 :root[data-theme="dark"] .paDesignNote { color: #A1B0C0; }
-:root[data-theme="dark"] .paClassTestDesign { background: #16241A; border-left-color: #4CAF50; color: #C9D3DD; }
+:root[data-theme="dark"] #threshold_box .paClassPlan { background: var(--pa-surface-sunken) !important; }
+:root[data-theme="dark"] #threshold_box .paClassPlanName { color: #E3EAF2; }
+:root[data-theme="dark"] #threshold_box .paClassPlan-perm { border-left-color: #4CAF50 !important; }
+:root[data-theme="dark"] #threshold_box .paClassPlanFacts li > b { color: #E3EAF2; }
+:root[data-theme="dark"] .metaboliteHead > h3.metaboliteTitle { color: #E3EAF2; }

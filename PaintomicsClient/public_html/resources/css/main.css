@@ -9392,6 +9392,253 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 .paLadderExcluded li.paIsSig { font-weight: 600; color: #141E2B; }
 .paLadderTip { position: fixed; z-index: 20000; pointer-events: none; background: #141E2B; color: #FFFFFF; font-size: 12px;
                padding: 5px 8px; border-radius: 4px; white-space: nowrap; display: none; }
-.paDesignNote { margin: 0 0 6px 155px; font-size: 12px; color: #52525B; max-width: 62ch; }
-.paClassTestDesign { margin: 0 0 10px; padding: 8px 12px; border-left: 3px solid #247B21; background: #F1F8F0;
-                     color: #3F3F46; font-size: 13px; max-width: 70ch; }
+/* Under the design field, on the input's rail: the label column is 150px
+   (the panel's labelWidth) and the generic paragraph inset is cancelled --
+   with it the note started 26px right of the input it annotates. The
+   parent selector outranks `div.contentbox p`. */
+.x-box-item > p.paDesignNote { margin: 0 0 6px 150px; padding: 0; font-size: 12px; color: #52525B; max-width: 78ch; }
+
+/* ==========================================================================
+   Step 2 · the compound cards, redrawn (2026-08-29)
+
+   The cards were 49%-wide floats with a 230px floor, so a two-candidate
+   card was two lines of content over 150px of white, and the candidates
+   were 200px cells with their KEGG ids hidden. Now: a grid whose cards
+   size to their content, the name and its count on one line, the id on
+   every candidate row, and the AI's reason printed on the card instead
+   of hidden in a tooltip.
+   ========================================================================== */
+.compoundsGrid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	/* The gutter the floated cards had (100% - 2 x 49% at this width). */
+	gap: 10px 22px;
+	/* Default stretch: the two cards of a row share one bottom edge. */
+	clear: both;
+}
+@media (max-width: 900px) {
+	.compoundsGrid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Undo the float grid for cards that live in the CSS grid. The float rules
+   stay for any other caller of .metaboliteBox. */
+.compoundsGrid > .contentbox.metaboliteBox {
+	float: none;
+	width: auto;
+	min-width: 0;
+	min-height: 0;
+	margin: 0;
+	padding-bottom: 14px;
+}
+/* An opened card takes the row: 100 alternatives want the width, and the
+   old `.expandedBox { width: 100% }` did the same for the floats. */
+.compoundsGrid > .contentbox.metaboliteBox.expandedBox {
+	grid-column: 1 / -1;
+	width: auto;
+}
+.metaboliteHead {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 15px var(--pa-card-inset) 8px;
+}
+/* Opts out of `div.contentbox h3` (its inset and size belong to a heading
+   that stands alone; this one shares a line with its count). */
+.metaboliteHead > h3.metaboliteTitle {
+	margin: 0;
+	padding: 0;
+	min-width: 0;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.35;
+	color: #1A1A18;
+}
+.metaboliteHead > .aiBadge {
+	flex: 0 0 auto;
+	margin-left: 0;
+	align-self: center;
+}
+.metaboliteHead > .metaboliteCount {
+	flex: 0 0 auto;
+	margin-left: auto;
+	font-size: 12px;
+	color: var(--pa-ink-muted);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+/* Candidates: two columns of rows, each row a checkbox, the name and its
+   id. The name ellipsises; the id never does, because it is the part that
+   disambiguates. */
+.metaboliteBox .mainCompoundsPanel,
+.metaboliteBox .otherCompoundsPanel {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 5px 16px;
+	padding: 0 var(--pa-card-inset);
+}
+.metaboliteBox .otherCompoundsPanel {
+	margin-top: 8px;
+	padding-top: 10px;
+	border-top: 1px dashed var(--pa-border);
+}
+.metaboliteBox .metaboliteCompound {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	font-size: 13px;
+	line-height: 1.4;
+}
+.metaboliteBox .metaboliteCompound > input[type="checkbox"] {
+	flex: 0 0 auto;
+	margin: 0;
+}
+.metaboliteBox .metaboliteCompound > a {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.metaboliteBox .metaboliteCompound > code.metaboliteId {
+	flex: 0 0 auto;
+	padding: 0;
+	font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+	font-size: 11px;
+	color: var(--pa-ink-muted);
+	background: transparent;
+}
+/* The AI's reason, under the candidates. Muted ink with the mark in the AI
+   colour: the sentence is the machine's, the decision is still the reader's. */
+.contentbox .aiReason {
+	display: flex;
+	align-items: flex-start;
+	gap: 7px;
+	margin: 9px 0 0;
+	padding: 0 var(--pa-card-inset);
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: var(--pa-ink-muted);
+}
+.contentbox .aiReason > svg.po-ai-mark,
+.contentbox .aiReason > i {
+	flex: 0 0 auto;
+	margin-top: 0.2em;
+	color: var(--pa-ai-blue);
+}
+.contentbox .aiReason-unsure > i { color: var(--pa-accent-orange); }
+.contentbox .aiReason-auto > i { color: var(--pa-ink-muted); }
+/* "102 more matches" is a quiet disclosure, not a red "Show". */
+.metaboliteBox .showOtherCompoundsButton,
+.metaboliteBox .showOtherCompoundsButton.visible {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 10px var(--pa-card-inset) 0;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--pa-link);
+}
+.metaboliteBox .showOtherCompoundsButton > i {
+	font-size: 10px;
+	color: var(--pa-ink-muted);
+}
+
+/* ==========================================================================
+   Step 2 · the class activity card (2026-08-29)
+
+   A one-line lede, then a plan block that says which test will run and on
+   what, then the two controls on the card's rail, then the mechanics of
+   the two tests behind a disclosure. The old card put ~200 words of prose
+   ahead of the controls and centred the controls under none of it.
+
+   `#threshold_box div, #threshold_box span` zeroes borders and forces
+   width 100% on everything it matches, so these blocks are <section>,
+   <p> and <dl>, and the selectors carry the id to outrank
+   `#threshold_box p` (margin) and `div.contentbox p` (inset).
+   ========================================================================== */
+#threshold_box .paClassLede {
+	margin: 12px 0 4px;
+	max-width: 680px;
+}
+#threshold_box .paClassPlan {
+	margin: 4px var(--pa-card-inset) 14px;
+	padding: 12px 16px 12px 15px;
+	max-width: 680px;
+	border-left: 3px solid var(--pa-accent-green);
+	border-radius: 0 var(--pa-radius) var(--pa-radius) 0;
+	background: var(--pa-surface-subtle);
+}
+#threshold_box .paClassPlan-binom { border-left-color: var(--pa-ink-muted); }
+#threshold_box .paClassPlanKicker {
+	margin: 0 0 3px;
+	padding: 0;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--pa-ink-label);
+}
+#threshold_box .paClassPlanName {
+	margin: 0 0 8px;
+	padding: 0;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.35;
+	color: #1A1A18;
+}
+#threshold_box .paClassPlanName > i {
+	margin-right: 7px;
+	color: var(--pa-accent-green);
+}
+#threshold_box .paClassPlan-binom .paClassPlanName > i { color: var(--pa-ink-muted); }
+#threshold_box .paClassPlanFacts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 18px;
+	margin: 0 0 8px;
+	padding: 0;
+	list-style: none;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--pa-ink-muted);
+}
+#threshold_box .paClassPlanFacts li {
+	margin: 0;
+	padding: 0;
+	white-space: nowrap;
+}
+#threshold_box .paClassPlanFacts li > b {
+	margin-left: 4px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: #1A1A18;
+}
+#threshold_box .paClassPlanWhy {
+	margin: 0;
+	padding: 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--pa-ink-label);
+}
+/* The controls on the rail. The shared rule further up centres every
+   `.x-form-item` in this card with `left: 50% !important`; the extra class
+   in this selector outranks it, and !important is needed to beat the
+   inline `left: 0` ExtJS writes as well. */
+#threshold_box .divForm .x-form-item {
+	left: var(--pa-card-inset) !important;
+	transform: none;
+}
+#threshold_box details.paHowItWorks {
+	margin: 2px var(--pa-card-inset) 14px;
+	max-width: 680px;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--pa-ink-label);
+}
+#threshold_box details.paHowItWorks > summary {
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--pa-link);
+}
+#threshold_box details.paHowItWorks ul { margin: 8px 0 0 18px; padding: 0; }
+#threshold_box details.paHowItWorks li { margin: 0 0 6px; padding: 0; }

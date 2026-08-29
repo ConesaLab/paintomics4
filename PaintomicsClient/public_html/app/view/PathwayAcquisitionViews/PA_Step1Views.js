@@ -1245,11 +1245,10 @@ function PA_Step1JobView() {
 			html: '<p data-guides="ignore" style="margin:0 10px 10px;padding:8px 12px;border-left:4px solid var(--pa-accent-blue);' +
 				'background:rgba(38,132,255,0.08);font-size:12px;line-height:1.5;">' +
 				'<b>This example dataset is fixed.</b> Its omics, organism and databases come from ' +
-				'the server&rsquo;s example catalogue' +
+				'the server&rsquo;s catalogue' +
 				(pipeline === "pathway-acquisition" ? "" : " for this pre-processing step") +
-				', so the panels below are shown read-only: changes made here would not reach the ' +
-				'analysis. Press <b>Reset</b> to go back to an upload form, or ' +
-				'<b>Load another example</b> to switch dataset.</p>'
+				', so the panels are read-only. <b>Reset</b> returns to an upload form; ' +
+				'<b>Load another example</b> switches dataset.</p>'
 		});
 	};
 
@@ -2480,16 +2479,15 @@ function OmicSubmittingPanel(nElem, options) {
 	   the "experimental design" label, including the ones that carry none
 	   and then run the binomial test. */
 	this.setExampleMode = function(omicName, hasDesign){
-		var label = omicName || this.type || "example";
 		var component = this.getComponent();
-		setExampleLabel(component.queryById("mainFileSelector"), label + " — values");
+		setExampleLabel(component.queryById("mainFileSelector"), "values");
 		setExampleLabel(component.queryById("secondaryFileSelector"),
-			label + " — relevant features");
+			"relevant features");
 		var design = component.queryById("designFileSelector");
 		var note = component.queryById("designFileNote");
 		if (design && !design.hidden) {
 			if (hasDesign) {
-				setExampleLabel(design, label + " — experimental design");
+				setExampleLabel(design, "experimental design");
 			} else {
 				design.setVisible(false);
 				if (note) note.setVisible(false);
@@ -2636,11 +2634,11 @@ function OmicSubmittingPanel(nElem, options) {
 							xtype: 'box',
 							itemId: "designFileNote",
 							hidden: this.mapTo !== "Compound",
-							html: '<p class="paDesignNote"><b>With replicates and a design</b>, metabolite class activity runs a ' +
-								'permutation test on your own samples: "does this class respond to the factor at all?" ' +
-								'The values are collapsed to one column per condition for painting. ' +
-								'<b>Without them</b>, it runs a binomial test on the relevant-features list against the ' +
-								'significance threshold you used to build that list.</p>'
+							/* data-guides="ignore": the note sits on the INPUT rail (150px
+							   in, under the field it annotates), which the overlay lists as a
+							   rail but judges this paragraph against the label column. */
+							html: '<p class="paDesignNote" data-guides="ignore">Optional. With a design, the class activity test runs on your ' +
+								'replicates instead of on the relevant list.</p>'
 						}, {
 							xtype: 'combo',
 							fieldLabel: 'Can be mapped to',
@@ -2808,9 +2806,9 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 			"Region-based omic";
 
 		setExampleLabel(component.queryById("mainFileSelector"),
-			omicName + " — region values");
+			"region values");
 		setExampleLabel(component.queryById("secondaryFileSelector"),
-			omicName + " — relevant regions");
+			"relevant regions");
 		setExampleLabel(component.queryById("tertiaryFileSelector"),
 			"genome annotation (GTF)");
 
@@ -3607,11 +3605,11 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 		var regulator = omicNames[0];
 
 		setExampleLabel(component.queryById("mainFileSelector"),
-			regulator + " — values");
+			"values");
 		setExampleLabel(component.queryById("secondaryFileSelector"),
-			regulator + " — relevant features");
+			"relevant features");
 		setExampleLabel(component.queryById("mirnaTargetsFileSelector"),
-			regulator + " — target predictions");
+			"target predictions");
 		setExampleLabel(component.queryById("rnaseqauxFileSelector"),
 			"target gene expression");
 

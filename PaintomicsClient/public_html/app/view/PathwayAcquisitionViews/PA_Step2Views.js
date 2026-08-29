@@ -373,32 +373,26 @@ function PA_Step2JobView() {
 				items: [{
 					html: '<h2 style="width: 100%;">Metabolite class activity test</h2>'
 				}, {
-					/* Two tests, chosen by what the data can support. The
-					   question each one answers is spelled out because they can
-					   give opposite answers on the same job. */
-					html: '<p>For each KEGG BRITE class (at three levels), PaintOmics asks <b>whether the class responds</b>.\n' +
-						'Which test runs depends on what you uploaded:</p>' +
-						'<ul style="margin: 0 0 10px 18px;">' +
-						'<li><b>Replicates and an experimental design</b> (one column per sample, plus the design that maps columns\n' +
-						'to conditions): a <b>permutation test on your replicates</b>. Per metabolite, an F-test for the chosen factor;\n' +
-						'per class, the mean F of its members against re-labellings of the factor. Self-contained, and it keeps the\n' +
-						'correlation between metabolites of a class.</li>' +
-						'<li><b>Ratios and a relevant list only</b>: a one-sided <b>binomial</b> on how many members are in your relevant\n' +
-						'list, against the significance threshold you used to build it (under "no member changed", each is flagged\n' +
-						'only by a type-I error at that rate). Valid when the list came from a statistical test; a fold-change\n' +
-						'cut-off has no such rate. "Relative to this job" instead asks whether the class is <i>more</i> relevant than\n' +
-						'the rest of your panel, which can never be significant when most of a targeted panel moves.</li>' +
-						'</ul>' +
-						'<p>P-values are corrected across the classes of each level. Classes with fewer than three measured\n' +
-						'members are reported but marked descriptive.</p>'
-				},{
+					/* One line. Which test will run, and on what, is the plan
+					   block inside the form below; how the two tests work is
+					   behind the disclosure after it. The old version put all of
+					   that here, ahead of the controls, and read as a wall. */
+					html: '<p class="paClassLede">Asks whether each KEGG BRITE class <b>responds as a whole</b>, '
+						+ 'at three levels of the hierarchy, with p-values corrected within each level.</p>'
+				}, {
 					xtype: 'form',
-					maxWidth: 600,
 					bodyCls: "divForm",
-					style: "margin: 0 auto 20px auto;",
+					/* On the card's rail, like the prose. It used to be centred
+					   (margin auto), which put the controls under nothing on a
+					   1360px card. maxWidth is what keeps the vbox from stretching
+					   the two combos to the card's full width. */
+					maxWidth: 660,
+					style: "margin: 0 0 4px 0;",
 					layout: {type: 'vbox', align: 'stretch'},
 					defaults: {labelAlign: "right", border: false},
 					items: thresholdMetaboliteClass
+				}, {
+					html: paClassActivityHowItWorks()
 				}]
 			}, {xtype: 'container', cls: 'paLayoutPad', html:'<div style="display: none;"></div>'});
 		}
@@ -601,16 +595,20 @@ function PA_Step2JobView() {
 		'  <div id="about" class="compoundsIntroLayout">' +
 		'    <div class="compoundsIntroText">' +
 		'      <h2>Compounds disambiguation</h2>' +
-		'      <p><b>' + me.items.length + '</b> of your compound names matched more than ' +
-		'one KEGG compound. Pick the one you measured on each card below.</p>' +
+		'      <p><b>' + me.items.length + '</b> names match more than one KEGG compound. ' +
+		'Tick the one you measured on each card.</p>' +
 		'    </div>' +
 		     me.renderAIActions() +
 		'  </div>' +
 		'</div>' +
 		me.renderAISummary() +
+		// A grid, not the odd/even floats: cards size to their content and
+		// a row's two cards share one bottom edge (see .compoundsGrid).
+		'<div class="compoundsGrid">' +
 		me.items.map(function(compoundSetView, index) {
 			return compoundSetView.renderCard(index);
 		}).join("") +
+		'</div>' +
 		// The cards are floated; the column layout used to supply the clearfix,
 		// so without this the panel would collapse to no height and the cards
 		// would spill out of the step-2 form.
@@ -1021,10 +1019,10 @@ function PA_Step2JobView() {
 				otherCompoundsPanel.html(this.items[setIndex].renderOtherCompounds());
 			}
 			card.addClass("expandedBox");
-			button.addClass("visible").html('<i class="fa fa-eye-slash"></i> Hide');
+			button.addClass("visible").html('<i class="fa fa-chevron-down"></i> ' + button.attr("data-label"));
 		} else {
 			card.removeClass("expandedBox");
-			button.removeClass("visible").html('<i class="fa fa-eye"></i> Show');
+			button.removeClass("visible").html('<i class="fa fa-chevron-right"></i> ' + button.attr("data-label"));
 		}
 
 		otherCompoundsPanel.toggle(!isVisible);
@@ -1130,6 +1128,86 @@ function paClassActivityDesign(omic) {
    threshold combo always. A function, not inline markup, because the
    replicate-detection card on the same page can apply or clear a mapping
    after the box was drawn. */
+/**
+* What the class activity test will do on this omic, as a plan rather than a
+* paragraph: which test, the numbers it rests on, one sentence of mechanism.
+* The card's earlier version said the same thing in 70 words of prose inside
+* a green box, and readers skipped it.
+*
+* Written with <section>/<p>/<ul> rather than <div>/<span> on purpose:
+* `#threshold_box div, #threshold_box span` in main.css zeroes borders and
+* forces width 100% on everything it matches, which would take the rail off
+* this block and stretch its facts row.
+*
+* @param {String} omicName
+* @param {Object|null} design paClassActivityDesign(), or null without one
+* @returns {String}
+*/
+function paClassActivityPlan(omicName, design) {
+	var name = Ext.String.htmlEncode(omicName || "");
+	if (design) {
+		return '<section class="paClassPlan paClassPlan-perm">' +
+			'<p class="paClassPlanKicker">Test that will run</p>' +
+			'<p class="paClassPlanName"><i class="fa fa-check-circle"></i>Permutation test on your replicates</p>' +
+			// One <li> per fact so a fact never wraps away from its label.
+			'<ul class="paClassPlanFacts">' +
+			'<li>Omic <b>' + name + '</b></li>' +
+			'<li>Sample columns <b>' + design.columns + '</b></li>' +
+			'<li>Conditions <b>' + design.conditions + '</b></li>' +
+			'<li>Replicates <b>' + design.replicates + ' per condition</b></li>' +
+			'</ul>' +
+			'<p class="paClassPlanWhy">Each class is scored by the mean F of its metabolites for the factor ' +
+			'below, against re-labellings of that factor. The threshold is used only if this test cannot run.</p>' +
+			'</section>';
+	}
+	return '<section class="paClassPlan paClassPlan-binom">' +
+		'<p class="paClassPlanKicker">Test that will run</p>' +
+		'<p class="paClassPlanName"><i class="fa fa-list-ul"></i>Binomial test on your relevant list</p>' +
+		'<p class="paClassPlanWhy">Counts how many members of each class are in your relevant list, against ' +
+		'the threshold you used to build it. To test on your own replicates instead, upload one column per ' +
+		'sample and an experimental design in Step 1.</p>' +
+		'</section>';
+}
+
+/**
+* The mechanics of the two tests, collapsed. They can give opposite answers
+* on the same job, so the difference has to be available -- but not ahead of
+* the controls.
+*
+* @returns {String}
+*/
+/**
+* Re-measure the class activity card after its disclosure opens or closes.
+*/
+function paRelayoutThresholdBox() {
+	var box = Ext.getCmp("threshold_box");
+	if (box && box.rendered) {
+		box.updateLayout();
+	}
+}
+
+function paClassActivityHowItWorks() {
+	// ontoggle: the card is an ExtJS vbox that measured this box closed, and
+	// it clips whatever the disclosure reveals until it is asked to measure
+	// again (see extjs-panel-clips-revealed-messages). `toggle` does not
+	// bubble, so a delegated handler cannot catch it.
+	return '<details class="paHowItWorks" ontoggle="paRelayoutThresholdBox()">' +
+		'<summary>How the two tests work</summary>' +
+		'<ul>' +
+		'<li><b>Permutation test on replicates</b> &mdash; needs one column per sample and a design. ' +
+		'Per metabolite, an F-test for the chosen factor; per class, the mean F of its members against ' +
+		're-labellings of that factor. Self-contained, and it keeps the correlation between metabolites of a class.</li>' +
+		'<li><b>Binomial test on the relevant list</b> &mdash; runs when only ratios and a relevant list were ' +
+		'uploaded. Counts the members of each class that are in the list, against the threshold used to build it, ' +
+		'so it is valid when the list came from a statistical test; a fold-change cut-off has no such rate. ' +
+		'&ldquo;Relative to this job&rdquo; instead asks whether the class is <i>more</i> relevant than the rest ' +
+		'of your panel, which can never be significant when most of a targeted panel moves.</li>' +
+		'<li>P-values are corrected across the classes of each level. Classes with fewer than three measured ' +
+		'members are reported but marked descriptive.</li>' +
+		'</ul>' +
+		'</details>';
+}
+
 function paClassActivityItems(model, omicName) {
 	var items = [];
 	/* The class activity test this omic can support. With a design
@@ -1141,17 +1219,8 @@ function paClassActivityItems(model, omicName) {
 		return o.omicName === omicName;
 	})[0] || {};
 	var design = paClassActivityDesign(compoundOmic);
+	items.push({xtype: 'box', html: paClassActivityPlan(omicName, design)});
 	if (design) {
-		items.push({
-			xtype: 'box',
-			cls: 'paClassTestDesign',
-			html: '<p class="paClassTestDesign"><i class="fa fa-check-circle"></i> <b>' + Ext.String.htmlEncode(omicName)
-				+ '</b> carries ' + design.columns + ' sample columns in ' + design.conditions
-				+ ' conditions. The class activity test will be a <b>permutation test on your replicates</b>'
-				+ ' (' + design.replicates + ' per condition): for each class, the mean F of its metabolites for the'
-				+ ' factor chosen below, against re-labellings of that factor inside the other factors.'
-				+ ' The threshold below is used only if the permutation test cannot run.</p>'
-		});
 		if (design.factors.length > 1) {
 			items.push({
 				xtype: 'combo',
@@ -1166,7 +1235,7 @@ function paClassActivityItems(model, omicName) {
 					getInnerTpl: function (displayField) { return '{' + displayField + ':htmlEncode}'; }
 				},
 				editable: false, allowBlank: false,
-				labelAlign: 'left', labelWidth: 240, width: 460,
+				labelAlign: 'left', labelWidth: 170, width: 420,
 				store: Ext.create('Ext.data.ArrayStore', {
 					fields: ['name', 'value'],
 					data: design.factors.map(function (f) { return [f.label, f.id]; })
@@ -1177,8 +1246,7 @@ function paClassActivityItems(model, omicName) {
 	}
 	items.push({
 		xtype: 'combo',
-		fieldLabel: design ? 'Fallback: significance threshold of your relevant list'
-		                   : 'Significance threshold of your relevant list',
+		fieldLabel: design ? 'Fallback threshold' : 'Threshold of your relevant list',
 		name: 'thresholdMetaboliteClass',
 		value: 0.05,
 		displayField: 'name', valueField: 'value',
@@ -1205,10 +1273,9 @@ function paClassActivityItems(model, omicName) {
 			}
 			return true;
 		},
-		/* Same rail as the cluster combo above. */
 		labelAlign: 'left',
-		labelWidth: 240,
-		width: 460,
+		labelWidth: 170,
+		width: 420,
 		store: Ext.create('Ext.data.ArrayStore', {
 			fields: ['name', 'value'],
 			data: [['0.01', 0.01],
@@ -1467,16 +1534,16 @@ function PA_Step2ReplicateDetectionView() {
 PA_Step2ReplicateDetectionView.prototype = new View();
 
 /**
-* "1 compound found" / "4 compounds found": the noun agrees with the count and
-* the verb is the past participle. This read "compounds founds" - and, for a
+* "1 KEGG match" / "4 KEGG matches": the noun agrees with the count; the caller
+* names the plural. The old label read "compounds founds" - and, for a
 * single match, "1 compounds founds" - since 2014.
 *
 * @param {Number} count how many candidates were matched
 * @param {String} noun "compound" or "alternative compound"
 * @returns {String}
 */
-function foundCountLabel(count, noun) {
-	return count + " " + noun + ((count === 1) ? "" : "s") + " found";
+function countLabel(count, singular, plural) {
+	return count + " " + ((count === 1) ? singular : (plural || singular + "s"));
 }
 
 /**
@@ -1488,10 +1555,9 @@ function foundCountLabel(count, noun) {
 * matched compounds, are what froze step 2 on a compound-heavy job.
 *
 * @param {Compound} compound the candidate
-* @param {Number} columnWidth width in px of the cell, as the old view had it
 * @returns {String}
 */
-function renderCompoundCandidate(compound, columnWidth, aiPickedID) {
+function renderCompoundCandidate(compound, aiPickedID) {
 	var compoundID = compound.getID();
 	var safeID = Ext.String.htmlEncode(compoundID);
 	var safeName = Ext.String.htmlEncode(compound.getName());
@@ -1499,12 +1565,14 @@ function renderCompoundCandidate(compound, columnWidth, aiPickedID) {
 	// rows still says WHICH row the machine is responsible for.
 	var picked = (aiPickedID && compoundID === aiPickedID) ? " aiPickedCandidate" : "";
 
+	// The id is printed. "L-Alanine", "D-Alanine" and "Alanine" are three
+	// different compounds, and C00041 / C00133 / C01401 is how anyone checks
+	// which one they are ticking.
 	return '' +
-	'<div class="metaboliteCompound' + picked + '" data-compound-id="' + safeID + '" data-compound-name="' + safeName + '"' +
-	' style="float:left; width:' + columnWidth + 'px; max-width:' + columnWidth + 'px; margin-top:5px;' +
-	' white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' +
+	'<div class="metaboliteCompound' + picked + '" data-compound-id="' + safeID + '" data-compound-name="' + safeName + '">' +
 	'  <input type="checkbox"' + (compound.isSelected() ? " checked" : "") + ' name="metabolite" value="' + safeID + '">' +
 	'  <a href="http://www.kegg.jp/dbget-bin/www_bget?' + encodeURIComponent(compoundID) + '" target="_blank">' + safeName + '</a>' +
+	'  <code class="metaboliteId">' + safeID + '</code>' +
 	'</div>';
 }
 
@@ -1625,6 +1693,33 @@ function PA_Step2CompoundSetView() {
 		       '<i class="fa ' + icon + '"></i> ' + label + '</span>';
 	};
 
+	/**
+	* Why the machine chose what it chose, as a line on the card rather than
+	* only a tooltip on the chip. The reason is the part a reader checks, and
+	* a hover target is not where anyone looks for it.
+	*
+	* @returns {String}
+	*/
+	this.renderAIReason = function() {
+		var state = this.aiState;
+		if (!state || !state.reason) {
+			return "";
+		}
+		var kind = state.status === "unsure" ? "unsure"
+			: (state.tier === "ai" ? "ai" : "auto");
+		var mark = (kind === "ai" && typeof getAIMark === "function")
+			? getAIMark()
+			: '<i class="fa ' + (kind === "unsure" ? "fa-question-circle" : "fa-check") + '"></i>';
+		// The rule-based reasons arrive as fragments ("the only matching
+		// candidate..."); on a line of their own they read as sentences.
+		var reason = String(state.reason);
+		reason = reason.charAt(0).toUpperCase() + reason.slice(1);
+		// data-guides="ignore": icon-led, like the AI offer's title. The icon
+		// sits under the checkboxes and the text under the candidate names.
+		return '<p class="aiReason aiReason-' + kind + '" data-guides="ignore">' + mark +
+		       '<span>' + Ext.String.htmlEncode(reason) + '</span></p>';
+	};
+
 	this.renderCard = function(index) {
 		var mainCompounds = this.model.getMainCompounds();
 		var otherCompounds = this.model.getOtherCompounds();
@@ -1638,24 +1733,31 @@ function PA_Step2CompoundSetView() {
 
 		var html =
 		'<div class="' + cardClass + '" data-compoundset="' + index + '">' +
-		'  <h3 class="metaboliteTitle">' + Ext.String.htmlEncode(this.model.getTitle()) +
-		     this.renderAIBadge() + '</h3>' +
-		'  <h4 style="padding-left: var(--pa-card-inset);">' + foundCountLabel(mainCompounds.length, "compound") + '</h4>' +
-		'  <div class="mainCompoundsPanel" style="padding: 3px 15px; overflow: hidden;">' +
+		// Name and the count on one line: the count is a property of the
+		// name, not a heading of its own.
+		'  <div class="metaboliteHead">' +
+		// The chip is a sibling of the heading, not part of the name.
+		'    <h3 class="metaboliteTitle">' + Ext.String.htmlEncode(this.model.getTitle()) + '</h3>' +
+		     this.renderAIBadge() +
+		'    <span class="metaboliteCount">' + countLabel(mainCompounds.length, "KEGG match", "KEGG matches") + '</span>' +
+		'  </div>' +
+		'  <div class="mainCompoundsPanel">' +
 		mainCompounds.map(function(compound) {
-			return renderCompoundCandidate(compound, 200, aiPickedID);
+			return renderCompoundCandidate(compound, aiPickedID);
 		}).join("") +
-		'  </div>';
+		'  </div>' +
+		this.renderAIReason();
 
 		// Only offer the control when there is something behind it: the old
 		// markup printed "0 alternative compounds founds" with a Show link over
-		// an empty container.
+		// an empty container. The count travels on the link so that opening
+		// and closing it swap the chevron and keep the number.
 		if (otherCompounds.length > 0) {
+			var more = countLabel(otherCompounds.length, "more match", "more matches");
 			html +=
-			'  <h4 style="padding-left: var(--pa-card-inset);">' + foundCountLabel(otherCompounds.length, "alternative compound") +
-			'    <a class="showOtherCompoundsButton" href="javascript:void(0)"><i class="fa fa-eye"></i> Show</a>' +
-			'  </h4>' +
-			'  <div class="otherCompoundsPanel" style="padding: 3px 15px; overflow: hidden; display: none;"></div>';
+			'  <a class="showOtherCompoundsButton" href="javascript:void(0)" data-label="' + more + '">' +
+			'<i class="fa fa-chevron-right"></i> ' + more + '</a>' +
+			'  <div class="otherCompoundsPanel" style="display: none;"></div>';
 		}
 
 		return html + '</div>';
@@ -1669,7 +1771,7 @@ function PA_Step2CompoundSetView() {
 	this.renderOtherCompounds = function() {
 		var aiPickedID = (this.aiState && this.aiState.keggID) || null;
 		return this.model.getOtherCompounds().map(function(compound) {
-			return renderCompoundCandidate(compound, 250, aiPickedID);
+			return renderCompoundCandidate(compound, aiPickedID);
 		}).join("");
 	};
 

@@ -319,6 +319,9 @@ class Step2AISuggestionsTest(unittest.TestCase):
         self.assertIn("AI unsure", case["card"])
         self.assertIn("aiBox-unsure", case["card"])
         self.assertIn("aiBadge-unsure", case["card"])
+        # The reason is on the card, not only in the chip's tooltip.
+        self.assertIn("aiReason-unsure", case["card"])
+        self.assertIn("both forms are plausible", case["card"])
 
     def test_a_compound_already_used_elsewhere_is_not_selected_twice(self):
         """Step 1 de-duplicates across boxes on purpose; applying picks must too.
