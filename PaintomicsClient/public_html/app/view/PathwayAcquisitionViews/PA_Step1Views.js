@@ -2561,6 +2561,7 @@ function OmicSubmittingPanel(nElem, options) {
 							})
 						}, {
 							xtype: "myFilesSelectorButton",
+							requiredTag: "required",
 							fieldLabel: 'Data file',
 							namePrefix: this.namePrefix,
 							itemId: "mainFileSelector",
@@ -2587,6 +2588,7 @@ function OmicSubmittingPanel(nElem, options) {
 							helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
 						}, {
 							xtype: "myFilesSelectorButton",
+							requiredTag: "optional",
 							fieldLabel: 'Relevant features file',
 							namePrefix: this.namePrefix + '_relevant',
 							itemId: "secondaryFileSelector",
@@ -2623,6 +2625,7 @@ function OmicSubmittingPanel(nElem, options) {
 							   build that list. Optional, and the panel is still
 							   valid without it. */
 							xtype: "myFilesSelectorButton",
+							requiredTag: "optional",
 							fieldLabel: 'Experimental design',
 							namePrefix: this.namePrefix + '_design',
 							itemId: "designFileSelector",
@@ -2938,6 +2941,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					})
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "required",
 					fieldLabel: 'Data file',
 					namePrefix: this.namePrefix,
 					itemId: "mainFileSelector",
@@ -2952,6 +2956,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "optional",
 					fieldLabel: 'Relevant features file',
 					namePrefix: this.namePrefix + '_relevant',
 					itemId: "secondaryFileSelector",
@@ -3039,6 +3044,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					})
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "required",
 					fieldLabel: 'Data file',
 					namePrefix: this.namePrefix,
 					itemId: "mainFileSelector",
@@ -3053,6 +3059,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "optional",
 					fieldLabel: 'Relevant features file',
 					namePrefix: this.namePrefix + '_relevant',
 					itemId: "secondaryFileSelector",
@@ -3067,12 +3074,14 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					helpTip: "Specify the type of data for uploaded file (Relevant Genes list, Relevant proteins list,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "required",
 					fieldLabel: 'Associations file',
 					namePrefix: this.namePrefix + '_associations',
 					itemId: "mainAssociationFileSelector",
 					helpTip: "Upload the 2 column association file associating genes with features or choose it from your data folder."
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "optional",
 					fieldLabel: 'Relevant associations file',
 					namePrefix: this.namePrefix + '_relevant_associations',
 					itemId: "secondaryAssociationFileSelector",
@@ -3167,7 +3176,8 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				/*REGIONS FILE*/
 				{
 					xtype: "myFilesSelectorButton",
-					fieldLabel: 'Regions file <br>(BED + Quantification)',
+					requiredTag: "required",
+					fieldLabel: 'Regions file',
 					namePrefix: this.namePrefix,
 					itemId: "mainFileSelector",
 					helpTip: "Upload the regions file (BED format + Quantification) or choose it from your data folder."
@@ -3182,6 +3192,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				/*RELEVANT REGIONS FILE*/
 				{
 					xtype: "myFilesSelectorButton",
+					requiredTag: "optional",
 					fieldLabel: "Relevant regions file",
 					namePrefix: this.namePrefix + '_relevant',
 					itemId: "secondaryFileSelector",
@@ -3197,6 +3208,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 				/*ANNOTATIONS FILE*/
 				{
 					xtype: "myFilesSelectorButton",
+					requiredTag: "required",
 					fieldLabel: "Annotations file (GTF)",
 					namePrefix: this.namePrefix + '_annotations',
 					itemId: "tertiaryFileSelector",
@@ -3489,6 +3501,16 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 			if (component.queryById("tertiaryFileSelector") && component.queryById("tertiaryFileSelector").getValue() === "") {
 				valid = false;
 				component.queryById("tertiaryFileSelector").markInvalid("Please, provide a GTF file.");
+			}
+			/* Only reachable from "Provide own associations lists", because
+			   mainAssociationFileSelector exists only in itemsContainerAssociations.
+			   That mode is the user saying "I will supply the mapping myself"; with
+			   no file, Job.parseAssociationsFile returns an empty dict and the omic
+			   maps to nothing -- a job that succeeds and means nothing. The row is
+			   tagged "required", so this is what makes the tag true. */
+			if (component.queryById("mainAssociationFileSelector") && component.queryById("mainAssociationFileSelector").getValue() === "") {
+				valid = false;
+				component.queryById("mainAssociationFileSelector").markInvalid("Please, provide an associations file, or untick \"Provide own associations lists\".");
 			}
 
 			if (this.queryById("reportOptionsContainer").query("checkboxfield[checked=true]") < 1) {
@@ -3785,6 +3807,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					})
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "required",
 					fieldLabel: 'Data file',
 					namePrefix: this.namePrefix,
 					itemId: "mainFileSelector",
@@ -3799,6 +3822,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					helpTip: "Specify the type of data for uploaded file (Gene Expression file, Proteomic quatification,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "optional",
 					fieldLabel: 'Relevant features file',
 					namePrefix: this.namePrefix + '_relevant',
 					itemId: "secondaryFileSelector",
@@ -3813,6 +3837,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					helpTip: "Specify the type of data for uploaded file (Relevant Genes list, Relevant proteins list,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "optional",
 					fieldLabel: 'Regulator associations file',
 					namePrefix: this.namePrefix + '_associations',
 					itemId: "thirdFileSelector",
@@ -3827,6 +3852,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					helpTip: "Specify the type of data for uploaded file (Relevant Genes list, Relevant proteins list,...)."
 				}, {
 					xtype: "myFilesSelectorButton",
+					requiredTag: "optional",
 					fieldLabel: 'Regulator relevant associations file',
 					namePrefix: this.namePrefix + '_relevant_associations',
 					itemId: "fourthFileSelector",
@@ -3929,7 +3955,8 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				/*miRNA FILE*/
 				{
 					xtype: "myFilesSelectorButton",
-					fieldLabel: 'Regulators expression file <br>(ie: miRNA expression)',
+					requiredTag: "required",
+					fieldLabel: 'Regulators expression file',
 					namePrefix: this.namePrefix,
 					itemId: "mainFileSelector",
 					helpTip: "Upload the quantification file (i.e. miRNA Quantification) or choose it from your data folder. See above the accepted format for the file."
@@ -3944,7 +3971,8 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				/*RELEVANT miRNA FILE*/
 				{
 					xtype: "myFilesSelectorButton",
-					fieldLabel: "Relevant regulators file<br> (optional)",
+					requiredTag: "optional",
+					fieldLabel: 'Relevant regulators file',
 					namePrefix: this.namePrefix + '_relevant',
 					itemId: "secondaryFileSelector",
 					helpTip: "Upload the list of relevant (differentially expressed) features (TAB format) or choose it from your data folder. See above the accepted format for the file."
@@ -3978,6 +4006,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				/*TARGETS FILE*/
 				{
 					xtype: "myFilesSelectorButton",
+					requiredTag: "required",
 					fieldLabel: "Associations file",
 					namePrefix: this.namePrefix + '_associations',
 					itemId: "mirnaTargetsFileSelector",
@@ -4009,7 +4038,8 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				},
 				{
 					xtype: "myFilesSelectorButton",
-					fieldLabel: 'Relevant associations file<br>(optional)',
+					requiredTag: "required",
+					fieldLabel: 'Relevant associations file',
 					namePrefix: this.namePrefix + '_relevant_associations',
 					itemId: "secondaryAssociationFileSelector",
 					helpTip: "Upload the 2 column list of relevant associations (gene - feature) or choose it from your data folder."
@@ -4045,7 +4075,8 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 						},
 						{
 							xtype: "myFilesSelectorButton",
-							fieldLabel: "Gene expression dataset"/*<br> (optional)"*/,
+							requiredTag: "optional",
+							fieldLabel: 'Gene expression dataset',
 							namePrefix: this.namePrefix + '_rnaseqaux',
 							extraButtons: [{
 								text: 'Use a file from other omic',
@@ -4254,9 +4285,21 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 				// });
 
 				$("#" + me.namePrefix + "_corrOptions").change(function() {
-					// $("#" + me.namePrefix + "_mapRegions").prop('disabled', $(this).is(':checked'));
-					me.getComponent().queryById("secondaryAssociationFileSelector").down('container').setDisabled($(this).is(':checked'));
-					me.getComponent().queryById("itemsContainerCorrOptions").setDisabled(! $(this).is(':checked'));
+					var corrEnabled = $(this).is(':checked');
+					// $("#" + me.namePrefix + "_mapRegions").prop('disabled', corrEnabled);
+					me.getComponent().queryById("secondaryAssociationFileSelector").down('container').setDisabled(corrEnabled);
+					me.getComponent().queryById("itemsContainerCorrOptions").setDisabled(! corrEnabled);
+
+					/* Two of the rows on this card are required only because of this
+					   checkbox, so their tag is driven by the checkbox -- and by the same
+					   reading of it that isValid() makes a few lines above. Correlation on:
+					   the panel needs the gene expression file and derives the relevant
+					   associations itself. Correlation off: it needs the associations list.
+					   Written into the label instead, one of the two would always be wrong;
+					   that is what 'Relevant associations file (optional)' was, a label that
+					   said optional over a field that refused the form. */
+					me.getComponent().queryById("secondaryAssociationFileSelector").setRequiredTag(corrEnabled ? "optional" : "required");
+					me.getComponent().queryById("rnaseqauxFileSelector").setRequiredTag(corrEnabled ? "required" : "optional");
 				});
 
 				$(this.getEl().dom).find("a.deleteOmicBox").click(function() {
@@ -4430,6 +4473,7 @@ function MORESubmittingPanel(nElem, options) {
 				},
 				{
 					xtype: "myFilesSelectorButton",
+					requiredTag: "required",
 					fieldLabel: 'Conditions file',
 					namePrefix: 'conditions',
 					itemId: "conditionsFileSelector",
@@ -4441,6 +4485,7 @@ function MORESubmittingPanel(nElem, options) {
 				},
 				{
 					xtype: "myFilesSelectorButton",
+					requiredTag: "required",
 					fieldLabel: "Gene expression dataset",
 					namePrefix: 'rnaseqaux',
 					itemId: "rnaseqauxFileSelector",
@@ -4485,6 +4530,7 @@ function MORESubmittingPanel(nElem, options) {
 				},
 				{
 					xtype: "myFilesSelectorButton",
+					requiredTag: "required",
 					fieldLabel: 'Regulators expression file',
 					namePrefix: 'file_0',
 					itemId: "mainFileSelector",
@@ -4492,13 +4538,15 @@ function MORESubmittingPanel(nElem, options) {
 				},
 				{
 					xtype: "myFilesSelectorButton",
-					fieldLabel: 'Relevant regulators file<br>(optional)',
+					requiredTag: "optional",
+					fieldLabel: 'Relevant regulators file',
 					namePrefix: 'relevant_file_0',
 					itemId: "moreRelevantFileSelector",
 					helpTip: "Upload the list of relevant (differentially expressed) features (TAB format) or choose it from your data folder. See above the accepted format for the file."
 				},
 				{
 					xtype: "myFilesSelectorButton",
+					requiredTag: "optional",
 					fieldLabel: 'Associations file',
 					namePrefix: 'assoc_file_0',
 					itemId: "moreAssociationsFileSelector",
@@ -4566,6 +4614,7 @@ function MORESubmittingPanel(nElem, options) {
 							},
 							{
 								xtype: "myFilesSelectorButton",
+								requiredTag: "required",
 								fieldLabel: 'Regulators expression file',
 								namePrefix: 'file_' + i,
 								/* The same itemIds as the first regulator's
@@ -4582,13 +4631,15 @@ function MORESubmittingPanel(nElem, options) {
 							},
 							{
 								xtype: "myFilesSelectorButton",
-								fieldLabel: 'Relevant regulators file<br>(optional)',
+								requiredTag: "optional",
+								fieldLabel: 'Relevant regulators file',
 								namePrefix: 'relevant_file_' + i,
 								itemId: "moreRelevantFileSelector",
 								helpTip: "Upload the list of relevant (differentially expressed) features (TAB format) or choose it from your data folder. See above the accepted format for the file."
 							},
 							{
 								xtype: "myFilesSelectorButton",
+								requiredTag: "optional",
 								fieldLabel: 'Associations file',
 								namePrefix: 'assoc_file_' + i,
 								itemId: "moreAssociationsFileSelector",

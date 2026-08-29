@@ -920,6 +920,10 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	fieldLabel: "label",
 	namePrefix: "filefield",
 	buttonText: "Browse...",
+	/* "required" or "optional": whether the job needs this file. Every file row on
+	   Step 1 sets it, so a row that says nothing is a row somebody forgot, not a
+	   row with nothing to say. Conditional rows flip it with setRequiredTag(). */
+	requiredTag: null,
 	labelAlign: "right",
 	labelWidth: 200,
 	margin: "5px 0px",
@@ -945,6 +949,19 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	},
 	markInvalid: function(errorMessage) {
 		return this.queryById("visiblePathField").markInvalid(errorMessage);
+	},
+	buildRequiredTag: function(tag) {
+		return '<span class="po-file-tag' + (tag === "required" ? " po-file-tag-required" : "") + '">' + tag + '</span>';
+	},
+	/* For the rows whose requiredness is a consequence of a choice made elsewhere
+	   on the card -- the correlation checkbox on a miRNA panel, say. The caller
+	   passes the same expression the validator reads, so the two cannot drift. */
+	setRequiredTag: function(tag) {
+		var box = this.queryById("requiredTag");
+		if (box && box.rendered) {
+			box.update(this.buildRequiredTag(tag));
+		}
+		return this;
 	},
 	/***********************************************************************
 	* COMPONENT DECLARATION
@@ -1014,7 +1031,13 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 				handler: function() {
 					this.showMenu();
 				}
-			}, (me.helpTip !== undefined ? {
+			}, (me.requiredTag ? {
+				xtype: "box",
+				itemId: "requiredTag",
+				width: 56,
+				margin: "0 0 0 8",
+				html: me.buildRequiredTag(me.requiredTag)
+			} : null), (me.helpTip !== undefined ? {
 				xtype: "label",
 				html: '<span class="helpTip" style="float:right;" title="' + this.helpTip + '""></span>'
 			} : null)]
