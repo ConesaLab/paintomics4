@@ -202,7 +202,7 @@ PUBLISHED = {
     # upstream number is both the more informative marker and the one that
     # cannot drift from what is on disk.
     "js/libs/cytoscape/cytoscape.min.js": ("3.34.0", None),
-    "app.js": ("0.3", None),
+    "app.js": ("0.4", None),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')

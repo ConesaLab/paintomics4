@@ -118,7 +118,9 @@ def run_node(script):
 # base declarations are stubbed -- everything under test is the real file.
 HARNESS = """
 const fs = require('fs'), vm = require('vm');
-const ctx = {console: console};
+// Every console channel goes to stderr: stdout is the JSON result, and the
+// shipped code is allowed to console.info() while it works.
+const ctx = {console: {log: console.error, info: console.error, warn: console.error, error: console.error}};
 ctx.window = ctx;
 vm.createContext(ctx);
 vm.runInContext("function Observable(){}; function Model(){}; Model.prototype = new Observable();"
@@ -290,9 +292,16 @@ class ContainmentBehaviourTest(unittest.TestCase):
         cls.restore_source = extract_block(
             read(APP_JS), "this.restoreCachedModel = function",
             "restoring a cached model must not be able to take the boot down")
+        # The cache contract the shipped restore compares against; lifted so
+        # the fixtures below carry whatever number app.js currently declares.
+        declaration = re.search(r"var PA_JOB_CACHE_SCHEMA = \d+;", read(APP_JS))
+        if declaration is None:
+            raise AssertionError("PA_JOB_CACHE_SCHEMA is missing from app.js")
+        cls.schema_source = declaration.group(0)
 
     def run_restore(self, model_js):
         script = harness() + """
+        vm.runInContext(%s, ctx);
         vm.runInContext(%s, ctx);
         vm.runInContext("var discarded = [];"
             + "function discardCachedJobModel(jobID) { discarded.push(jobID === undefined ? null : jobID); }"
@@ -301,12 +310,28 @@ class ContainmentBehaviourTest(unittest.TestCase):
             + "var restored = app.restoreCachedModel(model, payload);"
             + "result = {restored: restored, discarded: discarded};", ctx);
         process.stdout.write(JSON.stringify(ctx.result));
-        """ % (json.dumps(model_js), json.dumps(self.restore_source))
+        """ % (json.dumps(self.schema_source), json.dumps(model_js), json.dumps(self.restore_source))
         return run_node(script)
+
+    def test_a_row_written_under_an_older_contract_is_a_cache_miss(self):
+        """No loadFromJSON at all: the row is dropped and the server is asked."""
+        stale = ("var payload = {jobID: '10E1g361L3', cacheSchema: PA_JOB_CACHE_SCHEMA - 1};"
+                 "var loads = 0;"
+                 "var model = {loadFromJSON: function() { loads += 1; }};")
+        result = self.run_restore(stale)
+        self.assertFalse(result["restored"])
+        self.assertEqual(["10E1g361L3"], result["discarded"])
+
+    def test_a_row_with_no_stamp_at_all_is_a_cache_miss(self):
+        unstamped = ("var payload = {jobID: '10E1g361L3'};"
+                     "var model = {loadFromJSON: function() {}};")
+        result = self.run_restore(unstamped)
+        self.assertFalse(result["restored"])
+        self.assertEqual(["10E1g361L3"], result["discarded"])
 
     def test_a_model_that_cannot_be_restored_becomes_a_cache_miss(self):
         """Whatever the reason, the cache is dropped and the boot survives."""
-        broken = ("var payload = {jobID: '10E1g361L3'};"
+        broken = ("var payload = {cacheSchema: PA_JOB_CACHE_SCHEMA, jobID: '10E1g361L3'};"
                   "var model = {loadFromJSON: function() {"
                   "  throw new TypeError(\"Cannot read properties of null (reading 'inputGene')\");"
                   "}};")
@@ -318,7 +343,7 @@ class ContainmentBehaviourTest(unittest.TestCase):
                          "next load reads it back and fails identically")
 
     def test_a_readable_model_is_kept(self):
-        good = ("var payload = {jobID: '10E1g361L3'};"
+        good = ("var payload = {cacheSchema: PA_JOB_CACHE_SCHEMA, jobID: '10E1g361L3'};"
                 "var loaded = false;"
                 "var model = {loadFromJSON: function() { loaded = true; }};")
         result = self.run_restore(good)
@@ -329,7 +354,7 @@ class ContainmentBehaviourTest(unittest.TestCase):
 
     def test_the_real_poisoned_model_now_restores(self):
         """End to end: the shipped model class through the shipped guard."""
-        real = ("var payload = %s;"
+        real = ("var payload = %s; payload.cacheSchema = PA_JOB_CACHE_SCHEMA;"
                 "var model = new JobInstance(null);" % json.dumps(POISONED_MODEL))
         result = self.run_restore(real)
 
@@ -351,3 +376,25 @@ class SyntaxTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class CacheSchemaStampTest(unittest.TestCase):
+    """A cached job written under an older contract is refused, not restored.
+
+    The hub view found the hole: the boot never asks the server again for a
+    job it has cached, so new server fields (here sampleValues on
+    globalExpressionData) never reach a browser that saw the job before.
+    """
+
+    def test_the_schema_is_declared_once_in_app_js(self):
+        self.assertEqual(1, read(APP_JS).count("var PA_JOB_CACHE_SCHEMA = "))
+
+    def test_restore_refuses_a_stale_stamp(self):
+        body = read(APP_JS)
+        restore = body[body.index("this.restoreCachedModel = function"):]
+        self.assertIn("sessionJobJSON.cacheSchema !== PA_JOB_CACHE_SCHEMA", restore[:900])
+        self.assertIn("discardCachedJobModel(sessionJobJSON.jobID", restore[:1200])
+
+    def test_the_writer_stamps_the_job(self):
+        controller = read(os.path.join(CLIENT, "app", "controller", "JobController.js"))
+        self.assertIn("stamped.cacheSchema = PA_JOB_CACHE_SCHEMA;", controller)

@@ -1781,6 +1781,14 @@ function JobController() {
 		if (data != null) {
 			try {
 				serialised = JSON.stringify(data, replacerFn);
+				/* The job model is stamped with the cache contract it was written
+				   under (PA_JOB_CACHE_SCHEMA in app.js); the boot refuses a stale
+				   stamp and recovers the job from the server instead. */
+				if (data.jobID && typeof PA_JOB_CACHE_SCHEMA !== "undefined") {
+					var stamped = JSON.parse(serialised);
+					stamped.cacheSchema = PA_JOB_CACHE_SCHEMA;
+					serialised = JSON.stringify(stamped);
+				}
 			} catch (err) {
 				console.warn("Could not serialise " + key + " for storage.", err);
 			}

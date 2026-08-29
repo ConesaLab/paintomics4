@@ -4243,7 +4243,7 @@ function PA_Step3PathwayDetailsView() {
 
 			//For each omics type
 			for(var i in omicDataType){
-				var metagenes = this.getModel().metagenes[omicDataType[i]];
+				var metagenes = paMetagenesForDisplay(paJobModel(this), omicDataType[i], this.getModel().metagenes[omicDataType[i]]);
 				if(omicDataType[i] === "classification"){
 					/****************************************************************/
 					/* STEP 3.A IF WE ARE COLORING BY CLASSIFICAITON JUST IGNORE    */
@@ -8329,6 +8329,40 @@ var paOmicHeaders = function (jobModel, omicName) {
 	var headers = jobModel.getOmicHeaders(null, mode) || {};
 
 	return headers[omicName] || [];
+};
+
+/**
+ * The metagene trends of one omic, collapsed to one value per condition when
+ * the job is shown per sample and the omic carries a design or detector
+ * mapping. Without it the pathway tooltip's heatmap drew one cell per
+ * replicate -- 36 "Condition n" columns on a job whose design names 12 --
+ * while every feature chart beside it had switched to the 12 means.
+ * Entries are copied, never mutated: the pathway model keeps the raw trends.
+ */
+var paMetagenesForDisplay = function (jobModel, omicName, metagenes) {
+	if (!Array.isArray(metagenes) || !jobModel || !jobModel.getReplicateMode
+		|| jobModel.getReplicateMode() !== "samples"
+		|| typeof collapseReplicatesByMapping !== "function") {
+		return metagenes;
+	}
+	var omics = (jobModel.getGeneBasedInputOmics() || []).concat(jobModel.getCompoundBasedInputOmics() || []);
+	var omic = omics.filter(function (candidate) { return candidate && candidate.omicName === omicName; })[0];
+	if (!omic || !Array.isArray(omic.replicateMapping)
+		|| !Array.isArray(omic.sampleHeader) || !omic.sampleHeader.length) {
+		return metagenes;
+	}
+	return metagenes.map(function (metagene) {
+		var values = metagene && metagene.values;
+		if (!Array.isArray(values) || values.length !== omic.replicateMapping.length) {
+			return metagene;
+		}
+		var copy = {};
+		for (var field in metagene) {
+			if (Object.prototype.hasOwnProperty.call(metagene, field)) { copy[field] = metagene[field]; }
+		}
+		copy.values = collapseReplicatesByMapping(values.map(Number), omic.replicateMapping, omic.sampleHeader.length);
+		return copy;
+	});
 };
 
 /**

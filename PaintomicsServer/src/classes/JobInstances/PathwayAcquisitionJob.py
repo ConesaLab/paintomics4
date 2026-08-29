@@ -3217,7 +3217,15 @@ class PathwayAcquisitionJob(Job):
                 'originalName': self.inputCompoundsData[j].omicsValues[0].originalName,
                 'relevant': self.inputCompoundsData[j].omicsValues[0].relevant,
                 'relevantAssociation': self.inputCompoundsData[j].omicsValues[0].relevantAssociation,
-                'values': self.inputCompoundsData[j].omicsValues[0].values
+                'values': self.inputCompoundsData[j].omicsValues[0].values,
+                # The per-condition means a design or the replicate detector
+                # produced. The store carries them (applyReplicateMappingForOmic)
+                # and every Step 3 chart prefers them in "samples" mode; built
+                # without them, the class activity members' heatmap drew one
+                # cell per replicate -- 36 columns of "Condition n" on a job
+                # whose design names 12.
+                'sampleValues': getattr(self.inputCompoundsData[j].omicsValues[0], 'sampleValues', None),
+                'sampleRelevant': getattr(self.inputCompoundsData[j].omicsValues[0], 'sampleRelevant', None)
             }
             globalExpressionDataComp[expressionID] = expressionDetail
 
@@ -3235,7 +3243,15 @@ class PathwayAcquisitionJob(Job):
                 'originalName': self.inputGenesData[i].omicsValues[0].originalName,
                 'relevant': self.inputGenesData[i].omicsValues[0].relevant,
                 'relevantAssociation': self.inputGenesData[i].omicsValues[0].relevantAssociation,
-                'values': self.inputGenesData[i].omicsValues[0].values
+                'values': self.inputGenesData[i].omicsValues[0].values,
+                # The per-condition means a design or the replicate detector
+                # produced. The store carries them (applyReplicateMappingForOmic)
+                # and every Step 3 chart prefers them in "samples" mode; built
+                # without them, the class activity members' heatmap drew one
+                # cell per replicate -- 36 columns of "Condition n" on a job
+                # whose design names 12.
+                'sampleValues': getattr(self.inputGenesData[i].omicsValues[0], 'sampleValues', None),
+                'sampleRelevant': getattr(self.inputGenesData[i].omicsValues[0], 'sampleRelevant', None)
             }
             globalExpressionDataGene[expressionID] = expressionDetail
 
