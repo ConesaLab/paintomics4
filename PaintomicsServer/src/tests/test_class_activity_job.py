@@ -19,6 +19,7 @@ Usage:
 """
 import os
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -68,7 +69,7 @@ def _relevantNames():
         return {l.strip().lower() for l in handle if l.strip()}
 
 
-def _job(withDesign=True, thinDesign=False):
+def _job(withDesign=True, thinDesign=False, oneCondition=False, secondOmic=False):
     """A bare PathwayAcquisitionJob carrying the example's compounds."""
     header, rows = _readValues()
     relevant = _relevantNames()
@@ -89,17 +90,34 @@ def _job(withDesign=True, thinDesign=False):
             job.inputCompoundsData[cid] = compound
     omic = {"omicName": "Metabolomics", "inputDataFile": VALUES, "isExample": True,
             "omicHeader": list(header)}
+    if secondOmic:
+        # A lipidomics panel of its own width: cholesterol under Steroids,
+        # six ratio columns, no design.
+        compound = Compound("C00187")
+        omicValue = OmicValue("cholesterol")
+        omicValue.setOriginalName("Cholesterol")
+        omicValue.setOmicName("Lipidomics")
+        omicValue.setValues([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+        omicValue.setRelevant([True])
+        compound.addOmicValue(omicValue)
+        job.inputCompoundsData["C00187"] = compound
     if withDesign:
         with open(DESIGN, "r") as handle:
             body = handle.read()
         if thinDesign:
             # Every column its own condition: 36 conditions, one replicate each.
             body = "\n".join("%s\t%s" % (c, c) for c in header[1:])
+        if oneCondition:
+            # Every column the same condition: 36 replicates of nothing to compare.
+            body = "\n".join("%s\tCtr" % c for c in header[1:])
         sampleHeader, mapping, groups = parse_design(body, header[1:])
         omic["sampleHeader"] = sampleHeader
         omic["replicateMapping"] = mapping
         omic["replicateSource"] = "manual"
     job.compoundBasedInputOmics = [omic]
+    if secondOmic:
+        job.compoundBasedInputOmics.append({"omicName": "Lipidomics", "inputDataFile": VALUES,
+                                            "isExample": True, "omicHeader": ["ID"] + ["c%d" % i for i in range(6)]})
     job.geneBasedInputOmics = []
     return job
 
@@ -167,6 +185,9 @@ class PermutationRouteTest(unittest.TestCase):
     def test_features_and_exclusions(self):
         f = self.activity["features"]
         self.assertEqual(sorted(f["Alanine"]["kegg"]), ["C00041", "C00133"])
+        # The replicate columns are not stored a second time on this route;
+        # the strip is painted from `eff`.
+        self.assertNotIn("values", f["Alanine"])
         self.assertGreater(f["putrescine"]["F"], 50)
         self.assertTrue(f["putrescine"]["sig"])
         self.assertEqual(len(f["putrescine"]["eff"]), 6)
@@ -209,6 +230,38 @@ class BinomialRouteTest(unittest.TestCase):
         self.assertEqual(a["nullKind"], "relative")
         self.assertIsNone(a["alpha"])
         self.assertEqual(job.classificationMeta["thresholdSource"], "auto")
+
+    def test_one_condition_falls_back_with_a_warning(self):
+        """36 "replicates" of a single condition passed the replicate count and
+        reported a permutation test with nothing tested."""
+        job = _run(_job(withDesign=True, oneCondition=True), {"thresholdMetaboliteClass": "0.05"})
+        a = job.classActivity
+        self.assertEqual(a["test"], "binomial")
+        self.assertTrue(any("single condition" in w for w in a["warnings"]), a["warnings"])
+        amines = {e["key"]: e for e in a["levels"]["2"]}["Peptides > Amines"]
+        self.assertNotIn("meanF", amines)
+        self.assertEqual(amines["k"], [2])
+
+    def test_a_second_compound_omic_is_named_as_untested(self):
+        job = _run(_job(withDesign=True, secondOmic=True), {"thresholdMetaboliteClass": "0.05"})
+        a = job.classActivity
+        self.assertEqual(a["test"], "permutation")
+        self.assertTrue(any("Lipidomics" in w and "not" in w for w in a["warnings"]), a["warnings"])
+        steroids = [e for e in a["levels"]["2"] if e["name"] == "27-Carbon atoms"][0]
+        self.assertEqual(steroids["tested"], 0)
+        self.assertIsNone(steroids["p"])
+        self.assertEqual(steroids["k"], [1])            # the binomial still counts it
+
+    def test_measured_names_skip_a_leading_blank_line(self):
+        job = _job(withDesign=False)
+        with tempfile.NamedTemporaryFile("w", suffix=".tab", delete=False) as handle:
+            handle.write("\n#compound\tC1\tC2\nAlanine\t1\t2\nTaurine\t3\t4\n")
+            path = handle.name
+        try:
+            names = job._measuredCompoundNames({"inputDataFile": path, "isExample": True})
+        finally:
+            os.unlink(path)
+        self.assertEqual(names, ["alanine", "taurine"])
 
     def test_one_replicate_per_condition_falls_back_with_a_warning(self):
         job = _run(_job(withDesign=True, thinDesign=True), {"thresholdMetaboliteClass": "0.05"})

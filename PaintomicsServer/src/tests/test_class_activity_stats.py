@@ -33,6 +33,7 @@ Usage:
 import os
 import sys
 import unittest
+from collections import OrderedDict
 
 import numpy as np
 from scipy import stats
@@ -227,6 +228,68 @@ class DesignFactorsTest(unittest.TestCase):
         self.assertEqual(factors[0]["id"], "design")
         self.assertEqual(factors[0]["levels"], ["WT", "KO"])
         self.assertEqual(factors[0]["strata"], [0, 0, 0, 0])
+
+
+class GapsKeepTheNullExchangeableTest(unittest.TestCase):
+    """A metabolite below LOD in one arm.
+
+    The interaction's rank depends on which cells the surviving columns
+    occupy; under a relabelling the labels move while the gaps stay on their
+    columns, so the observed fit was at (df1=1, df2=6) and most permuted fits
+    at (2, 5) -- a lighter tail, 8% of pure-noise classes called at nominal
+    5%. A row with a gap is fitted additively now, at the same degrees of
+    freedom under every relabelling.
+    """
+
+    def setUp(self):
+        # Ctr/Ik x 0H/2H, three replicates: 12 columns.
+        self.level = np.array([0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1])
+        self.strata = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1])
+        rng = np.random.default_rng(3)
+        self.Y = rng.normal(size=(6, 12))
+        self.Y[0, 0:3] = np.nan          # Ctr_0H missing for row 0
+
+    def test_a_gap_is_fitted_at_the_same_df_under_every_relabelling(self):
+        _F, _p, df1, df2 = CA.factorTest(self.Y, self.level, self.strata)
+        self.assertEqual((df1[0], df2[0]), (1, 6))
+        self.assertEqual((df1[1], df2[1]), (2, 8))          # a complete row keeps the interaction
+        rng = np.random.default_rng(11)
+        seen = set()
+        for _ in range(40):
+            permuted = CA._shuffleWithinStrata(self.level, self.strata, rng)
+            _F, _p, d1, d2 = CA.factorTest(self.Y, permuted, self.strata)
+            seen.add((d1[0], d2[0]))
+        self.assertEqual(seen, {(1, 6)})
+
+    def test_a_member_missing_a_cell_does_not_blank_the_class_direction(self):
+        # Four members up by ~1.5 at 0H; the fourth has no Ctr_0H columns.
+        Y = np.random.default_rng(5).normal(size=(4, 12)) * 0.1
+        Y[:, 3:6] += 1.5
+        Y[3, 0:3] = np.nan
+        factor = {"columnLevel": self.level, "strata": self.strata, "levels": ["Ctr", "Ik"],
+                  "strataLabels": ["0H", "2H"]}
+        classes = {2: OrderedDict([("K", {"name": "K", "parent": "P", "path": ["P", "K"],
+                                           "members": {"a", "b", "c", "d"}})])}
+        rows = {"a": 0, "b": 1, "c": 2, "d": 3}
+        out = CA.permutationClassTest(Y, factor, classes, rows, nPerm=50, seed=1)
+        entry = out["levels"][2]["K"]
+        self.assertEqual(len(entry["eff"]), 2)
+        self.assertIsNotNone(entry["eff"][0])
+        self.assertGreater(entry["eff"][0], 1.0)
+
+    def test_nsig_counts_at_the_callers_alpha(self):
+        Y = np.random.default_rng(7).normal(size=(3, 12)) * 0.1
+        Y[0, self.level == 1] += 3.0                        # one member responds hard
+        factor = {"columnLevel": self.level, "strata": self.strata, "levels": ["Ctr", "Ik"],
+                  "strataLabels": ["0H", "2H"]}
+        classes = {2: OrderedDict([("K", {"name": "K", "parent": "P", "path": ["P", "K"],
+                                           "members": {"a", "b", "c"}})])}
+        rows = {"a": 0, "b": 1, "c": 2}
+        strict = CA.permutationClassTest(Y, factor, classes, rows, nPerm=50, seed=1, alpha=1e-12)
+        loose = CA.permutationClassTest(Y, factor, classes, rows, nPerm=50, seed=1, alpha=0.05)
+        self.assertEqual(strict["levels"][2]["K"]["nsig"], 0)
+        self.assertEqual(loose["levels"][2]["K"]["nsig"], 1)
+        self.assertEqual(loose["alpha"], 0.05)
 
 
 if __name__ == "__main__":

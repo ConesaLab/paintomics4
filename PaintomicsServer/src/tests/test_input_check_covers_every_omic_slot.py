@@ -119,9 +119,17 @@ EXAMPLE_ROLES = {
     # MORE's associations slot takes 2 or 3 columns (runMORE.R), so it is the
     # regulator-targets contract too; the two-column rule refused a third.
     # The metabolomics replicate design: long form, its own role (MORE's
-    # `design` refuses text labels).
+    # `design` refuses text labels). The MORE examples ship a file of the
+    # same NAME for the Conditions slot; EXAMPLE_ROLES_BY_PATH keeps those
+    # under `design`, so R's contract still has shipped files exercising it.
     "experimental_design.tab": "replicates",
     "synthetic_mmu.gtf": None,          # not a delimited contract; never checked
+}
+
+# Files whose role depends on the dataset they ship in, by path under DATASETS.
+EXAMPLE_ROLES_BY_PATH = {
+    "06-regulatory-more/data/experimental_design.tab": "design",
+    "11-stategra-more/data/experimental_design.tab": "design",
 }
 
 
@@ -267,7 +275,7 @@ class InputCheckCoversEverySlotTest(unittest.TestCase):
         cases = []
         for path in sorted(glob.glob(os.path.join(DATASETS, "*", "data", "*"))):
             name = os.path.basename(path)
-            role = EXAMPLE_ROLES.get(name)
+            role = EXAMPLE_ROLES_BY_PATH.get(os.path.relpath(path, DATASETS), EXAMPLE_ROLES.get(name))
             if role is None:
                 continue
             cases.append({"file": os.path.relpath(path, DATASETS), "role": role, "path": path})

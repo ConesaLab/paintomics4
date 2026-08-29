@@ -2907,10 +2907,15 @@ class PathwayAcquisitionJob(Job):
         try:
             delimiter = Job.detect_delimiter(fileName)
             with open(fileName, "r", encoding="utf-8-sig", newline="") as handle:
-                for n, line in enumerate(csv_reader(handle, delimiter=delimiter)):
+                first = True
+                for line in csv_reader(handle, delimiter=delimiter):
                     if not line or not line[0].strip():
                         continue
-                    if n == 0:
+                    # The header is the first NON-BLANK row (a file may open
+                    # with an empty line), and only if its second cell is not
+                    # a number; a `#` row is a comment either way.
+                    if first or line[0].lstrip().startswith("#"):
+                        first = False
                         try:
                             float(line[1])
                         except (IndexError, ValueError):
@@ -3024,19 +3029,36 @@ class PathwayAcquisitionJob(Job):
                                   "nStrata": len(f["strataLabels"])} for f in factors]
             result["factor"] = factor["id"]
             # Every level x stratum cell needs two replicates or there is no
-            # residual variance to test against.
+            # residual variance to test against; and a factor with one level
+            # has nothing to compare (a design mapping every column to one
+            # condition passed the replicate count with 36 "replicates").
             cells = defaultdict(int)
             for lvl, st in zip(factor["columnLevel"], factor["strata"]):
                 cells[(lvl, st)] += 1
             thin = [(factor["levels"][lvl], factor["strataLabels"][st])
                     for (lvl, st), count in cells.items() if count < 2]
-            if thin:
+            if len(factor["levels"]) < 2:
+                result["warnings"].append(
+                    "The design names a single condition (%s), so there is nothing to compare. "
+                    "The binomial test on your relevant list ran instead."
+                    % ", ".join(factor["levels"]))
+            elif thin:
                 result["warnings"].append(
                     "The permutation test needs at least two replicates per condition; "
                     + ", ".join(("%s %s" % (l, s)).strip() for l, s in thin[:4])
                     + (" and more" if len(thin) > 4 else "")
                     + " have one. The binomial test on your relevant list ran instead.")
             else:
+                others = [o.get("omicName") for o in (getattr(self, "compoundBasedInputOmics", None) or [])
+                          if o is not inputOmic and o.get("omicName") != inputOmic.get("omicName")]
+                if others:
+                    # One design, one omic: the test reads this omic's columns
+                    # and a second compound omic's features have no row here,
+                    # so its classes carry the binomial result only.
+                    result["warnings"].append(
+                        "The permutation test reads %s; %s carries its own columns and was not "
+                        "tested -- its classes show the binomial result only."
+                        % (inputOmic.get("omicName"), ", ".join(str(o) for o in others)))
                 keys = sorted(compoundIDsByFeature)
                 rows = {k: i for i, k in enumerate(keys)}
                 width = len(mapping)
@@ -3048,7 +3070,10 @@ class PathwayAcquisitionJob(Job):
                                       else np.nan for v in values]
                 nPerm = max(100, int(CLASS_ACTIVITY_PERMUTATIONS))
                 seed = zlib.crc32(str(getattr(self, "jobID", "")).encode("utf-8"))
-                perm = CA.permutationClassTest(Y, factor, levels, rows, nPerm=nPerm, seed=seed)
+                # "Responds individually" at the cut-off the reader chose for
+                # their own list, when they chose one; 0.05 otherwise.
+                sigAlpha = alpha if isinstance(alpha, (int, float)) and 0 < alpha < 1 else 0.05
+                perm = CA.permutationClassTest(Y, factor, levels, rows, nPerm=nPerm, seed=seed, alpha=sigAlpha)
                 result.update({"test": "permutation", "nPerm": nPerm,
                                "conditions": list(perm["effects"]["labels"]),
                                "transformed": bool(perm["transformed"]),
@@ -3066,9 +3091,13 @@ class PathwayAcquisitionJob(Job):
                     entry.update({
                         "F": CA._finite(feats["F"][i]), "p": CA._finite(feats["p"][i]),
                         "bh": CA._finite(feats["bh"][i]),
-                        "sig": bool(np.isfinite(feats["bh"][i]) and feats["bh"][i] < 0.05),
+                        "sig": bool(np.isfinite(feats["bh"][i]) and feats["bh"][i] < sigAlpha),
                         "eff": [CA._finite(v) for v in (effects[i].tolist() if effects.shape[1] else [])],
                     })
+                    # The client paints the strip from `eff` on this route; the
+                    # replicate columns themselves already live on the omic
+                    # values, and a wide panel would store them twice.
+                    entry.pop("values", None)
         if perm is None:
             result["conditions"] = conditionLabels
 

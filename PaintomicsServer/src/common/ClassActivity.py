@@ -270,8 +270,9 @@ def maybeLog2(Y):
     return Y, False
 
 
-def _designMatrices(columnLevel, strata, nLevelsFactor, nStrata):
-    """(X_reduced, X_full) for ``y ~ strata`` and ``y ~ strata * factor``."""
+def _designMatrices(columnLevel, strata, nLevelsFactor, nStrata, interaction=True):
+    """(X_reduced, X_full) for ``y ~ strata`` and ``y ~ strata * factor``
+    (``y ~ strata + factor`` when ``interaction`` is False)."""
     n = len(columnLevel)
     reduced = [np.ones(n)]
     for s in range(1, nStrata):
@@ -279,10 +280,11 @@ def _designMatrices(columnLevel, strata, nLevelsFactor, nStrata):
     Xr = np.column_stack(reduced)
     factorCols = [(columnLevel == l).astype(float) for l in range(1, nLevelsFactor)]
     full = [Xr] + [c[:, None] for c in factorCols]
-    for s in range(1, nStrata):
-        sMask = (strata == s).astype(float)
-        for c in factorCols:
-            full.append((c * sMask)[:, None])
+    if interaction:
+        for s in range(1, nStrata):
+            sMask = (strata == s).astype(float)
+            for c in factorCols:
+                full.append((c * sMask)[:, None])
     Xf = np.column_stack(full)
     return Xr, Xf
 
@@ -305,6 +307,17 @@ def factorTest(Y, columnLevel, strata):
     Returns ``(F, p, df1, df2)`` as arrays over rows; a row that cannot be
     tested (too few complete columns, a level or stratum lost entirely,
     zero residual variance) carries NaN.
+
+    A row with ANY missing column is fitted without the interaction
+    (``y ~ strata + factor``). The interaction's rank depends on which
+    level x stratum cells the surviving columns occupy, and under a
+    permutation the labels move while the gaps stay on their columns, so
+    a metabolite below LOD in one arm was fitted at (df1=1, df2=6) on the
+    observed labels and at (2, 5) on most relabellings -- a lighter upper
+    tail, and a null that is not exchangeable: measured 8.0% of pure-noise
+    classes called at nominal 5%. The additive model's rank depends on the
+    columns alone, so every relabelling is fitted at the observed degrees
+    of freedom.
     """
     Y = np.asarray(Y, dtype=float)
     columnLevel = np.asarray(columnLevel)
@@ -333,7 +346,7 @@ def factorTest(Y, columnLevel, strata):
             continue
         cl = np.array([levelMap[l] for l in cl])
         st = np.array([strataMap[s] for s in st])
-        Xr, Xf = _designMatrices(cl, st, len(levelMap), len(strataMap))
+        Xr, Xf = _designMatrices(cl, st, len(levelMap), len(strataMap), interaction=bool(keep.all()))
         rankR = np.linalg.matrix_rank(Xr)
         rankF = np.linalg.matrix_rank(Xf)
         df1 = rankF - rankR
@@ -396,12 +409,13 @@ def _effects(Y, columnLevel, strata, nLevels, strataLabels, levels):
     return labels, np.column_stack(columns)
 
 
-def permutationClassTest(Y, factor, classesByLevel, featureRows, nPerm=2000, seed=0):
+def permutationClassTest(Y, factor, classesByLevel, featureRows, nPerm=2000, seed=0, alpha=0.05):
     """The replicate-based class test at every level.
 
     ``Y``: features x replicate columns (NaN allowed). ``factor``: one entry
     of :func:`designFactors`. ``classesByLevel``: :func:`membershipsByLevel`
-    output. ``featureRows``: ``{featureKey: row index in Y}``.
+    output. ``featureRows``: ``{featureKey: row index in Y}``. ``alpha``:
+    the BH cut-off behind ``nsig`` ("members that respond individually").
 
     Returns::
 
@@ -441,16 +455,22 @@ def permutationClassTest(Y, factor, classesByLevel, featureRows, nPerm=2000, see
     observed = {k: float(F[rows].mean()) if rows else float("nan") for k, rows in classRows.items()}
     counts = {k: 0 for k in classRows}
     nullValues = {k: [] for k in classRows}
-    for _ in range(int(nPerm)):
-        permuted = _shuffleWithinStrata(columnLevel, strata, rng)
-        Fp, _, _, _ = factorTest(Y, permuted, strata)
-        for k, rows in classRows.items():
-            if not rows:
-                continue
-            value = float(Fp[rows].mean())
-            nullValues[k].append(value)
-            if value >= observed[k]:
-                counts[k] += 1
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        for _ in range(int(nPerm)):
+            permuted = _shuffleWithinStrata(columnLevel, strata, rng)
+            Fp, _, _, _ = factorTest(Y, permuted, strata)
+            for k, rows in classRows.items():
+                if not rows:
+                    continue
+                # A relabelling can leave a member untestable (its factor
+                # confounded with the strata on the surviving columns); the
+                # mean over the rest stands in, and a class with none left
+                # counts as exceeding -- the conservative side.
+                value = float(np.nanmean(Fp[rows]))
+                nullValues[k].append(value)
+                if not np.isfinite(value) or value >= observed[k]:
+                    counts[k] += 1
 
     levelsOut = {}
     for level, classes in classesByLevel.items():
@@ -460,8 +480,13 @@ def permutationClassTest(Y, factor, classesByLevel, featureRows, nPerm=2000, see
             members = sorted(entry["members"])
             if rows:
                 null = np.array(nullValues[(level, key)])
+                null = null[np.isfinite(null)]
                 p = (1.0 + counts[(level, key)]) / (1.0 + nPerm)
-                eff = effects[rows].mean(axis=0).tolist() if effects.shape[1] else []
+                # nanmean: one member absent from one cell (below LOD in an
+                # arm) must not blank that condition for the whole class.
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    eff = np.nanmean(effects[rows], axis=0).tolist() if effects.shape[1] else []
                 out[key] = {
                     "name": entry["name"], "parent": entry["parent"], "path": entry["path"],
                     "n": len(members), "tested": len(rows), "members": members,
@@ -469,7 +494,7 @@ def permutationClassTest(Y, factor, classesByLevel, featureRows, nPerm=2000, see
                     "nullMedian": float(np.median(null)) if null.size else None,
                     "nullQ95": float(np.percentile(null, 95)) if null.size else None,
                     "nullMax": float(null.max()) if null.size else None,
-                    "nsig": int(np.sum(bh[rows] < 0.05)),
+                    "nsig": int(np.sum(bh[rows] < alpha)),
                     "eff": [_finite(v) for v in eff],
                     "E": _finite(float(np.nanmean(np.abs(effects[rows])))) if effects.shape[1] else None,
                 }
@@ -491,6 +516,7 @@ def permutationClassTest(Y, factor, classesByLevel, featureRows, nPerm=2000, see
         "effects": {"labels": effectLabels, "values": effects},
         "levels": levelsOut,
         "nPerm": int(nPerm),
+        "alpha": float(alpha),
         "transformed": transformed,
     }
 
