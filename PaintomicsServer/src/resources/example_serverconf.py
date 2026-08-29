@@ -244,6 +244,13 @@ AI_VERIFICATION_WORKERS = int(os.getenv("AI_VERIFICATION_WORKERS", "4"))
 AI_PAPERS_PER_SEARCH_TASK = int(os.getenv("AI_PAPERS_PER_SEARCH_TASK", "5"))
 AI_PAPERS_KEPT_PER_TASK = int(os.getenv("AI_PAPERS_KEPT_PER_TASK", "3"))
 AI_SEARCH_PLANNER_TEMPERATURE = float(os.getenv("AI_SEARCH_PLANNER_TEMPERATURE", "0.4"))
+# "Choose for me" on step 2: residual compound sets go to the gateway thirty
+# per call. The calls fan out over this many threads inside the one queue job
+# (they are independent; the worker is idle on I/O), and a run sends at most
+# MAX_SETS -- the rest are left to the user -- so a click can never hold a
+# queue worker for more than a few batch budgets.
+COMPOUND_SUGGESTION_WORKERS = int(os.getenv("COMPOUND_SUGGESTION_WORKERS", "3"))
+COMPOUND_SUGGESTION_MAX_SETS = int(os.getenv("COMPOUND_SUGGESTION_MAX_SETS", "90"))
 AI_SEARCH_SUBAGENT_TEMPERATURE = float(os.getenv("AI_SEARCH_SUBAGENT_TEMPERATURE", "0.2"))
 
 # ========== MORE BACKEND ==========
