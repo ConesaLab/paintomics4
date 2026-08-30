@@ -379,6 +379,13 @@ function PA_Step2JobView() {
 			   a line - roughly twice a readable measure - so they sit as columns
 			   beside each other instead, which is also how they read as a set. */
 			var dbs_notes = databases.map(function(dbname) {
+				/* A database with no blurb gets no column, rather than a headed one
+				   reading "undefined". The map is a literal of the four databases the
+				   installers build, but getDatabases() answers from the job, so a
+				   fifth would print the word. The matrix above still counts it. */
+				if (!dbs_descriptions[dbname]) {
+					return '';
+				}
 				return '<div class="paDbNote"><h3>' + Ext.String.htmlEncode(dbname) + '</h3>' +
 				'<p>' + dbs_descriptions[dbname] + '</p></div>';
 			}).join('');
@@ -412,7 +419,9 @@ function PA_Step2JobView() {
 				'      <tbody>' + dbs_rows + '</tbody>' +
 				'    </table>' +
 				'  </div>' +
-				'  <div class="paDbNotes">' + dbs_notes + '</div>' +
+				/* No blurb for any of them, no block: the row carries a top rule, and
+				   an empty one would draw a line under the table for nothing. */
+				(dbs_notes ? '  <div class="paDbNotes">' + dbs_notes + '</div>' : '') +
 				'  <p class="paDbFoot">The diagrams below combine the matched and unmatched features of <b>all</b> databases. Hover over a diagram for the per-database breakdown.</p>' +
 				'</div>'
 			};

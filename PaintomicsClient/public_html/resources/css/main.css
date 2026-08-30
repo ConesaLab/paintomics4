@@ -6368,8 +6368,15 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 	   cards. Simulated by dropping the flex off the row: the section came out
 	   at top -174 while the last floated card still ran to -44, i.e. beside it.
 	   `clear` is inert on a flex item, so this costs the supported path
-	   nothing and restores the documented fallback for the rest. */
+	   nothing and restores the documented fallback for the rest.
+
+	   `width` for the same reason and in the same breath: ExtJS gives every
+	   column-layout item `.x-column`, which floats, and a float with `width:
+	   auto` shrink-to-fits. Before the move this section was a block-level
+	   form at full width. `flex-basis` restores that only where the flex row
+	   applies; this restores it where it does not. */
 	clear: both;
+	width: 100%;
 }
 
 #mainViewCenterPanel.mobileMode div.omicSummaryBox,
