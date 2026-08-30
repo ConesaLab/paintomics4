@@ -40,7 +40,6 @@ Usage:
     python -m src.tests.test_step1_browse_lives_inside_the_field
 """
 import os
-import re
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
