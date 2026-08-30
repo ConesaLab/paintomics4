@@ -3428,8 +3428,16 @@ div.contentbox p > #download_mapping_file {
 	margin: 10px 0;
 	width: 100% !important;
 }
-#dbs_message div {
-	padding: 0 var(--pa-card-inset) 10px;
+/* The card body carries the inset once, on the one element that is the body.
+   Unscoped, this reached every nested div in the card and the matrix, its
+   scroll wrapper and each description column each took another 26px.
+
+   It ends on that inset too. Every Step-2 module now leaves --pa-card-inset
+   under its last line, the same measure it leaves left and right; the class
+   activity card was ending on 22px and read pinched against a card whose
+   other three edges were 26. */
+#dbs_message > .paDbBody {
+	padding: 0 var(--pa-card-inset) var(--pa-card-inset);
 }
 /* The class activity card's own blocks are exempt: an hbox cannot lay out
    two children that are both forced to 100%, and the plan and the band
@@ -3438,7 +3446,12 @@ div.contentbox p > #download_mapping_file {
 #threshold_box div:not(.paClassMain):not(.paClassPlanCol):not(.paClassControls):not(.paClassPlan *):not(.paClassHow *),
 #threshold_box span:not(.paClassPlan *):not(.paClassHow *) {
 	border: 0 !important;
-	background-color: white !important;
+	/* The token, not the literal. `white` predates the dark theme and this rule
+	   carries !important, so in dark mode it painted a white slab inside both
+	   config cards - most of the class activity card's controls panel, and the
+	   box behind every combo in the cluster card. --pa-surface is #FFFFFF in
+	   light, so nothing changes there; in dark it is the card's own ground. */
+	background-color: var(--pa-surface) !important;
 	width: 100% !important;
 }
 /* `margin: 0 auto` centred this form in its card, which put the one control
@@ -3463,78 +3476,154 @@ div.contentbox p > #download_mapping_file {
 	   baselines across one row. */
 	margin: 14px 0;
 }
-/* Each database gets a name, a paragraph about it, and the table of what
-   matched in it. The table is the answer the card exists to give, so it is
-   centred under the prose that introduces it rather than left hanging between
-   two unequal margins, and it carries the same treatment as every other table
-   on the results pages - it was the one place left with a pure-black 1px
-   border and cells with no vertical padding. */
-#dbs_message dt {
-	font-weight: 600;
-	font-size: 13px;
-	color: #27272A;
-	/* Flush with the prose and the heading; 5px left the database names five
-	   pixels adrift of every other line in the card. */
-	padding-left: 0;
-	margin-top: 20px;
+/* Each database used to get a name, a paragraph, and its own two-column table
+   of the same omics - centred inside a 1124px card with about 370px of dead
+   space either side. Three identical shapes, 1149px of page, and the reader
+   still had to hold one row in their head while scrolling to the next table
+   to compare it. Comparing the databases is the only reason the card exists,
+   so it is one table: omics down, databases across, and a row is the answer.
+
+   The old `dt`/`dd`/`#matching_table_*` rules went with the markup. */
+#dbs_message .paDbLede {
+	max-width: 72ch;
+	margin: 14px 0 18px;
 }
-#dbs_message dd {
-	margin: 6px 0 0;
+/* A narrow window (or a fourth database) scrolls the table rather than the
+   page: the card must never widen past the column the rest of the step uses. */
+#dbs_message .paDbMatrixWrap {
+	overflow-x: auto;
 }
-/* Same as the results-page card: the prose uses the card's width rather than a
-   reading measure, so it does not sit as a column with empty space beside it. */
-#dbs_message p {
-	max-width: none;
-}
-#dbs_message dd > div[id^="matching_table_"] {
-	display: flex;
-	justify-content: center;
-	padding: 18px 0 6px;
-}
-#dbs_message table {
+#dbs_message table.paDbMatrix {
+	width: 100%;
+	/* Fixed, so the omic names get a label column and the rest of the card goes
+	   to the bars. Auto layout gave the first column the slack - 470px of it -
+	   and left each omic's name a third of the card away from its own numbers. */
+	table-layout: fixed;
 	border: 1px solid var(--pa-border);
 	border-radius: var(--pa-radius);
 	border-collapse: separate;
 	border-spacing: 0;
 	overflow: hidden;
 	background-color: #FFFFFF;
-	min-width: 340px;
-	/* `div[id^=matching_table] table` further down this file centres these
-	   tables, and that inherits into the cells. The <th> below then sets itself
-	   back to `left` while the <td> did not, so "Omic" and "Gene expression"
-	   sat in one column on two different edges - 27px apart here, and a
-	   different 27px in the Reactome table next to it, because centred text
-	   moves with the column width and the two tables hold different numbers.
-	   Set the alignment once on the table; the last-child rule below still
-	   takes the counts back to the right. */
 	text-align: left;
 }
-#dbs_message table th {
-	padding: 9px 18px;
+#dbs_message .paDbMatrix th,
+#dbs_message .paDbMatrix td {
+	padding: 10px 18px;
+	font-size: 12.5px;
+	color: #27272A;
+}
+#dbs_message .paDbMatrix thead th {
 	border-bottom: 1px solid var(--pa-border);
 	background-color: #F9F8F4;
 	color: #52525B;
 	font-size: 11.5px;
 	font-weight: 600;
-	text-align: left;
 	white-space: nowrap;
 }
-#dbs_message table td {
-	padding: 9px 18px;
+/* The omic column is a label column: left, fixed, and it does not wrap. */
+#dbs_message .paDbMatrix th:first-child {
+	width: 210px;
+}
+#dbs_message .paDbMatrix tbody th {
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+#dbs_message .paDbMatrix tbody tr + tr th,
+#dbs_message .paDbMatrix tbody tr + tr td {
 	border-top: 1px solid #F1F1F3;
-	font-size: 12.5px;
-	color: #27272A;
 }
-/* The first row is the <th> header, so the first data row is the second one -
-   without this it draws a second rule directly under the header's. */
-#dbs_message table tr:nth-child(2) td {
-	border-top: 0;
+/* Counts are magnitudes, so they line up digit for digit under their column
+   head. The share follows each one in muted ink at a fixed width, so the eye
+   reads the column of counts first and the percentages only when it wants
+   them - two columns per database would have made a 3-database job seven
+   columns wide. */
+#dbs_message .paDbMatrix tbody td {
+	text-align: right;
 }
-/* Counts read as a column of magnitudes, so they line up digit for digit. */
-#dbs_message table th:last-child,
-#dbs_message table td:last-child {
+/* Each database's head sits over the left edge of its own cells, which is
+   where the bar starts. Right-aligned it landed over the percentage - the
+   last and least of the three things in the cell - and read as a label for
+   that column rather than for the group. */
+#dbs_message .paDbMatrix thead th + th {
+	text-align: left;
+}
+/* Bar, count, share - one row per cell. The bar takes the slack so the two
+   figures stay on their own rails down the column and the eye can read either
+   the numbers or the shapes. */
+#dbs_message .paDbCell {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+}
+#dbs_message .paDbBar {
+	flex: 1 1 auto;
+	min-width: 24px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--pa-fig-bar);
+	overflow: hidden;
+}
+#dbs_message .paDbBar > i {
+	display: block;
+	height: 100%;
+	border-radius: 999px;
+	background: var(--pa-fig-cell-strong);
+}
+/* A fixed basis, not `auto`. Sized to content, the count column was 45px wide
+   on a row reading 16,466 and 18px on one reading 52 - and the bar, which
+   takes the slack, was 27px longer in the second row. Two bars of different
+   track lengths cannot be compared by eye, which is the one thing a bar is
+   for. Fixed here, `table-layout: fixed` on the table, and every track in the
+   matrix is the same length. */
+#dbs_message .paDbCount {
+	flex: 0 0 66px;
 	text-align: right;
 	font-variant-numeric: tabular-nums;
+}
+#dbs_message .paDbPct {
+	flex: 0 0 34px;
+	text-align: right;
+	color: var(--pa-ink-muted);
+	font-variant-numeric: tabular-nums;
+}
+/* The descriptions keep every word; what changes is the measure. As three
+   paragraphs across the card they ran to about 140 characters a line, which
+   is roughly twice what anyone reads comfortably. As columns they are also
+   what they always were - a set, to be compared. */
+#dbs_message .paDbNotes {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 14px 26px;
+	margin-top: 22px;
+	padding-top: 20px;
+	border-top: 1px solid var(--pa-border);
+}
+#dbs_message .paDbNote {
+	flex: 1 1 220px;
+	min-width: 0;
+	padding: 0;
+}
+#dbs_message .paDbNote > h3 {
+	margin: 0 0 6px;
+	padding: 0;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: #27272A;
+}
+#dbs_message .paDbNote > p {
+	margin: 0;
+	max-width: none;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--pa-ink-label);
+}
+#dbs_message .paDbFoot {
+	margin: 20px 0 0;
+	max-width: 72ch;
 }
 
 /********************************************************************************
@@ -4812,13 +4901,6 @@ i.masterRegulator:before {
 }
 .step4PathwayThumbnailHover:hover {
 	opacity: 1;
-}
-
-div[id^=matching_table] table {
-	margin: 5px auto;
-	border: 1px solid black;
-	text-align: center;
-	padding: 5px 10px;
 }
 
 /**REUSING THUMBNAILS AT STEP3*/
@@ -6264,6 +6346,37 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 	flex: 1 1 calc(50% - 22px);
 	min-width: 0;
 	margin: 0;
+}
+
+/* Compounds disambiguation is a member of the same row, and it takes all of
+   it. The rule above sizes `.contentbox` children; this box is not a card but
+   a section - a header card and the grid of compound cards under it - so it
+   needs its own basis or the flex default (`0 1 auto`) shrinks it to its
+   content and parks it beside whatever card came last. */
+.x-column-layout-ct > * > * > .compoundsPanelsContainer {
+	flex: 1 1 100%;
+	min-width: 0;
+	/* 10, the same margin the three full-width cards above carry, so every
+	   module boundary on the step is one measure: 10 + 10 + the row's 10px gap.
+	   At 24 this one sat 14px further from the card above it than any other
+	   pair on the page. */
+	margin: 10px 0 0;
+	/* The flex row above is gated on `:has()` and promises that a browser
+	   without it "gets exactly the previous behaviour" - the odd/even floats.
+	   This section used to be structurally immune to that because it lived
+	   outside the column layout; inside it, it is a block following floated
+	   cards. Simulated by dropping the flex off the row: the section came out
+	   at top -174 while the last floated card still ran to -44, i.e. beside it.
+	   `clear` is inert on a flex item, so this costs the supported path
+	   nothing and restores the documented fallback for the rest.
+
+	   `width` for the same reason and in the same breath: ExtJS gives every
+	   column-layout item `.x-column`, which floats, and a float with `width:
+	   auto` shrink-to-fits. Before the move this section was a block-level
+	   form at full width. `flex-basis` restores that only where the flex row
+	   applies; this restores it where it does not. */
+	clear: both;
+	width: 100%;
 }
 
 #mainViewCenterPanel.mobileMode div.omicSummaryBox,
@@ -9637,16 +9750,73 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	left: 0 !important;
 	transform: none;
 }
+/* The two panels of the class activity card: the plan and its controls. One
+   rule, because they are one pair - same padding, same radius, same edge.
+
+   What actually puts them on one bottom edge is that both columns are
+   containers with the same vbox layout (see paClassActivityItems). `align:
+   stretch` writes a height onto whichever of them is the SHORTER and leaves
+   the taller at its natural height, and it arrives at that height differently
+   for a plain box than for a container, and differently again for an auto
+   layout than for a vbox - each mismatch tried here left the two 2px apart,
+   in whichever direction the taller column happened to be. Measured with one
+   combo in the controls and with two; both end level.
+
+   The edge is an inset shadow rather than a border so that it stays out of
+   the box model entirely: nothing ExtJS measures has to know about it. */
+#threshold_box .paClassPlanCol,
+#threshold_box .paClassControls {
+	padding: 16px 18px;
+	border: 0;
+	border-radius: 10px;
+	box-shadow: inset 0 0 0 1px var(--pa-border);
+	background: var(--pa-surface);
+}
 #threshold_box .paClassPlan {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	margin: 4px 0 8px 26px;
-	padding: 16px 18px;
-	border: 1px solid var(--pa-border) !important;
-	border-radius: 10px;
-	background: var(--pa-surface);
+	margin: 0;
+	padding: 0;
+	border: 0 !important;
+	background: transparent;
 	color: var(--pa-ink-label);
+}
+/* The controls get a panel of their own, matching the plan's, and the field
+   sits centred in it.
+
+   They used to be a bare 440px column beside the plan: one 40px combo hung
+   from the top with about 150px of empty card underneath it. That is the one
+   control this whole card exists to offer, and with no surface of its own it
+   read as something left in the corner rather than as the decision it is -
+   the same reason the AI offer further down this step was given a panel.
+
+   `align: stretch` on the row makes the two panels end level, so the pair
+   reads as one instrument. The vertical centring is `pack: 'center'` on the
+   layout, not CSS: an ExtJS box layout writes its children's positions
+   inline and no stylesheet outranks that. */
+/* The panel's own kicker and closing line, on the same rails as the plan's.
+   `#threshold_box p` sets 14px margins on every paragraph in this card, so
+   both are restated here rather than inherited into the wrong rhythm. */
+#threshold_box .paClassSet {
+	/* Padding, not margin: `pack: center` centres the SUM of the items' box
+	   heights, and a margin on the paragraph inside a box is not part of that
+	   box - which put the group 18px off centre in its panel. */
+	margin: 0;
+	padding: 0 0 12px;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--pa-ink-label);
+}
+#threshold_box .paClassSetNote {
+	margin: 0;
+	padding: 12px 0 0;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--pa-ink-label);
+	text-wrap: pretty;
 }
 #threshold_box .paClassPlanKicker,
 #threshold_box .paClassHowTitle,
@@ -9738,7 +9908,11 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 #threshold_box .paClassHow {
 	display: flex;
 	flex-direction: column;
-	margin: 0 26px 6px;
+	/* 26 at the bottom, not 6. With the band's own 16px of padding under the
+	   footnote that came to 22px between the last line and the card's edge, on
+	   a card whose other three edges are --pa-card-inset - which is why this
+	   one corner read as pinched while nothing else on the step did. */
+	margin: 0 26px 26px;
 	padding: 18px 24px 16px;
 	border: 1px solid var(--pa-border) !important;
 	border-radius: 10px;
@@ -9816,5 +9990,3 @@ div.contentbox .paClassMapKeys li { padding-left: 0; }
 	line-height: 1.45;
 	color: var(--pa-ink-muted);
 }
-/* Stacked (narrow viewport): the controls sit under the plan, on its rail. */
-#threshold_box .paClassTop-stacked .paClassControls { margin-left: 26px; }

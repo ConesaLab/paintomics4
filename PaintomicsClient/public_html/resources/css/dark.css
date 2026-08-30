@@ -1211,23 +1211,37 @@
    --pa-ink-* tokens over a transparent ground, so the token block above is all
    the theming it needs.
 
-   The <dt> database names are included even though they are ink, not surface:
-   at #27272A on the dark card they measured 1.4:1, which is the same defect
-   seen from the other side. */
+   The row labels are included even though they are ink, not surface: at
+   #27272A on the dark card they measured 1.4:1, which is the same defect seen
+   from the other side.
+
+   Header and row label are separated here, which the old markup never had to
+   do: the matrix has a <th> in every row, and the single `table th` rule gave
+   each omic name the grid header's fill - a column of grey chips down the
+   left of the table. */
 [data-theme="dark"] #dbs_message table {
 	background-color: var(--pa-surface-sunken);
 	border-color: var(--pa-border);
 }
-[data-theme="dark"] #dbs_message table th {
+[data-theme="dark"] #dbs_message .paDbMatrix thead th {
 	background-color: var(--pa-grid-header-bg);
 	border-bottom-color: var(--pa-border);
 	color: var(--pa-grid-header-ink);
 }
+[data-theme="dark"] #dbs_message .paDbMatrix tbody th {
+	color: var(--pa-ink-title);
+}
 [data-theme="dark"] #dbs_message table td {
-	border-top-color: var(--pa-border-row);
 	color: var(--pa-ink-body);
 }
-[data-theme="dark"] #dbs_message dt { color: var(--pa-ink-title); }
+[data-theme="dark"] #dbs_message .paDbMatrix tbody tr + tr th,
+[data-theme="dark"] #dbs_message .paDbMatrix tbody tr + tr td {
+	border-top-color: var(--pa-border-row);
+}
+[data-theme="dark"] #dbs_message .paDbPct { color: var(--pa-ink-muted); }
+[data-theme="dark"] #dbs_message .paDbNotes { border-top-color: var(--pa-border); }
+[data-theme="dark"] #dbs_message .paDbNote > h3 { color: var(--pa-ink-title); }
+[data-theme="dark"] #dbs_message .paDbNote > p { color: var(--pa-ink-body); }
 
 /* The compound disambiguation cards. main.css inks every bare h4 #27272A and
    this file answers that card by card rather than with a blanket (the

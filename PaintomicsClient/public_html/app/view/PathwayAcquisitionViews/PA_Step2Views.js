@@ -300,6 +300,11 @@ function PA_Step2JobView() {
 					xtype: 'form',
 					maxWidth: 600,
 					bodyCls: "divForm",
+					/* 20, which reads as --pa-card-inset: ExtJS leaves 6px of row
+					   spacing below the last field inside the form panel, so 26 here
+					   put 33px under the last input where the two cards beside it
+					   leave 25. Measured from the input's own edge, not the panel's -
+					   the ink is what a reader sees the card end below. */
 					style: "margin: 0 auto 20px auto;",
 					layout: {type: 'vbox', align: 'stretch'},
 					defaults: {labelAlign: "right", border: false},
@@ -317,33 +322,107 @@ function PA_Step2JobView() {
 				"OmniPath": '<a href="https://omnipathdb.org/" target="_blank">OmniPath</a> integrates over 100 resources into a prior-knowledge network of signed, directed molecular interactions, available for human, mouse and rat. Its pathways are defined by the curated SIGNOR and NetPath annotations and carry no diagram, so they open as an interactive interaction network rather than as a painted map.'
 			};
 
-			var dl_dbs = databases.map(function(dbname) {
-				var divContent =
-				'<table>' +
-					'<tr><th>Omic</th><th>Matched</th></tr>' +
-					Object.keys(matchingPerDB[dbname]).map(function(omicName) {
-						return '<td>' + omicName + '</td><td>' + matchingPerDB[dbname][omicName]["matched"] + " (" + matchingPerDB[dbname][omicName]["percentage"] + "%)</td>";
-					}).join('</tr><tr>') +
-				'</table>';
+			/* One matrix, not one table per database.
 
-				return '<dt>' + dbname + '</dt><dd>' + dbs_descriptions[dbname] + '<div id="matching_table_' + dbname + '">' + divContent + '</div></dd>';
+			   Every database used to print its own two-column table of the same
+			   omics, each centred inside the 1124px card with ~370px of dead space
+			   either side: three identical shapes, 1149px of card, and no way to
+			   compare one omic across databases without scrolling between two
+			   tables. Comparing them is the only reason this card exists, so it is
+			   one table - omics down, databases across - and the answer is a row.
+
+			   Column order follows `databases`, so it matches the order the rest
+			   of the step uses. */
+			var dbs_head = databases.map(function(dbname) {
+				return '<th scope="col">' + Ext.String.htmlEncode(dbname) + '</th>';
+			}).join('');
+
+			/* Every database was given an entry for every omic by the loop above,
+			   so any of them names the full row set; the first is as good as any.
+			   Read from the map rather than from dataDistribution so the rows and
+			   the cells can never disagree about which omics exist. */
+			var dbs_omicNames = Object.keys(matchingPerDB[databases[0]] || {});
+
+			var dbs_rows = dbs_omicNames.map(function(omicName) {
+				/* title, because the label column is fixed at 210px and clips with an
+				   ellipsis. Omic names come from Step 1 and are routinely longer than
+				   that ("Transcriptomics - liver - 24 h post treatment" measures 308px
+				   against the 246px it is given); in the old wrapping cell they were
+				   always readable, and nothing else on this card carries the name. */
+				return '<tr><th scope="row" title="' + Ext.String.htmlEncode(omicName) + '">' +
+				Ext.String.htmlEncode(omicName) + '</th>' +
+				databases.map(function(dbname) {
+					/* A missing entry means the omic matched nothing in that
+					   database - which is a zero, not an unknown. An empty cell
+					   would read as "not measured", which is a different claim. */
+					var cell = (matchingPerDB[dbname] || {})[omicName] || {matched: 0, percentage: 0};
+					/* The share as a bar as well as a number. Four columns of bare
+					   figures across 1070px is a lot of table to read one comparison
+					   out of; the bar answers "which database covers this omic best"
+					   at a glance and gives the card's width something to do. The
+					   figures stay - the bar is the second reading, not the only one.
+
+					   Clamped: the percentage is Math.ceil'd upstream, so a fully
+					   matched omic can arrive as 100 and nothing above it should
+					   ever draw past the track. */
+					var share = Math.max(0, Math.min(100, Number(cell.percentage) || 0));
+					return '<td><span class="paDbCell">' +
+					'<span class="paDbBar"><i style="width:' + share + '%"></i></span>' +
+					'<span class="paDbCount">' + Number(cell.matched || 0).toLocaleString() + '</span>' +
+					'<span class="paDbPct">' + cell.percentage + '%</span>' +
+					'</span></td>';
+				}).join('') + '</tr>';
+			}).join('');
+
+			/* The descriptions keep every word they had; what changes is their
+			   measure. Three paragraphs across 1070px ran to about 140 characters
+			   a line - roughly twice a readable measure - so they sit as columns
+			   beside each other instead, which is also how they read as a set. */
+			var dbs_notes = databases.map(function(dbname) {
+				/* A database with no blurb gets no column, rather than a headed one
+				   reading "undefined". The map is a literal of the four databases the
+				   installers build, but getDatabases() answers from the job, so a
+				   fifth would print the word. The matrix above still counts it. */
+				if (!dbs_descriptions[dbname]) {
+					return '';
+				}
+				return '<div class="paDbNote"><h3>' + Ext.String.htmlEncode(dbname) + '</h3>' +
+				'<p>' + dbs_descriptions[dbname] + '</p></div>';
 			}).join('');
 
 			var dbs_message = {
 				xtype: 'box',
 				cls: "contentbox", minHeight: 240, id: "dbs_message",
-				// The <dl> and the closing sentence were both inside the opening <p>.
-				// A description list is not phrasing content, so the parser closed
-				// that paragraph before the list and left the last sentence in no
-				// paragraph at all - which is why it ignored the card's reading
-				// measure and ran the full width of the box while the first sentence
-				// wrapped at 105 characters.
 				html:
 				'<h2>Multiple databases used</h2>' +
-				'<div>' +
-				'  <p>Your analysis includes the following databases:</p>' +
-				'  <dl id="dbs_dl">' + dl_dbs + '</dl>' +
-				'  <p>The diagrams below combine the matched and unmatched features of <b>all</b> databases. Hover over a diagram for the per-database breakdown.</p>' +
+				'<div class="paDbBody">' +
+				'  <p class="paDbLede">How many of your features carry an identifier each database ' +
+				'is keyed on. Read across a row to compare one omic between databases &mdash; the ' +
+				'bar is that share of the omic\'s input features.</p>' +
+				'  <div class="paDbMatrixWrap">' +
+				/* A floor, so the wrapper's overflow-x has something to scroll. The
+				   table is `width: 100%` under `table-layout: fixed`, so without one
+				   it can never be wider than its wrapper - the scroll was dead code -
+				   and each database column just kept shrinking. A cell's contents do
+				   NOT shrink with it: 24 (bar) + 66 (count) + 34 (share) + 24 (gaps)
+				   + 36 (padding) = 184px is a hard minimum, and below that the flex
+				   row overflows LEFT (`justify-content: flex-end`) into the column
+				   beside it. Measured: at a 163px column the numbers already sit on
+				   the omic names, at 103px they spill 63px. Reachable on a 4-database
+				   organism at 1200px, and on any organism in a narrow window.
+
+				   190 per database leaves 6px over that minimum; 210 is the label
+				   column. Inline because it depends on how many databases this job
+				   has, which no stylesheet knows. */
+				'    <table class="paDbMatrix" style="min-width:' + (210 + databases.length * 190) + 'px">' +
+				'      <thead><tr><th scope="col">Omic</th>' + dbs_head + '</tr></thead>' +
+				'      <tbody>' + dbs_rows + '</tbody>' +
+				'    </table>' +
+				'  </div>' +
+				/* No blurb for any of them, no block: the row carries a top rule, and
+				   an empty one would draw a line under the table for nothing. */
+				(dbs_notes ? '  <div class="paDbNotes">' + dbs_notes + '</div>' : '') +
+				'  <p class="paDbFoot">The diagrams below combine the matched and unmatched features of <b>all</b> databases. Hover over a diagram for the per-database breakdown.</p>' +
 				'</div>'
 			};
 
@@ -395,9 +474,15 @@ function PA_Step2JobView() {
 				}, {
 					xtype: 'form',
 					cls: 'paClassMain',
-					/* Configured, not flexed: see the note on #classActivityBox.
-					   Plan and controls side by side need 26 + 626 + 24 + 440. */
-					width: paClassColumnsSideBySide() ? 1116 : 692,
+					/* Configured, not flexed: see the note on #classActivityBox. Plan
+					   and controls side by side need 26 + 600 + 24 + 446 = 1096; this
+					   said 1116, which was the old columns and 20px more than the row
+					   it sizes. Measured at three viewports, ExtJS writes the card's
+					   own inner width here regardless (1122 at 1459, 1171 at 1512), so
+					   the value is the intent for the columns inside rather than the
+					   width that renders - which is all the more reason for it not to
+					   contradict them. */
+					width: paClassColumnsSideBySide() ? 1096 : 692,
 					bodyCls: "divForm",
 					style: "margin: 0 0 4px 0;",
 					layout: {type: 'vbox', align: 'left'},
@@ -434,6 +519,33 @@ function PA_Step2JobView() {
 			compoundsPanelHTML = me.renderCompoundsPanel();
 		}
 
+		/* Compounds disambiguation is a module of this step like any other, so it
+		   goes in the container that holds the modules.
+
+		   It used to live in a form of its own below #omicSummaryPanel. The two
+		   only ever lined up because they happen to share `.omicSummaryContainer`'s
+		   max-width - nothing structural held them on one rail, and the cards
+		   inside it were laid out by the odd/even floats while every other card on
+		   the step had moved to the `:has()` flex row.
+
+		   The form it sat in carried one hidden field, jobID, and
+		   JobController.step2OnFormSubmitHandler adds jobID to the payload
+		   explicitly anyway; the selections are read from the MODEL
+		   (getSelectedCompounds), never from this markup. So there is nothing left
+		   in that form to lose.
+
+		   Not added at all when there is nothing to decide. As a member of the
+		   flex row it claims a full row of its own, so an empty one is 24px of
+		   blank at the end of the step; every caller already guards for the box
+		   being absent (refreshCompoundsPanel, initCompoundsPanelHandlers). */
+		if (compoundsPanelHTML !== "") {
+			omicSummaryPanelComponents.push({
+				xtype: "box", itemId: "compoundsPanelsContainer",
+				cls: "compoundsPanelsContainer",
+				html: compoundsPanelHTML
+			});
+		}
+
 		this.component = Ext.widget({
 			xtype: "container",
 			minHeight: 800,
@@ -450,19 +562,6 @@ function PA_Step2JobView() {
 				cls: "omicSummaryContainer",
 				layout: 'column',  style: "margin-top:50px;",
 				items: omicSummaryPanelComponents
-			}, {
-				xtype: 'form', cls: "omicSummaryContainer",
-				border: 0, style: "margin-top:30px;", defaults: {labelAlign: "right",border: 0},
-				items: [{
-					xtype: "textfield", itemId: "jobIDField",
-					name: "jobID",
-					hidden: true,
-					value: this.model.getJobID()
-				}, {
-					xtype: "box", itemId: "compoundsPanelsContainer",
-					cls: "compoundsPanelsContainer",
-					html: compoundsPanelHTML
-				}]
 			}],
 			listeners: {
 				boxready: function() {
@@ -1335,8 +1434,8 @@ function paClassActivityPlan(omicName, design, omic) {
 * @returns {Boolean}
 */
 function paClassColumnsSideBySide() {
-	// 626 + 24 + 440 inside the card, plus the sidebar and gutters (a 1470px
-	// viewport gives the card 1132px inside).
+	// 26 + 600 + 24 + 446 inside the card, plus the sidebar and gutters (a
+	// 1470px viewport gives the card 1132px inside).
 	return Ext.getBody().getViewSize().width >= 1440;
 }
 
@@ -1412,7 +1511,7 @@ function paClassActivityItems(model, omicName) {
 				getInnerTpl: function (displayField) { return '{' + displayField + ':htmlEncode}'; }
 			},
 			editable: false, allowBlank: false,
-			labelAlign: 'left', labelWidth: 150, width: 420,
+			labelAlign: 'left', labelWidth: 150, width: 380,
 			store: Ext.create('Ext.data.ArrayStore', {
 				fields: ['name', 'value'],
 				data: design.factors.map(function (f) { return [f.label, f.id]; })
@@ -1451,7 +1550,12 @@ function paClassActivityItems(model, omicName) {
 		},
 		labelAlign: 'left',
 		labelWidth: 150,
-		width: 420,
+		/* Short of the panel's content box, which is 410 (446 less 18px of
+		   padding either side). ExtJS hangs the help icon off the
+		   field's own table in a 15px cell and `.x-box-inner` clips at the
+		   container's width, so a field measured to the full 408 had its icon cut
+		   down the middle. */
+		width: 380,
 		store: Ext.create('Ext.data.ArrayStore', {
 			fields: ['name', 'value'],
 			data: [['0.01', 0.01],
@@ -1464,27 +1568,94 @@ function paClassActivityItems(model, omicName) {
 		}),
 		helpTip: "The p-value or FDR cut-off you used to build the relevant-features list. Under \"no member of this class changed\" each member is flagged only by a type-I error, at that rate, so 3 of 4 flagged is p = 0.0005 at 0.05. \"Relative to this job\" instead compares the class with the rest of your panel."
 	});
+	/* The controls panel says what it is and what the number does, the way the
+	   plan beside it does. A combo alone in a panel is a setting with no name
+	   and no consequence on the page - the consequence was in a tooltip, which
+	   is the one place a reader who has not already decided to hover never
+	   looks. */
+	/* Not a second telling of the band below, which already says what each
+	   test needs and what \u201crelative to this job\u201d does. This line is about
+	   the field: which number goes in it. */
+	var controlsNote = design
+		? 'Used only if the permutation test cannot run on this job.'
+		: 'The \u03b1 you built that list at \u2014 the p-value or FDR cut-off, not a fold-change threshold.';
+	var controlItems = [{
+		xtype: 'box',
+		cls: 'paClassSetHead',
+		width: 380,
+		html: '<p class="paClassSet">What you set</p>'
+	}].concat(controls, [{
+		xtype: 'box',
+		cls: 'paClassSetFoot',
+		width: 380,
+		html: '<p class="paClassSetNote">' + controlsNote + '</p>'
+	}]);
+
 	var side = paClassColumnsSideBySide();
-	/* Plan on the left, controls on the right. Every width is configured:
-	   an html box whose width is only known after the layout resolves is
-	   measured without it -- see the note on #classActivityBox. */
+	/* Plan on the left, its controls on the right, as two panels that end level.
+
+	   The controls used to be a bare column: one combo at the top of 440px of
+	   nothing. Giving them a panel of the same build as the plan's fills that
+	   space with the thing that belongs in it and makes the pair read as one
+	   instrument - what will run, and the one number you get to set.
+
+	   Every width is configured: an html box whose width is only known after
+	   the layout resolves is measured WITHOUT it -- see the note on
+	   #classActivityBox. */
 	return [{
 		xtype: 'container',
 		cls: 'paClassTop' + (side ? '' : ' paClassTop-stacked'),
 		layout: {type: side ? 'hbox' : 'vbox', align: side ? 'stretch' : 'left'},
 		items: [{
-			xtype: 'box',
+			/* A CONTAINER, not a box, and the container is the panel.
+
+			   Both columns have to be the same kind of component or they do not
+			   end on the same line. `align: stretch` writes a height onto a
+			   container and takes its border off on the way, and writes nothing at
+			   all onto a plain box - so a bordered container beside a bordered box
+			   came out 2px apart, in whichever direction the taller column
+			   happened to be. Measured both ways: one combo in the panel put the
+			   controls 2px short, two combos put them 2px long. Two containers get
+			   one formula and land on one edge whatever they hold.
+
+			   The html inside carries its own width for the reason the note on
+			   #classActivityBox gives: 600 less 18px of padding either side. The
+			   panel edge is an inset shadow rather than a border, so it takes no
+			   width -- see the note on .paClassPlanCol in main.css. */
+			xtype: 'container',
 			cls: 'paClassPlanCol',
-			width: 626,
-			html: paClassActivityPlan(omicName, design, compoundOmic)
+			width: 600,
+			margin: '4 0 8 26',
+			/* The same layout as the controls opposite, for the same reason as the
+			   same xtype: a vbox and an auto layout account for a container's frame
+			   differently when `align: stretch` writes a height onto it. */
+			layout: {type: 'vbox', align: 'left'},
+			items: [{
+				xtype: 'box',
+				width: 564,
+				html: paClassActivityPlan(omicName, design, compoundOmic)
+			}]
 		}, {
 			xtype: 'container',
 			cls: 'paClassControls',
-			width: 440,
-			margin: side ? '0 0 0 24' : '12 0 0 26',
-			layout: {type: 'vbox', align: 'left'},
+			/* 26 + 600 + 24 + 446 = 1096, which lands the panel's right edge on
+			   1372 - the same edge the band below it ends on, so the card has one
+			   right rail rather than two. */
+			/* Stacked, the two panels are one above the other on one rail, so
+			   they take the same width. 440 was invisible while the controls were
+			   a bare column; as a panel it drew a second right edge 160px short of
+			   the plan's. */
+			width: side ? 446 : 600,
+			/* The same margins as the plan opposite; see the note there for why
+			   both columns are containers. */
+			margin: side ? '4 0 8 24' : '12 0 0 26',
+			/* Centred on the cross axis, so one control sits opposite the test
+			   it belongs to instead of hanging from the top of an empty column.
+			   `pack`, not CSS: an ExtJS box layout writes its children's
+			   positions inline, and no stylesheet outranks that. */
+			layout: {type: 'vbox', align: 'left', pack: side ? 'center' : 'start'},
 			defaults: {border: false},
-			items: controls
+			items: controlItems
 		}]
 	}];
 }
