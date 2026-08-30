@@ -49,8 +49,12 @@ if (debugging === true)
  * this a browser that opened a job before an upgrade never asked again --
  * the hub view's checkSchema() learned that the hard way.
  *   2: globalExpressionData carries sampleValues / sampleRelevant.
+ *   3: every pathway carries totalGenes / totalCompounds, the denominator of
+ *      the network's "min features in pathway" filter. Without them the filter
+ *      falls back to the installed gene-only count, which is what made a
+ *      metabolomics-only job draw an empty network.
  */
-var PA_JOB_CACHE_SCHEMA = 2;
+var PA_JOB_CACHE_SCHEMA = 3;
 
 function openPaintomicsDB() {
     var db = new Dexie("paintomics");

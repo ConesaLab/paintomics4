@@ -48,6 +48,14 @@ function Pathway(ID) {
     //GRAPHICAL INFORMATION
     this.graphicalOptions = null;
     this.totalFeatures = null;
+    //HOW MANY FEATURES OF EACH KIND THE PATHWAY CONTAINS, filled by the server
+    //while it matches. The network's "min features in pathway" filter divides
+    //by these; the number it used instead, total_features in the installed
+    //pathways_network.json, counts GENES only, so a compound-only job divided
+    //matched compounds by the pathway's gene count and drew nothing. Null on
+    //jobs stored before this existed - see paNetworkCoverageTotal.
+    this.totalGenes = null;
+    this.totalCompounds = null;
 
     this.selected = false;
     this.visible = true;
@@ -167,6 +175,12 @@ function Pathway(ID) {
 	this.getAllAdjustedSignificanceValues = function() {
 		return jQuery.extend({}, this.getAdjustedSignificanceValues(), this.getAdjustedCombinedSignificanceValues());
 	};
+    this.getTotalGenes = function () {
+        return this.totalGenes;
+    };
+    this.getTotalCompounds = function () {
+        return this.totalCompounds;
+    };
     this.setTotalFeatures = function (totalFeatures) {
         this.totalFeatures = totalFeatures;
     };
@@ -216,6 +230,12 @@ function Pathway(ID) {
         }
         if (jsonObject.matchedCompounds !== undefined) {
             this.matchedCompounds = jsonObject.matchedCompounds;
+        }
+        if (jsonObject.totalGenes !== undefined) {
+            this.totalGenes = jsonObject.totalGenes;
+        }
+        if (jsonObject.totalCompounds !== undefined) {
+            this.totalCompounds = jsonObject.totalCompounds;
         }
         if (jsonObject.metagenes !== undefined) {
             this.metagenes = jsonObject.metagenes;

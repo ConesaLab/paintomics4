@@ -304,6 +304,56 @@ def summariseBuild():
         stderr.write("  (could not write the warning hand-off file: %s)\n" % writeError)
 
 #**************************************************************************
+#* SHARED FEATURES BETWEEN PATHWAYS
+#*
+#* All three network builders (KEGG, Reactome, MapMan) fill the same diagonal
+#* pathway-pair matrix and emit one "shared biological features" edge per
+#* non-zero cell. All three filled it from a gene -> pathways mapping ONLY, so
+#* two pathways sharing metabolites and no gene were never connected, and the
+#* edge weight the view starts from counted genes when the user may have
+#* submitted no genes at all. The counting is identical whatever the feature
+#* is, so it lives here once and is called for each feature class.
+#**************************************************************************
+def indexCompoundsByPathway(ALL_PATHWAYS):
+    """compound id -> the set of pathways containing it.
+
+    Blank identifiers are dropped rather than indexed: an empty id present in
+    two pathways joins them, and an empty id present in a hundred joins all
+    hundred to each other. Reactome writes an entry with no usable id whenever
+    a SimpleEntity carries neither a ChEBI nor a KEGG mapping.
+    """
+    index = defaultdict(set)
+    for pathwayID, pathway in ALL_PATHWAYS.items():
+        for compound in pathway.get("compounds", []) or []:
+            compoundID = compound.get("id")
+            if compoundID:
+                index[compoundID].add(pathwayID)
+    return index
+
+
+def accumulateSharedFeatures(pathways_matrix, feature2pathways):
+    """Add one to every pathway PAIR that shares a feature.
+
+    `pathways_matrix` is diagonal -- only one of (a,b) and (b,a) is a key -- so
+    each pair is incremented through whichever direction exists. A pair that
+    exists in neither direction names a pathway that never became a node and is
+    skipped; writing the missing direction in would double the weight of every
+    pair, since the bulk step below reads both.
+    """
+    for pathways in feature2pathways.values():
+        associated = sorted(pathways)
+        for index, current_path in enumerate(associated):
+            row = pathways_matrix.get(current_path)
+            for other_path in associated[index + 1:]:
+                if row is not None and other_path in row:
+                    row[other_path] += 1
+                else:
+                    other_row = pathways_matrix.get(other_path)
+                    if other_row is not None and current_path in other_row:
+                        other_row[current_path] += 1
+
+
+#**************************************************************************
 #  ______ _   _  _____ ______ __  __ ____  _
 # |  ____| \ | |/ ____|  ____|  \/  |  _ \| |
 # | |__  |  \| | (___ | |__  | \  / | |_) | |
@@ -1683,6 +1733,17 @@ def processMapManPathwaysData():
                     stderr.write("Pathways " + current_path + " or " + other_path + " not found in MapMan network values.\n")
 
     #***********************************************************************************
+    #* THE SAME, FOR COMPOUNDS
+    #          A MapMan diagram carries metabolites as well as genes, and two bins that
+    #          use the same metabolite share a biological feature. The matrix counted
+    #          genes only.
+    #***********************************************************************************
+    mapmanPathways = {pathwayID: pathway for pathwayID, pathway in ALL_PATHWAYS.items()
+                      if pathway.get("source") == "MapMan"}
+    accumulateSharedFeatures(pathways_matrix,
+                             indexCompoundsByPathway(mapmanPathways))
+
+    #***********************************************************************************
     #* GET THE NUMBER OF GENES FOR EACH PATHWAY
     #***********************************************************************************
     mapman_g2p_file = DATA_DIR + "gene2pathway_mapman.list"
@@ -1695,6 +1756,16 @@ def processMapManPathwaysData():
 
             # Write one row for each gene and pathway
             mapman_gene2pathway.writelines(str(geneID) + "\t" + str(path_id) + "\n" for geneID in gene_ids)
+
+    # A field of its own beside it: total_features has meant "genes" since
+    # Paintomics 3 and is read by clusters.py and by any client that has not
+    # reloaded, so redefining it would silently move their filter.
+    for path_id, pathway in mapmanPathways.items():
+        node = NODES.get(path_id)
+        if node is not None:
+            node["data"]["total_compounds"] = len(
+                set(compound.get("id") for compound in pathway.get("compounds", [])
+                    if compound.get("id")))
 
 
     #***********************************************************************************
@@ -2701,6 +2772,17 @@ def processReactomePathwaysData():
                     "Pathways " + current_path + " or " + other_path + " not found in Reactome network values.\n")
 
     # ***********************************************************************************
+    # * THE SAME, FOR COMPOUNDS
+    #          A Reactome SimpleEntity is a small molecule, and two processes that use
+    #          the same one share a biological feature. The matrix counted genes only,
+    #          so the "shared biological features" mode was blind to metabolites.
+    # ***********************************************************************************
+    reactomePathways = {pathwayID: pathway for pathwayID, pathway in ALL_PATHWAYS.items()
+                        if pathway.get("source") == "Reactome"}
+    accumulateSharedFeatures(pathways_matrix,
+                             indexCompoundsByPathway(reactomePathways))
+
+    # ***********************************************************************************
     # * ENTITY PROCESSING SUMMARY
     # ***********************************************************************************
     stderr.write("\n" + "="*80 + "\n")
@@ -2743,6 +2825,16 @@ def processReactomePathwaysData():
         except Exception:
             print(path_id)
             continue
+
+    # A field of its own beside it: total_features has meant "genes" since
+    # Paintomics 3 and is read by clusters.py and by any client that has not
+    # reloaded, so redefining it would silently move their filter.
+    for path_id, pathway in reactomePathways.items():
+        node = NODES.get(path_id)
+        if node is not None:
+            node["data"]["total_compounds"] = len(
+                set(compound.get("id") for compound in pathway.get("compounds", [])
+                    if compound.get("id")))
 
     # ***********************************************************************************
     # * BULK THE MATRIX INTO JSON:
@@ -3052,6 +3144,27 @@ def generatePathwaysNetwork(ALL_PATHWAYS):
     del gene2pathway
 
     #***********************************************************************************
+    #* STEP 3B. THE SAME, FOR COMPOUNDS
+    #          Two pathways that share a metabolite share a biological feature. The
+    #          matrix counted genes only, so a metabolomics user asking for "shared
+    #          biological features" got edges drawn from data they never submitted --
+    #          and none at all between two pathways joined solely by their compounds.
+    #***********************************************************************************
+    #          ALL_PATHWAYS holds every source installed for the species, and NODES
+    #          here is keyed by the bare 5-digit map number, so the ids are narrowed to
+    #          KEGG's and normalised before they are used as keys.
+    keggPathways = {pathwayID: pathway for pathwayID, pathway in ALL_PATHWAYS.items()
+                    if pathway.get("source") == "KEGG"}
+    compound2pathway = {}
+    for compoundID, pathwayIDs in indexCompoundsByPathway(keggPathways).items():
+        normalised = set(filter(None, (normaliseKeggPathwayId(pathwayID, SPECIE)
+                                       for pathwayID in pathwayIDs)))
+        if len(normalised) > 1:
+            compound2pathway[compoundID] = normalised
+    accumulateSharedFeatures(pathways_matrix, compound2pathway)
+    del compound2pathway
+
+    #***********************************************************************************
     #* STEP 4. GET THE NUMBER OF GENES FOR EACH PATHWAY
     #***********************************************************************************
     file_name = DATA_DIR + "pathway2gene.list"
@@ -3074,6 +3187,19 @@ def generatePathwaysNetwork(ALL_PATHWAYS):
         #LAST PATHWAY
         NODES[previous_pathway]["data"]["total_features"] += nGenes
     csvfile.close()
+
+    #***********************************************************************************
+    #* STEP 4B. AND THE NUMBER OF COMPOUNDS
+    #          A separate field, not folded into total_features: that name has meant
+    #          "genes" since Paintomics 3 and is read by clusters.py and by any client
+    #          that has not reloaded, so redefining it would silently move their filter.
+    #***********************************************************************************
+    for pathwayID, pathway in keggPathways.items():
+        node = NODES.get(normaliseKeggPathwayId(pathwayID, SPECIE))
+        if node is not None:
+            node["data"]["total_compounds"] = len(
+                set(compound.get("id") for compound in pathway.get("compounds", [])
+                    if compound.get("id")))
 
     #***********************************************************************************
     #* STEP 5. BULK THE MATRIX INTO JSON:
