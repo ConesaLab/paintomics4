@@ -1162,15 +1162,17 @@ function paFigAccent(active) {
 	return active ? "var(--pa-accent-green)" : "var(--pa-fig-faint)";
 }
 
-/* Samples: two conditions x three replicates x four metabolites. */
+/* Samples: two conditions x three replicates x four metabolites. Generic
+   condition labels, not the example dataset's own names: the figure is shown
+   for every job, and the test is not limited to a control/treatment pair. */
 function paFigPermInput() {
-	var parts = [paFigOpen(), paFigText(19, 8, "Ctr", {anchor: "middle"}), paFigText(67, 8, "Ik", {anchor: "middle"})];
-	var ctr = [0.55, 0.7, 0.45, 0.62], ik = [1, 0.9, 0.5, 0.82];
+	var parts = [paFigOpen(), paFigText(19, 8, "Control", {anchor: "middle"}), paFigText(67, 8, "Treatment", {anchor: "middle"})];
+	var control = [0.55, 0.7, 0.45, 0.62], treatment = [1, 0.9, 0.5, 0.82];
 	for (var r = 0; r < 4; r++) {
 		var y = 12 + r * 13;
 		for (var c = 0; c < 3; c++) {
-			parts.push('<rect x="' + (c * 13) + '" y="' + y + '" width="11" height="11" rx="2" fill="var(--pa-fig-cell)" opacity="' + ctr[r] + '"></rect>');
-			parts.push('<rect x="' + (48 + c * 13) + '" y="' + y + '" width="11" height="11" rx="2" fill="var(--pa-fig-cell-strong)" opacity="' + ik[r] + '"></rect>');
+			parts.push('<rect x="' + (c * 13) + '" y="' + y + '" width="11" height="11" rx="2" fill="var(--pa-fig-cell)" opacity="' + control[r] + '"></rect>');
+			parts.push('<rect x="' + (48 + c * 13) + '" y="' + y + '" width="11" height="11" rx="2" fill="var(--pa-fig-cell-strong)" opacity="' + treatment[r] + '"></rect>');
 		}
 	}
 	parts.push('</svg>');
