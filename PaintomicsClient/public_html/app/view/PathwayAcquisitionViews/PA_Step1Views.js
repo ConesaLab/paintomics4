@@ -2718,6 +2718,16 @@ function OmicSubmittingPanel(nElem, options) {
 					return true;
 				}
 
+				/* ExtJS's own rules first -- maxLength, allowBlank, a validator -- as
+				   the Region-based, miRNA and MORE panels do, so they refuse through
+				   checkForm() (the field named and scrolled into view) rather than
+				   through the failure handler after submit() validates again. */
+				Ext.Array.each(this.query("field"), function(field) {
+					if (!field.validate()) {
+						valid = false;
+					}
+				});
+
 				/* Ext.isEmpty, not === "": an omic name typed and then deleted leaves
 				   the combo's value null, which === "" let through and ExtJS's own
 				   allowBlank then refused with no field named. */

@@ -57,12 +57,18 @@ STEP1_VIEWS = os.path.join(
     CLIENT_ROOT, "app", "view", "PathwayAcquisitionViews", "PA_Step1Views.js")
 JOB_CONTROLLER = os.path.join(
     CLIENT_ROOT, "app", "controller", "JobController.js")
+UTIL_JS = os.path.join(CLIENT_ROOT, "app", "view", "common", "Util.js")
 
 VIEW_HEADERS = {"firstFormError": "this.firstFormError = function() {"}
 CONTROLLER_HEADERS = {
+    "showInvalidStep1FormMessage": "function showInvalidStep1FormMessage(jobView) {",
+}
+# The composition lives in Util.js, shared with the failure handler's
+# client-abort branch.
+UTIL_HEADERS = {
     "plainFieldText": "function plainFieldText(html) {",
     "fieldErrorText": "function fieldErrorText(field) {",
-    "showInvalidStep1FormMessage": "function showInvalidStep1FormMessage(jobView) {",
+    "showInvalidFieldMessage": "function showInvalidFieldMessage(field) {",
 }
 NO_DATA_STATEMENT = "var STEP1_NO_DATA_MESSAGE ="
 
@@ -135,6 +141,7 @@ function showErrorMessage(title, opts) { shown.push({title: title, opts: opts});
 %(STEP1_NO_DATA_MESSAGE)s
 %(plainFieldText)s
 %(fieldErrorText)s
+%(showInvalidFieldMessage)s
 %(showInvalidStep1FormMessage)s
 
 function makeField(spec) {
@@ -254,11 +261,13 @@ class InvalidFormNamesTheFieldTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        views, controller = read(STEP1_VIEWS), read(JOB_CONTROLLER)
+        views, controller, util = read(STEP1_VIEWS), read(JOB_CONTROLLER), read(UTIL_JS)
         pieces = {name: extract_block(views, header, "PA_Step1Views.js")
                   for name, header in VIEW_HEADERS.items()}
         pieces.update({name: extract_block(controller, header, "JobController.js")
                        for name, header in CONTROLLER_HEADERS.items()})
+        pieces.update({name: extract_block(util, header, "Util.js")
+                       for name, header in UTIL_HEADERS.items()})
         pieces["STEP1_NO_DATA_MESSAGE"] = extract_statement(
             controller, NO_DATA_STATEMENT, "JobController.js")
         cls.results = run_node(HARNESS % pieces)

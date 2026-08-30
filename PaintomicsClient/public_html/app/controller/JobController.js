@@ -132,27 +132,6 @@ var STEP1_NO_DATA_MESSAGE = "Invalid form. <br/> Please provide at least: " +
 	"<span style='color: auto;text-decoration: underline;'>Gene expression /Metabolomics /Proteomics data.</span>" +
 	" Also, please make sure to <span style='color: auto;text-decoration: underline;'>select an organism.</span>";
 
-/* The plain text of a field's error. ExtJS wraps several in a <ul>, and a
-   custom markInvalid() message only ever appears in the active error, not in
-   getErrors(), so this reads the active error and strips the markup. */
-/* Markup stripped to plain text: tags out, whitespace collapsed, edges trimmed. */
-function plainFieldText(html) {
-	return String(html || "")
-		.replace(/<\/li>\s*<li[^>]*>/gi, " \u2014 ")
-		.replace(/<[^>]*>/g, " ")
-		.replace(/\s+/g, " ")
-		.replace(/^ | $/g, "");
-}
-
-/* The plain text of a field's error. ExtJS wraps several in a <ul>, and a
-   custom markInvalid() message only ever appears in the active error, not in
-   getErrors(), so this reads the active error and strips the markup. Several
-   errors are joined with a dash rather than glued into one sentence. */
-function fieldErrorText(field) {
-	var error = (field && field.getActiveError) ? field.getActiveError() : "";
-	return plainFieldText(error);
-}
-
 /**
 * The refusal a Step 1 submission gets when checkForm() said no.
 *
@@ -177,30 +156,10 @@ function showInvalidStep1FormMessage(jobView) {
 		return;
 	}
 
-	var field = (jobView && jobView.firstFormError) ? jobView.firstFormError() : null;
-	if (field) {
-		/* Scrolled before the dialog opens, so closing it leaves the reader
-		   looking at the field the message just named. */
-		try {
-			field.getEl().dom.scrollIntoView({block: "center"});
-		} catch (ignored) {
-			/* An unrendered field cannot be scrolled to; the message still names it. */
-		}
-
-		/* Six shipped labels carry a <br> ("Regions file <br>(BED + Quantification)"),
-		   and that is the label the file widget's inner textfield inherits, so the
-		   markup is stripped exactly as the error text is. */
-		var label = plainFieldText(field.fieldLabel).replace(/\s*:\s*$/, "");
-		var reason = fieldErrorText(field) || "Please check this field.";
-		showErrorMessage("Invalid Form. </br>" +
-			(label ? " <b>" + Ext.String.htmlEncode(label) + "</b>: " : " ") +
-			Ext.String.htmlEncode(reason),
-			{height: 150, width: 400, showReportButton: true});
-		return;
-	}
-
-	showErrorMessage("Invalid Form. </br> Please check the form errors.",
-		{height: 150, width: 400, showReportButton: true});
+	/* The composition -- scroll the field into view, quote its label and what
+	   it wants -- lives in Util.js as showInvalidFieldMessage, shared with the
+	   failure handler for the refusals ExtJS itself raises inside submit(). */
+	showInvalidFieldMessage((jobView && jobView.firstFormError) ? jobView.firstFormError() : null);
 }
 
 function JobController() {

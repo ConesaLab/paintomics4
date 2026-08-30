@@ -138,18 +138,35 @@ def enclosing_object(source, index, masked=None):
 
 
 def combo_configs(source, item_id):
-    """Yield (line_number, config_text) for every *combo* whose `itemId` is
-    `item_id`.
+    """(line_number, config_text) for every *combo* whose `itemId` is
+    `item_id`; at least one, or the test that asked cannot pass vacuously.
 
     The named panels (Region-based, miRNA, MORE) carry a hidden `textfield`
     under the same itemId with a preset value; those never read
     file_types.json and are skipped."""
     masked = mask_strings_and_comments(source)
+    found = []
     for match in re.finditer(r'itemId:\s*"%s"' % re.escape(item_id), source):
         config = enclosing_object(source, match.start(), masked)
         if not re.search(r"xtype:\s*['\"]combo(box)?['\"]", config):
             continue
-        yield source.count("\n", 0, match.start()) + 1, config
+        found.append((source.count("\n", 0, match.start()) + 1, config))
+    if not found:
+        raise AssertionError("no combo with itemId %s" % item_id)
+    return found
+
+
+def plain_panel(source):
+    """The OmicSubmittingPanel constructor: the one panel whose File Type
+    combos are visible, and the scope every scan here is anchored to so a
+    quote or brace elsewhere in the file cannot shift it."""
+    return between(source, "function OmicSubmittingPanel(nElem, options) {",
+                   "\nOmicSubmittingPanel.prototype")
+
+
+def between(source, start_marker, end_marker):
+    start = source.index(start_marker)
+    return source[start:source.index(end_marker, start)]
 
 
 def combo_declarations(source, item_id):
@@ -163,7 +180,7 @@ def combo_declarations(source, item_id):
                value.group(1) if value else None)
 
 
-class TheBraceWalkerReadsTheSourceLikeAParser(unittest.TestCase):
+class TheBraceWalkerReadsTheSourceLikeAParserTest(unittest.TestCase):
 
     SNIPPET = """{
 \t\txtype: "combobox", itemId: "fileTypeSelector",
@@ -183,11 +200,11 @@ class TheBraceWalkerReadsTheSourceLikeAParser(unittest.TestCase):
         self.assertEqual(len(list(combo_configs(self.SNIPPET, "mapToSelector"))), 1)
 
 
-class FileTypeComboStoresThePick(unittest.TestCase):
+class FileTypeComboStoresThePickTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.source = read(STEP1_VIEWS)
+        cls.source = plain_panel(read(STEP1_VIEWS))
         cls.records = json.loads(read(FILE_TYPES))["types"]
         if not cls.records:
             raise AssertionError("file_types.json has no records")
@@ -197,9 +214,7 @@ class FileTypeComboStoresThePick(unittest.TestCase):
         every pick from the list is stored as undefined -> null."""
         columns = set.intersection(*(set(r) for r in self.records))
         for item_id in COMBO_ITEM_IDS:
-            declarations = list(combo_declarations(self.source, item_id))
-            self.assertTrue(declarations, "no combo with itemId %s" % item_id)
-            for line, _display, value in declarations:
+            for line, _display, value in combo_declarations(self.source, item_id):
                 self.assertIn(
                     value, columns,
                     "%s at PA_Step1Views.js:%d stores valueField %r, which is "
@@ -255,13 +270,21 @@ class FileTypeComboStoresThePick(unittest.TestCase):
         """Type an omic name and delete it: the combo's value is null, not "",
         and the old `=== ""` let checkForm() pass a form ExtJS then refused
         with no field named."""
-        is_valid = self.source[self.source.index("isValid: function() {"):]
-        is_valid = is_valid[:is_valid.index("isEmpty: function() {")]
+        is_valid = between(self.source, "isValid: function() {", "isEmpty: function() {")
         self.assertIn('Ext.isEmpty(this.queryById("omicNameField").getValue())', is_valid)
         self.assertNotIn('queryById("omicNameField").getValue() === ""', is_valid)
 
+    def test_the_panel_runs_extjs_validation_before_its_own_checks(self):
+        """Like the Region-based, miRNA and MORE panels, isValid() validates
+        every field first, so a maxLength or an allowBlank refuses through
+        checkForm() -- named and scrolled into view -- and the failure
+        handler's client-abort branch stays the last resort."""
+        is_valid = between(self.source, "isValid: function() {", "isEmpty: function() {")
+        self.assertRegex(is_valid, r'query\("field"\)')
+        self.assertIn(".validate()", is_valid)
 
-class AClientSideAbortNamesTheField(unittest.TestCase):
+
+class AClientSideAbortNamesTheFieldTest(unittest.TestCase):
 
     def test_extjs_error_handler_names_the_field_on_a_client_abort(self):
         """ExtJS's submit() runs form.isValid() again and, refusing, calls the
@@ -269,13 +292,35 @@ class AClientSideAbortNamesTheField(unittest.TestCase):
         read like checkForm()'s refusal -- the field and its reason -- not
         like a server fault."""
         util = read(UTIL_JS)
-        handler = util[util.index("function extJSErrorHandler(form, responseObj)"):]
-        handler = handler[:handler.index("\n}\n")]
+        handler = between(util, "function extJSErrorHandler(form, responseObj)", "\n}\n")
         self.assertIn("Ext.form.action.Action.CLIENT_INVALID", handler)
-        self.assertIn("form.getFields()", handler)
-        self.assertIn("Invalid Form.", handler)
+        self.assertIn("showInvalidFieldMessage(", handler)
         self.assertNotIn("Please try again later", handler.split("CLIENT_INVALID")[0],
                          "the client-abort branch must come before the server fallback")
+
+    def test_the_client_abort_survives_a_destroyed_form_and_names_no_hidden_field(self):
+        """The complex-path caller destroys its temporary form before calling
+        the handler (getFields() would throw), and a hidden field must never
+        be the one named -- both fall through to the generic wording."""
+        util = read(UTIL_JS)
+        handler = between(util, "function extJSErrorHandler(form, responseObj)", "\n}\n")
+        self.assertIn("form.monitor", handler)
+        self.assertIn("isVisible(true)", handler)
+        self.assertEqual(handler.count("findBy("), 1, "one pass: visible invalid fields only")
+
+    def test_one_refusal_dialog_serves_checkform_and_extjs(self):
+        """checkForm()'s refusal and the client-abort branch quote the field
+        the same way, from one helper that also scrolls it into view."""
+        util = read(UTIL_JS)
+        self.assertIn("function showInvalidFieldMessage(field)", util)
+        self.assertIn("function plainFieldText(html)", util)
+        self.assertIn("function fieldErrorText(field)", util)
+        helper = between(util, "function showInvalidFieldMessage(field)", "\n}\n")
+        self.assertIn("scrollIntoView", helper)
+        controller = read(os.path.join(CLIENT_ROOT, "app", "controller", "JobController.js"))
+        refusal = between(controller, "function showInvalidStep1FormMessage(jobView)", "\n}\n")
+        self.assertIn("showInvalidFieldMessage(", refusal)
+        self.assertNotIn("function plainFieldText", controller)
 
 
 if __name__ == "__main__":

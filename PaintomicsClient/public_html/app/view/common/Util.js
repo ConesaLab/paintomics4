@@ -838,6 +838,53 @@ function splitServerError(message) {
              technical: raw.slice(0, at).trim() };
 }
 
+/* Markup stripped to plain text: tags out, whitespace collapsed, edges trimmed. */
+function plainFieldText(html) {
+    return String(html || "")
+        .replace(/<\/li>\s*<li[^>]*>/gi, " \u2014 ")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^ | $/g, "");
+}
+
+/* The plain text of a field's error. ExtJS wraps several in a <ul>, and a
+   custom markInvalid() message only ever appears in the active error, not in
+   getErrors(), so this reads the active error and strips the markup. Several
+   errors are joined with a dash rather than glued into one sentence. */
+function fieldErrorText(field) {
+    var error = (field && field.getActiveError) ? field.getActiveError() : "";
+    return plainFieldText(error);
+}
+
+/* The refusal that names one field: scrolled into view first, so closing the
+   dialog leaves the reader looking at it, then the dialog quoting its label
+   and what it wants. Shared by checkForm()'s refusal (JobController's
+   showInvalidStep1FormMessage) and by extJSErrorHandler when ExtJS's own
+   submit-time validation is the one refusing. No field -- nothing marked
+   anywhere, or only hidden fields -- keeps the old wording, which is the
+   shape of a bug and stays reportable. */
+function showInvalidFieldMessage(field) {
+    if (!field) {
+        showErrorMessage("Invalid Form. </br> Please check the form errors.",
+            {height: 150, width: 400, showReportButton: true});
+        return;
+    }
+    try {
+        field.getEl().dom.scrollIntoView({block: "center"});
+    } catch (ignored) {
+        /* An unrendered field cannot be scrolled to; the message still names it. */
+    }
+    /* Six shipped labels carry a <br> ("Regions file <br>(BED + Quantification)"),
+       and that is the label the file widget's inner textfield inherits, so the
+       markup is stripped exactly as the error text is. */
+    var label = plainFieldText(field.fieldLabel).replace(/\s*:\s*$/, "");
+    var reason = fieldErrorText(field) || "Please check this field.";
+    showErrorMessage("Invalid Form. </br>" +
+        (label ? " <b>" + Ext.String.htmlEncode(label) + "</b>: " : " ") +
+        Ext.String.htmlEncode(reason),
+        {height: 150, width: 400, showReportButton: true});
+}
+
 function extJSErrorHandler(form, responseObj) {
     if (debugging === true)
         debugger
@@ -849,25 +896,13 @@ function extJSErrorHandler(form, responseObj) {
        message.", which reads as a server fault. Nothing reached the server:
        name the field and what it wants, the way checkForm()'s refusal does. */
     if (responseObj && responseObj.failureType === Ext.form.action.Action.CLIENT_INVALID) {
-        var invalid = form.getFields().findBy(function (field) {
-            return !field.isValid() && field.isVisible(true);
-        }) || form.getFields().findBy(function (field) {
-            return !field.isValid();
-        });
-        var label = "";
-        var reason = "Please check the form errors.";
-        if (invalid) {
-            label = String(invalid.fieldLabel || "");
-            if (typeof plainFieldText === "function") {
-                label = plainFieldText(label);
-            }
-            label = label.replace(/\s*:\s*$/, "");
-            reason = ((typeof fieldErrorText === "function") ? fieldErrorText(invalid) : "") || "Please check this field.";
-        }
-        showErrorMessage("Invalid Form. </br>" +
-            (label ? " <b>" + Ext.String.htmlEncode(label) + "</b>: " : " ") +
-            Ext.String.htmlEncode(reason),
-            {height: 150, width: 400, showReportButton: true});
+        /* The complex-path caller destroys its temporary form before calling
+           this handler (its monitor is gone), and a hidden field is never the
+           one named: either falls through to the generic wording. */
+        var fields = (form && form.monitor) ? form.getFields() : null;
+        showInvalidFieldMessage(fields ? fields.findBy(function (field) {
+            return field.hasActiveError && field.hasActiveError() && field.isVisible(true);
+        }) : null);
         return;
     }
 
