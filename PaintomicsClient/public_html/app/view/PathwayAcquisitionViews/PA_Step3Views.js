@@ -144,6 +144,21 @@ function PA_Step3JobView() {
 		var pathways = this.getModel().getPathways();
 		var databases = this.getModel().getDatabases();
 
+		/* Which kinds of feature this job actually measured. The network's
+		   coverage filter divides by the pathway's features OF THESE CLASSES,
+		   and starts at a threshold these classes can reach - see
+		   paNetworkCoverageTotal and paNetworkDefaultMinFeatures. */
+		var hasCompoundOmics = (this.getModel().getCompoundBasedInputOmics() || []).length > 0;
+		this.omicClasses = {
+			/* `|| !hasCompoundOmics` mirrors clusters.py::_omic_classes: a job
+			   that records no omic at all is read as gene-based, which is what
+			   every such job has always been treated as. Without it the
+			   denominator would be unknown for both classes, the filter would
+			   switch itself off, and the slider would still read 50%. */
+			genes: (this.getModel().getGeneBasedInputOmics() || []).length > 0 || !hasCompoundOmics,
+			compounds: hasCompoundOmics
+		};
+
 		/********************************************************/
 		/* STEP 2.1.A LOAD VISUAL OPTIONS IF ANY                */
 		/********************************************************/
@@ -152,7 +167,8 @@ function PA_Step3JobView() {
 			//GENERAL OPTIONS
 			pathwaysVisibility: [],
 			//OPTIONS FOR NETWORK
-			minFeatures: 0.50,
+			minFeatures: paNetworkDefaultMinFeatures(this.omicClasses.genes,
+			                                         this.omicClasses.compounds),
 			minPValue: 0.05,
 			/* 0.10, not 0.90.
 			   Every other statement of this default in the application says
@@ -421,6 +437,13 @@ function PA_Step3JobView() {
 		} else {
 			this.visualOptions[db][propertyName] = value;
 		}
+	};
+	/* Which feature classes the job measured, {genes, compounds}. Always
+	   replaced by loadModel; this initialiser only keeps the field defined for
+	   a view read before a model is attached. */
+	this.omicClasses = {genes: true, compounds: false};
+	this.getOmicClasses = function() {
+		return this.omicClasses;
 	};
 	this.getClassificationData = function(db = null){
 		return (db == null) ? this.classificationData : this.classificationData[db];
@@ -2014,6 +2037,180 @@ function paNetworkLabelInk() {
 	return (ink !== "") ? ink : "#000";
 }
 
+/**
+* How many features the "Min features in pathway" slider measures a pathway
+* against - the denominator of the coverage the node filter compares to.
+*
+* It used to be `elem.data.total_features`, which the installer fills from the
+* pathway's GENE list alone (`len(gene_ids)`, `pathway2gene.list`, the
+* 20-character MapMan ids). The numerator has always been matched genes PLUS
+* matched compounds, so the filter divided one kind of thing by another. On a
+* compound-only job that is fatal: the numerator holds no genes at all and the
+* denominator is the pathway's whole gene set, so nothing can clear the bar.
+* Measured on a mmu STATegra metabolomics job, 137 of the 141 matched pathways
+* were dropped by this line alone and the network drew nothing.
+*
+* So count the classes the input actually contains, and nothing else. A
+* gene-based job divides by the pathway's genes, exactly as it always has; a
+* metabolomics job divides by its compounds; a job with both divides by both.
+*
+* The installed node still decides WHETHER the filter applies; the job's counts
+* only correct WHAT it divides by. `total_features` absent or zero is how a
+* database says it has never had a coverage filter, because `total_features *
+* minFeatures > matched` could not be true either way: OmniPath ships no such
+* field at all, every one of MapMan's 70 bins carries 0 (the installer counts
+* only 20-character gene ids), and so do 220 of mmu's 584 KEGG maps. Handing
+* those a denominator out of the job's own counts would switch a 50% filter on
+* for the first time - on ath MapMan bins holding 21,446 genes, and on OmniPath
+* pathways with a median of 20 - which is this bug again, moved to another
+* database.
+*
+* Two sources for the denominator, in order of authority:
+*  1. the job's own pathway, which the server fills from the full feature sets
+*     it already holds while matching - correct on every existing install;
+*  2. the installed network node, for jobs stored before (1) existed.
+*
+* @param {Object} pathwayCounts {genes, compounds} from the job's pathway
+* @param {Object} nodeData the installed node's data (total_features is GENES)
+* @param {Object} omicClasses {genes, compounds} - what the job submitted
+* @returns {Number|null} null means "no coverage filter here"
+*/
+var paNetworkCoverageTotal = function (pathwayCounts, nodeData, omicClasses) {
+	var counts = pathwayCounts || {}, node = nodeData || {};
+	var total = 0, known = false;
+
+	if (!(typeof node.total_features === "number" && node.total_features > 0)) {
+		return null;
+	}
+
+	var take = function (primary, fallback) {
+		/* 0 is a real answer: a pathway with no compounds cannot be covered by
+		   a metabolomics input. Only null/undefined/NaN mean "not known". */
+		var value = (typeof primary === "number" && !isNaN(primary)) ? primary :
+		            ((typeof fallback === "number" && !isNaN(fallback)) ? fallback : null);
+		if (value !== null) {
+			total += value;
+			known = true;
+		}
+	};
+
+	if (omicClasses.genes) {
+		take(counts.genes, node.total_features);
+	}
+	if (omicClasses.compounds) {
+		take(counts.compounds, node.total_compounds);
+	}
+	/* A submitted class whose total is unknown - a job stored before the counts
+	   existed, on a species not yet reinstalled - contributes nothing to the
+	   denominator while its matches still count in the numerator, so coverage
+	   can read high. That is precisely what this filter did for every job
+	   before this change, and reproducing it is the point: an old job must
+	   draw the network it drew yesterday. */
+	return known ? total : null;
+};
+
+/**
+* Where the "Min features in pathway" slider starts.
+*
+* 50% is a transcriptomics number: an RNA-seq experiment measures very nearly
+* every gene a pathway contains, so half of them is a bar worth clearing. A
+* metabolomics platform measures a few hundred compounds out of KEGG's ~19000,
+* and covers about a tenth of any one pathway - the median on the mmu STATegra
+* metabolomics job was 10.1%, and at 50% only 6 of its 140 pathways cleared the
+* coverage bar against 75 at 10%. Holding every job to the gene number hands a
+* compound-only user a blank canvas by default.
+*
+* Only the default moves. A saved visual setting is a user's own choice and is
+* left alone.
+*
+* @param {Boolean} hasGeneOmics
+* @param {Boolean} hasCompoundOmics
+* @returns {Number}
+*/
+var paNetworkDefaultMinFeatures = function (hasGeneOmics, hasCompoundOmics) {
+	return (!hasGeneOmics && hasCompoundOmics) ? 0.10 : 0.50;
+};
+
+/**
+* The "Shared biological features" edges, derived from the job's own matched
+* features.
+*
+* The install file ships an 's' edge for every pathway pair sharing a GENE, and
+* the view then recomputes the weight it draws from the matched genes AND
+* compounds. So the file only ever decided which pairs were allowed to exist,
+* and it decided it on genes: two pathways joined solely by their metabolites
+* could not be connected however much they shared. Deriving the pairs here
+* instead needs no reinstall, and is exactly equivalent for gene-based jobs -
+* a shipped pair with no shared MATCHED feature scores zero and was already
+* being dropped by the threshold below.
+*
+* Sorensen-Dice over the pooled matched features: S = 2|AnB| / (|A| + |B|).
+*
+* O(n^2) pair tests over the drawn nodes, each a set lookup per feature of the
+* smaller pathway. n is the node count after filtering (~600 at the very most,
+* usually far fewer), so this is milliseconds; sets are built once per pathway
+* rather than per pair.
+*
+* @param {Array} pathwayIDs the ids that became nodes
+* @param {Object} featuresByID id -> {genes: [...], compounds: [...]} matched
+* @param {Number} minSimilarity the "Min shared features" threshold
+* @returns {Array} cytoscape-style edge data, class 's'
+*/
+var paNetworkSharedFeatureEdges = function (pathwayIDs, featuresByID, minSimilarity) {
+	var edges = [], sets = {}, sizes = {}, drawable = [];
+
+	for (var i = 0; i < pathwayIDs.length; i++) {
+		var id = pathwayIDs[i], matched = featuresByID[id];
+		if (matched === undefined) {
+			continue;
+		}
+		/* Genes and compounds go into one set, prefixed so that a gene and a
+		   compound that happen to share an identifier are not counted as one
+		   shared feature. */
+		var pooled = {}, size = 0, feature;
+		for (var g = 0; g < matched.genes.length; g++) {
+			feature = "g:" + matched.genes[g];
+			if (pooled[feature] === undefined) { pooled[feature] = 1; size++; }
+		}
+		for (var c = 0; c < matched.compounds.length; c++) {
+			feature = "c:" + matched.compounds[c];
+			if (pooled[feature] === undefined) { pooled[feature] = 1; size++; }
+		}
+		/* A pathway with no matched feature has no similarity to anything and
+		   would put a zero in the Dice denominator. */
+		if (size > 0) {
+			sets[id] = pooled;
+			sizes[id] = size;
+			drawable.push(id);
+		}
+	}
+
+	for (var a = 0; a < drawable.length; a++) {
+		var source = drawable[a], sourceSet = sets[source];
+		for (var b = a + 1; b < drawable.length; b++) {
+			var target = drawable[b];
+			/* Walk the smaller of the two, look up in the larger. */
+			var small = sizes[source] <= sizes[target] ? sourceSet : sets[target];
+			var large = small === sourceSet ? sets[target] : sourceSet;
+			var shared = 0;
+			for (var key in small) {
+				if (large[key] !== undefined) {
+					shared++;
+				}
+			}
+			if (shared === 0) {
+				continue;
+			}
+			var similarity = 2 * shared / (sizes[source] + sizes[target]);
+			if (similarity >= minSimilarity) {
+				edges.push({id: source + "-" + target, source: source,
+				            target: target, weight: similarity, "class": "s"});
+			}
+		}
+	}
+	return edges;
+};
+
 function PA_Step3PathwayNetworkView(db = "KEGG") {
 	/**
 	* About this view: this view (PA_Step3PathwayNetworkView) is used to visualize
@@ -2068,6 +2265,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			visualOptions.colorBy = "classification";
 		}
 		var indexedPathways = this.getParent().getIndexedPathways(this.database);
+		var omicClasses = this.getParent().getOmicClasses();
 		var CLUSTERS = {};
 		var TOTAL_CLUSTERS = this.getModel().getClusterNumber()[this.database];
 
@@ -2160,7 +2358,16 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 			}
 
 			matchedPathway.setTotalFeatures(matchedPathway.getMatchedGenes().length + matchedPathway.getMatchedCompounds().length);
-			if (elem.data.total_features * visualOptions.minFeatures > matchedPathway.getTotalFeatures() || pValue > visualOptions.minPValue){
+			/* The denominator counts the feature classes the job actually
+			   submitted, NOT elem.data.total_features - which is the pathway's
+			   gene count, and made this line divide matched compounds by genes.
+			   null means no total is known for any submitted class, and the
+			   coverage filter is skipped rather than guessed at. */
+			var coverageTotal = paNetworkCoverageTotal(
+				{genes: matchedPathway.getTotalGenes(),
+				 compounds: matchedPathway.getTotalCompounds()},
+				elem.data, omicClasses);
+			if ((coverageTotal !== null && coverageTotal * visualOptions.minFeatures > matchedPathway.getTotalFeatures()) || pValue > visualOptions.minPValue){
 				ignoredPathways[elem.data.id] = true;
 				continue;
 			}
@@ -2243,51 +2450,60 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 		}
 		/********************************************************/
 		/* STEP 2. GENERATE EDGES                               */
+		/*                                                      */
+		/* The two modes come from different places. "Linked     */
+		/* biological processes" is a statement the DATABASE     */
+		/* makes about two pathways - a KEGG map link, a         */
+		/* Reactome hierarchy or embedded sub-pathway - so it is */
+		/* read from the installed file. "Shared biological      */
+		/* features" is a statement about THIS JOB's data, and   */
+		/* is derived from the matched features here: the file's */
+		/* 's' edges list the pairs that share a GENE, so two    */
+		/* pathways joined only by their metabolites could never */
+		/* be connected however much they shared. Equivalent for */
+		/* gene-based jobs - a shipped pair with no shared       */
+		/* MATCHED feature scores zero and was already dropped.  */
 		/********************************************************/
-		nElems = data.edges.length;
-		for (var i = nElems; i--;) {
-			elem = data.edges[i];
+		if (visualOptions.edgesClass === 's') {
+			var matchedFeatures = {}, drawnIDs = [];
+			for (var i = 0; i < nodesAux.length; i++) {
+				var drawnID = nodesAux[i].id;
+				drawnIDs.push(drawnID);
+				matchedFeatures[drawnID] = {
+					genes: indexedPathways[drawnID].getMatchedGenes(),
+					compounds: indexedPathways[drawnID].getMatchedCompounds()
+				};
+			}
+			var sharedEdges = paNetworkSharedFeatureEdges(
+				drawnIDs, matchedFeatures, visualOptions.minSharedFeatures);
+			for (var e = 0; e < sharedEdges.length; e++) {
+				sharedEdges[e].type = 'dotted';
+				sharedEdges[e].size = sharedEdges[e].weight;
+				edgesAux.push(sharedEdges[e]);
+			}
+		} else {
+			nElems = data.edges.length;
+			for (var i = nElems; i--;) {
+				elem = data.edges[i];
 
-			/********************************************************/
-			/* STEP 2.A.1 EXCLUDE ELEM IF:                           */
-			/*  - If elem is not an EDGE                            */
-			/*  - If source/target were ignored previously          */
-			/*  - If source/target are not valid pathways           */
-			/*  - If source/target are not visible                  */
-			/*  - Is source/target are special cases (e.g. mmu01100)*/
-			/********************************************************/
-			if ((elem.group !== "edges") || (elem.data.class !== visualOptions.edgesClass) ||
-			(ignoredPathways[elem.data.source] || ignoredPathways[elem.data.target]) ||
-			(indexedPathways[elem.data.source] === undefined || indexedPathways[elem.data.target] === undefined) ||
-			(!indexedPathways[elem.data.source].isVisible() || !indexedPathways[elem.data.target].isVisible()) ||
-			(elem.data.source === this.getModel().getOrganism() + "01100" || elem.data.target === this.getModel().getOrganism() + "01100")) {
-				continue;
-			}
+				/********************************************************/
+				/* STEP 2.A.1 EXCLUDE ELEM IF:                           */
+				/*  - If elem is not an EDGE                            */
+				/*  - If source/target were ignored previously          */
+				/*  - If source/target are not valid pathways           */
+				/*  - If source/target are not visible                  */
+				/*  - Is source/target are special cases (e.g. mmu01100)*/
+				/********************************************************/
+				if ((elem.group !== "edges") || (elem.data.class !== visualOptions.edgesClass) ||
+				(ignoredPathways[elem.data.source] || ignoredPathways[elem.data.target]) ||
+				(indexedPathways[elem.data.source] === undefined || indexedPathways[elem.data.target] === undefined) ||
+				(!indexedPathways[elem.data.source].isVisible() || !indexedPathways[elem.data.target].isVisible()) ||
+				(elem.data.source === this.getModel().getOrganism() + "01100" || elem.data.target === this.getModel().getOrganism() + "01100")) {
+					continue;
+				}
 
-			var similarity = 1;
-			if(visualOptions.edgesClass === 's'){
-				//CALCULATE THE Sorensen–Dice similarity coefficient (https://en.wikipedia.org/wiki/S%C3%B8rensen%E2%80%93Dice_coefficient)
-				var totalIntersection =  Array.intersect(indexedPathways[elem.data.target].getMatchedGenes(),indexedPathways[elem.data.source].getMatchedGenes()).length;
-				totalIntersection +=  Array.intersect(indexedPathways[elem.data.target].getMatchedCompounds(),indexedPathways[elem.data.source].getMatchedCompounds()).length;
-				//S(A,B) = 2 * |AnB| / |A| + |B|
-				//0 <= S(A,B) <= 1
-				similarity = 2 * totalIntersection / ((indexedPathways[elem.data.target].getMatchedGenes().length + indexedPathways[elem.data.target].getMatchedCompounds().length) + (indexedPathways[elem.data.source].getMatchedGenes().length + indexedPathways[elem.data.source].getMatchedCompounds().length));
-			}
-			/********************************************************/
-			/* STEP 2.A.2 EXCLUDE ELEM IF:                           */
-			/*  - If number of total shared features * N % is bigger than   */
-			/*    the sum of matched features in the pathway,       */
-			/********************************************************/
-			if (visualOptions.minSharedFeatures > similarity){
-				continue;
-			}
-			/********************************************************/
-			/* STEP 2.B GENERATE THE EDGE                               */
-			/********************************************************/
-			else {
-				// elem.data.label = '' + similarity;
 				elem.data.type = 'dotted';
-				elem.data.size = similarity;
+				elem.data.size = 1;
 				edgesAux.push(elem.data);
 			}
 		}
@@ -3611,7 +3827,7 @@ function PA_Step3PathwayNetworkView(db = "KEGG") {
 				'    <label for="background-layout-check_' + me.dbid + '">Calculate layout on background <span class="helpTip" style="float:right;" title="Run the layout on background, apply the new nodes position on stop (increases performance)."></span><span class="commentTip" style="padding-left:21px;">Increases performance.</span></label>' +
 				'  </div>'+
 				"  <h4>Node filtering options</h4>" +
-				'  <h5>Min features in pathway (<span id="minFeaturesValue_' + me.dbid + '">50</span>%)<span class="helpTip" style="float:right;" title="Min % of features (genes + compounds) of a pathway found at the input. Pathways with lower values will be excluded from the network. E.g. Using min=50%, if we find 80 features from the input data, at a Pathway that contains 200 features, the pathway will be excluded (80 < 100)."></span></h5>' +
+				'  <h5>Min features in pathway (<span id="minFeaturesValue_' + me.dbid + '">50</span>%)<span class="helpTip" style="float:right;" title="Min % of the features in a pathway that your input covers. Only the kinds of feature you submitted are counted, so a metabolomics job is measured against the compounds in the pathway and a transcriptomics job against its genes.<br><br>E.g. at min=50%, a pathway holding 200 countable features needs 100 of them in your input; with 80 it is excluded. The default starts at 50% for gene-based data and 10% for compound-only data, because a metabolomics platform covers far less of a pathway than an RNA-seq experiment does."></span></h5>' +
 				'  <div class="slider-ui" id="minFeaturesSlider_' + me.dbid + '"></div>' +
 				'  <h5>Min shared features (<span id="minSharedFeaturesValue_' + me.dbid + '">10</span>%)<span class="helpTip" style="float:right;" title="Min. % of features shared between 2 pathways (using the smaller pathway as reference). Edges showing a smaller relationship will be excluded.<br>E.g. Taking min=10%, Pathway A (60 features) and B (90 features), if shared features=5 the edge will be ignored (5 < Min(60,90) * 0.1)"></span></h5>' +
 				'  <div class="slider-ui" id="minSharedFeaturesSlider_' + me.dbid + '"></div>' +

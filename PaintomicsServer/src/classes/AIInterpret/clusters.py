@@ -222,11 +222,59 @@ def _fisher_min_pvalue(pw):
     return _best_pval(pw)
 
 
-def _load_total_features(organism):
-    """pathway id -> total feature count from the installed network file.
+def _omic_classes(job_instance):
+    """{genes, compounds}: the feature classes the job actually submitted.
 
-    Mirrors the client's "min features in pathway" filter. Missing file or
-    unexpected shape -> {} and the filter is simply not applied.
+    The coverage filter must divide by the pathway's features OF THESE CLASSES.
+    Dividing matched compounds by a gene count is not a ratio of anything, and
+    on a compound-only job it excludes every pathway.
+    """
+    try:
+        genes = bool(job_instance.getGeneBasedInputOmics())
+    except Exception:
+        genes = False
+    try:
+        compounds = bool(job_instance.getCompoundBasedInputOmics())
+    except Exception:
+        compounds = False
+    # No omic recorded at all: behave the way this has always behaved.
+    return {"genes": genes or not compounds, "compounds": compounds}
+
+
+def _coverage_total(pathway, installed_total, classes):
+    """The denominator of "min features in pathway" for one pathway.
+
+    `installed_total` is total_features from the network file, which counts
+    GENES only. It is both the fallback for jobs stored before the pathway
+    carried its own counts AND the gate: absent or zero is how a database says
+    it has never had a coverage filter (OmniPath ships no such field, every
+    MapMan bin carries 0), so a denominator is not invented from the job's own
+    counts there. Mirrors paNetworkCoverageTotal in PA_Step3Views.js. None
+    means "no coverage filter here".
+    """
+    if not isinstance(installed_total, (int, float)) or installed_total <= 0:
+        return None
+
+    total, known = 0, False
+    for wanted, attribute, fallback in (
+            ("genes", "totalGenes", installed_total),
+            ("compounds", "totalCompounds", None)):
+        if not classes.get(wanted):
+            continue
+        value = getattr(pathway, attribute, None)
+        if not isinstance(value, (int, float)):
+            value = fallback
+        if isinstance(value, (int, float)):
+            total += value
+            known = True
+    return total if known else None
+
+
+def _load_total_features(organism):
+    """pathway id -> total GENE count from the installed network file.
+
+    The fallback for jobs stored before Pathway carried its own counts. Missing
+    file or unexpected shape -> {} and the filter is simply not applied.
     """
     try:
         from src.conf.serverconf import KEGG_DATA_DIR
@@ -278,11 +326,17 @@ def select_network_nodes(job_instance, params=None, always_include=None):
     # network file is missing, min_features is silently ignored and pathways the
     # caller asked to exclude come back in -- a difference between what was asked
     # for and what happened, with nothing anywhere to say so. Say so.
+    #
+    # Still exactly true now that a pathway can carry its own counts: the
+    # installed total is the GATE in _coverage_total, so with no totals at all
+    # the filter is applied to nothing, whatever the pathways know about
+    # themselves.
     if p["min_features"] > 0 and not totals:
         logger.warning("[clusters] min_features=%s requested for organism %r but "
                        "no pathway network totals were found; the filter was NOT "
                        "applied and low-feature pathways remain in the universe",
                        p["min_features"], organism)
+    classes = _omic_classes(job_instance)
     forced = {str(i) for i in (always_include or [])}
     rows = []
     for pid, pw in matched.items():
@@ -298,7 +352,7 @@ def select_network_nodes(job_instance, params=None, always_include=None):
                 continue
             n_matched = len(getattr(pw, "matchedGenes", None) or []) + \
                 len(getattr(pw, "matchedCompounds", None) or [])
-            total = totals.get(pid)
+            total = _coverage_total(pw, totals.get(pid), classes)
             if total and total * p["min_features"] > n_matched:
                 continue
         rows.append((pid not in forced, pval, pid, pw))

@@ -2169,6 +2169,16 @@ class PathwayAcquisitionJob(Job):
                 pathwayInstance.addSignificanceValues(omicName, rel_val)
 
         if isValidPathway:
+            # How big the pathway is, by feature class. This is the only place
+            # that sees both full feature sets and builds the Pathway, and the
+            # sets arrive from getAllFeatureIDsByPathwayID already deduplicated.
+            # The network view needs them because the count it used instead --
+            # total_features in the installed pathways_network.json -- is the
+            # GENE count, so on a compound-only job it divided matched compounds
+            # by the pathway's genes and excluded everything.
+            pathwayInstance.setTotalGenes(len(genesInPathway or []))
+            pathwayInstance.setTotalCompounds(len(compoundsInPathway or []))
+
             self._setPerOmicSignificance(pathwayInstance, totalFeaturesByOmic,
                                          totalRelevantFeaturesByOmic, has_multi_cond)
             self._setCrossOmicSignificance(pathwayInstance, mappedRatiosByOmic, has_multi_cond)

@@ -36,6 +36,17 @@ class Pathway(Model):
         self.matchedGenes = []
         #METAGENES INFORMATION FOR EACH OMIC DATA TYPE
         self.metagenes = {}
+        # NOTE: totalGenes and totalCompounds -- how many features of each kind
+        # the pathway CONTAINS, not how many were matched -- are deliberately
+        # NOT declared here. The network view divides the matched count by them
+        # to get "min features in pathway", and a pathway stored before they
+        # existed must be distinguishable from one that genuinely has none, so
+        # that the client falls back to the installed gene count instead of
+        # filtering against a zero. Absent is that distinction: toBSON is
+        # self.__dict__, so an undeclared attribute is simply not a key, whereas
+        # a None would reach the client as the STRING "None" (DAO.adaptBSON).
+        # They are set in testPathwaySignificance, which is the only place that
+        # sees both of the pathway's full feature sets.
         #SIGNIFICANCE VALUES PER OMIC in format OmicName -> [[totalFeatures, totalRelevantFeatures, pValue], ...] (one per condition)
         self.significanceValues= {}
         self.globalOmicPvalues = {}
@@ -88,6 +99,19 @@ class Pathway(Model):
         self.matchedGenes.append(matchedGen.getID())
     def addMatchedGeneID(self, matchedGenID):
         self.matchedGenes.append(matchedGenID)
+
+    def setTotalGenes(self, totalGenes):
+        self.totalGenes = totalGenes
+    def getTotalGenes(self):
+        """The pathway's gene count, or None if this pathway was matched
+        before the count was recorded."""
+        return getattr(self, "totalGenes", None)
+
+    def setTotalCompounds(self, totalCompounds):
+        self.totalCompounds = totalCompounds
+    def getTotalCompounds(self):
+        """The pathway's compound count, or None if not recorded."""
+        return getattr(self, "totalCompounds", None)
 
     def setMetagenes(self, metagenes):
         self.metagenes= metagenes
