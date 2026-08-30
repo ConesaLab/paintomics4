@@ -205,7 +205,10 @@ PUBLISHED = {
     # upstream number is both the more informative marker and the one that
     # cannot drift from what is on disk.
     "js/libs/cytoscape/cytoscape.min.js": ("3.34.0", None),
-    "app.js": ("0.4", None),
+    # 0.5 since #113. index.html has said 0.5 since that merge while this table
+    # still said 0.4, so the gate that exists to catch an unbumped marker was
+    # itself red on master -- caught by run_all on this branch, fixed here.
+    "app.js": ("0.5", None),
 }
 
 _SRC = re.compile(r'src="([^"]+?)\?v=([0-9.]+)"')
