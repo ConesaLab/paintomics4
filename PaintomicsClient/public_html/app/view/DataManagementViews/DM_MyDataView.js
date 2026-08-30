@@ -1037,12 +1037,13 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		text.on("click", function() {
 			me.openFilePicker();
 		});
-		/* Ext.menu.Manager hides every open menu on a document mousedown. The
-		   caret's own mousedown must not reach it, or the click that follows
-		   would show the menu straight back; with that stopped, the click is a
-		   plain toggle on what is visible. */
-		caret.on("mousedown", function(e) {
-			e.stopPropagation();
+		/* Ext.menu.Manager hides every open menu on a document mousedown, so
+		   the click that follows a press on the caret would show its own menu
+		   straight back. The press records whether the menu was open -- the
+		   caret's listener runs before the document's -- and still propagates:
+		   combos and tooltips close on that same document mousedown. */
+		caret.on("mousedown", function() {
+			me.menuWasOpen = me.optionsMenu.isVisible();
 		});
 		caret.on("click", function() {
 			me.toggleOptionsMenu();
@@ -1075,12 +1076,23 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		var measure = function() {
 			var width = control.getWidth();
 			var padding = (width + 2) + "px";
-			if (width > 0 && field.inputEl.getStyle("padding-right") !== padding) {
-				field.inputEl.setStyle("padding-right", padding);
+			if (width > 0) {
+				if (field.inputEl.getStyle("padding-right") !== padding) {
+					field.inputEl.setStyle("padding-right", padding);
+				}
+				field.un("resize", measure);
 			}
 		};
 		measure();
 		field.on("resize", measure);
+		/* The web font can land after the first paint and change the width. */
+		if (document.fonts && document.fonts.ready) {
+			document.fonts.ready.then(function() {
+				if (!me.isDestroyed && field.rendered) {
+					measure();
+				}
+			});
+		}
 		me.setRequiredTag(me.requiredTag);
 		me.fieldDisabled = !!field.disabled;
 		me.applyBrowseState();
@@ -1096,7 +1108,9 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	},
 	toggleOptionsMenu: function() {
 		var menu = this.optionsMenu;
-		if (menu.isVisible()) {
+		var wasOpen = this.menuWasOpen;
+		this.menuWasOpen = false;
+		if (wasOpen || menu.isVisible()) {
 			menu.hide();
 		} else {
 			this.showOptionsMenu();

@@ -198,7 +198,7 @@ root {
      own fill - which is why the green and red button fills do not constrain
      the choice. */
   --pa-focus-ring: #0A84FF;
-  --pa-status-error: #C84D2F;   /* the refusal dialog's ink and the asterisk on a required row */
+  --pa-status-error-ink: #C84D2F;   /* the refusal dialog's ink and the asterisk on a required row; dark.css keeps --pa-status-error for fills */
 
   /* Surfaces and controls ----------------------------------------------------
      The app had three corner radii in play - 2px on cards, 3px on form fields,
@@ -2548,7 +2548,7 @@ body > .x-mask {
 	border-top-color: rgb(211, 96, 68);
 }
 #messageDialog.errorDialog h4 {
-	color: var(--pa-status-error, #C84D2F); /* was rgb(211,96,68) - 3.80:1 on the dialog's white fill */
+	color: var(--pa-status-error-ink, #C84D2F); /* was rgb(211,96,68) - 3.80:1 on the dialog's white fill */
 }
 #messageDialog.warningDialog {
 	border-top-color: #CB7505;
@@ -7581,7 +7581,7 @@ a.po-ghost-action > i.fa {
    the word "required" or "optional" that sat after each Browse button; the
    card's help column says once what the asterisk means. */
 .po-required-mark {
-  color: var(--pa-status-error, #C84D2F);
+  color: var(--pa-status-error-ink, #C84D2F);
   font-weight: 600;
 }
 /* A hair of air between the words and the mark, in the labels only: the
@@ -7669,8 +7669,13 @@ a.po-ghost-action > i.fa {
   cursor: default;
 }
 /* A row switched off by its panel (the miRNA associations row when the
-   correlation box is ticked) is disabled through the field, which Neptune
-   already fades to .3; the control's own fade would stack on top of it. */
+   correlation box is ticked) is disabled through the field. Neptune fades
+   that row's label and input to .3 but not the control, which sits beside
+   the input in the body cell: the control fades to the same .3 itself, and
+   its buttons' own .45 does not stack on top. */
+.x-item-disabled .po-browse {
+  opacity: 0.3;
+}
 .x-item-disabled .po-browse button:disabled {
   opacity: 1;
 }

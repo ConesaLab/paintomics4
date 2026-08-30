@@ -139,12 +139,15 @@ class TheTagIsOneComponentTest(unittest.TestCase):
 
     def test_the_mark_is_red_and_the_words_are_gone(self):
         css = read(MAIN_CSS)
-        self.assertRegex(css, r"\.po-required-mark\s*\{[^}]*var\(--pa-status-error")
-        # The token is named after the refusal dialog's ink, so the dialog
-        # reads it too -- one source of truth for the colour.
+        # dark.css keeps --pa-status-error for fills and --pa-status-error-ink
+        # for text; the mark is text, and the light sheet declares the ink.
+        self.assertRegex(css, r"--pa-status-error-ink:\s*#")
+        self.assertRegex(css, r"\.po-required-mark\s*\{[^}]*var\(--pa-status-error-ink")
+        # The token is the refusal dialog's ink, so the dialog reads it too --
+        # one source of truth for the colour.
         dialog = css[css.index("#messageDialog.errorDialog h4 {"):]
         dialog = dialog[:dialog.index("}")]
-        self.assertIn("var(--pa-status-error", dialog)
+        self.assertIn("var(--pa-status-error-ink", dialog)
         self.assertNotIn(".po-file-tag {", css)
         self.assertNotIn(".po-file-tag-required {", css)
 

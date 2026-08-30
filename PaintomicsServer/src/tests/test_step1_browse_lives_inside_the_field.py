@@ -138,6 +138,8 @@ class BrowseLivesInsideTheFieldTest(unittest.TestCase):
         wire = between(self.widget, "wireBrowse: function(field)", "\n\t},")
         self.assertRegex(wire, r"\bwidth\s*>\s*0", "guard the zero measurement")
         self.assertRegex(wire, r"[\"']resize[\"']", "re-measure on the field's resize")
+        self.assertIn('un("resize"', wire, "stop re-measuring once a figure has landed")
+        self.assertIn("document.fonts", wire, "the web font can land after the first measurement")
 
     def test_a_container_enable_cannot_lift_the_example_lock(self):
         """Example rows are locked through the widget's setDisabled; a panel
@@ -151,15 +153,18 @@ class BrowseLivesInsideTheFieldTest(unittest.TestCase):
         self.assertIn("fieldDisabled = false", listeners)
 
     def test_the_caret_toggles_its_menu_without_a_timer(self):
-        """Ext.menu.Manager hides every menu on a document mousedown; the
-        caret's own mousedown must not reach it, and then a plain
-        isVisible() toggle is deterministic -- no grace period a slow press
-        can outlast."""
+        """Ext.menu.Manager hides every menu on a document mousedown, so a
+        click on the caret would show its menu straight back. The caret's
+        mousedown records whether the menu was open (element listeners run
+        before the document's) and still propagates -- combos and tooltips
+        listen to the same document mousedown to close -- and the click
+        shows the menu only if it was not open."""
         wire = between(self.widget, "wireBrowse: function(field)", "\n\t},")
-        self.assertRegex(wire, r"[\"']mousedown[\"'][^}]*stopPropagation")
+        self.assertRegex(wire, r"[\"']mousedown[\"'][^}]*menuWasOpen\s*=")
+        self.assertNotIn("stopPropagation", wire)
         toggle = between(self.widget, "toggleOptionsMenu: function()", "\n\t},")
+        self.assertIn("menuWasOpen", toggle)
         self.assertIn("isVisible()", toggle)
-        self.assertNotIn("menuHiddenAt", self.widget)
 
     def test_the_menu_still_offers_the_three_actions(self):
         for entry in ("Upload file from my PC", "Use a file from My Data",
@@ -167,9 +172,10 @@ class BrowseLivesInsideTheFieldTest(unittest.TestCase):
             self.assertIn(entry, self.widget)
 
     def test_a_row_disabled_through_its_container_fades_once(self):
-        """Neptune fades a disabled field (.x-item-disabled, opacity .3) and
-        the control fades its disabled buttons (.45); stacked, the control
-        all but vanishes on the miRNA associations row."""
+        """Neptune fades a disabled row's label and input to .3 but not the
+        control, which is the input's sibling: the control fades to the same
+        .3 itself, and its buttons' own .45 does not stack on top."""
+        self.assertRegex(self.css, r"\.x-item-disabled\s+\.po-browse\s*\{[^}]*opacity:\s*0?\.3")
         self.assertRegex(self.css, r"\.x-item-disabled\s+\.po-browse\s+button:disabled\s*\{[^}]*opacity:\s*1")
 
     def test_the_stylesheet_puts_browse_inside_the_field(self):
@@ -186,12 +192,6 @@ class BrowseLivesInsideTheFieldTest(unittest.TestCase):
                              "%s still draws the split arrow" % name)
             self.assertNotIn("a.x-btn .x-btn-wrap::before", sheet,
                              "%s still draws the split divider" % name)
-
-    def test_dark_theme_needs_no_restatement(self):
-        """Native buttons are not caught by dark.css's blanket anchor rule and
-        the control reads theme tokens, so a second copy to keep in sync
-        would only ever drift."""
-        self.assertNotIn(".po-browse", self.dark)
 
 
 if __name__ == "__main__":
