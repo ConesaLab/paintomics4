@@ -132,6 +132,14 @@ function PA_Step2JobView() {
 
 		var dataDistribution = me.getModel().getDataDistributionSummaries(), aux = null;
 
+		/* The per-omic cards are collected apart from the panel array and
+		   inserted below, straight after "Multiple databases used". Pushed
+		   inline they always ended up last, because every config box that
+		   follows is spliced in at a fixed index in front of them -- so the
+		   databases card's own "The diagrams below..." pointed past the
+		   cluster and class-activity boxes at cards ~1600px further down. */
+		var omicCards = [];
+
 		var omicSummaryPanelComponents = [{
 			xtype: 'box',
 			cls: "contentbox omicSummaryBox", minHeight: 240,
@@ -275,7 +283,7 @@ function PA_Step2JobView() {
 					items: paClassActivityItems(me.getModel(), omicName)
 				});
 			}
-			omicSummaryPanelComponents.push(new PA_OmicSummaryPanel(omicName, dataDistribution[omicName], isCompoundBased).getComponent());
+			omicCards.push(new PA_OmicSummaryPanel(omicName, dataDistribution[omicName], isCompoundBased).getComponent());
 		}
 
 		if (numberOfClusters.length) {
@@ -407,6 +415,20 @@ function PA_Step2JobView() {
 				}]
 			}, {xtype: 'container', cls: 'paLayoutPad', html:'<div style="display: none;"></div>'});
 		}
+
+		/* Straight after the databases card and the layout pad that follows
+		   it, so the cards start on a fresh row of the column layout. With a
+		   single database there is no such card and they follow the two
+		   summary boxes instead. Located by id, not by a counted index: what
+		   sits in front depends on which of the config boxes this job needs. */
+		var cardsAt = 2;
+		for (var i = 0; i < omicSummaryPanelComponents.length; i++) {
+			if (omicSummaryPanelComponents[i].id === "dbs_message") {
+				cardsAt = i + 2;
+				break;
+			}
+		}
+		omicSummaryPanelComponents.splice.apply(omicSummaryPanelComponents, [cardsAt, 0].concat(omicCards));
 
 		if (me.items.length > 0) {
 			compoundsPanelHTML = me.renderCompoundsPanel();
