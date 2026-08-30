@@ -842,6 +842,35 @@ function extJSErrorHandler(form, responseObj) {
     if (debugging === true)
         debugger
 
+    /* ExtJS runs form.isValid() again inside submit(), and when one of its own
+       validators refuses -- allowBlank, maxLength, a validator function -- it
+       calls this handler with failureType "client" and no response at all. That
+       used to be reported as "Oops..Internal error! Unable to parse the error
+       message.", which reads as a server fault. Nothing reached the server:
+       name the field and what it wants, the way checkForm()'s refusal does. */
+    if (responseObj && responseObj.failureType === Ext.form.action.Action.CLIENT_INVALID) {
+        var invalid = form.getFields().findBy(function (field) {
+            return !field.isValid() && field.isVisible(true);
+        }) || form.getFields().findBy(function (field) {
+            return !field.isValid();
+        });
+        var label = "";
+        var reason = "Please check the form errors.";
+        if (invalid) {
+            label = String(invalid.fieldLabel || "");
+            if (typeof plainFieldText === "function") {
+                label = plainFieldText(label);
+            }
+            label = label.replace(/\s*:\s*$/, "");
+            reason = ((typeof fieldErrorText === "function") ? fieldErrorText(invalid) : "") || "Please check this field.";
+        }
+        showErrorMessage("Invalid Form. </br>" +
+            (label ? " <b>" + Ext.String.htmlEncode(label) + "</b>: " : " ") +
+            Ext.String.htmlEncode(reason),
+            {height: 150, width: 400, showReportButton: true});
+        return;
+    }
+
     var err;
     try {
         err = JSON.parse(responseObj.response.responseText);

@@ -2569,6 +2569,9 @@ function OmicSubmittingPanel(nElem, options) {
 						}, {
 							xtype: 'combo', itemId: "fileTypeSelector",
 							fieldLabel: 'File Type', emptyText: 'Type or choose the file type',
+							/* A sixteen-row static list: the default remote mode re-fetched
+							   file_types.json on every dropdown open and every typed query. */
+							queryMode: 'local',
 							name: this.namePrefix + '_file_type',
 							hidden: this.omicName !== "",
 							displayField: 'name', valueField: 'name',
@@ -2596,11 +2599,21 @@ function OmicSubmittingPanel(nElem, options) {
 						}, {
 							xtype: 'combo', itemId: "relevantFileTypeSelector",
 							fieldLabel: 'File Type', emptyText: 'Type or choose the file type',
+							queryMode: 'local',
 							name: this.namePrefix + '_relevant_file_type',
 							hidden: this.omicName !== "",
 							displayField: 'name', valueField: 'name',
 							editable: true, allowBlank: true,
 							value: (this.relevantFileType !== null) ? this.relevantFileType : null,
+							/* ExtJS validates on blur as well as on submit. With blank allowed
+							   (the file is optional), its validation would clear the mark
+							   isValid() puts on this combo the moment the combo was focused and
+							   left, while the panel still refused. Same rule as isValid(): a
+							   type is needed exactly when a relevant file is attached. */
+							validator: function(value) {
+								var file = me.getComponent().queryById("secondaryFileSelector");
+								return (file && file.getValue() !== "" && Ext.isEmpty(value)) ? "Please, specify a File type." : true;
+							},
 							store: Ext.create('Ext.data.ArrayStore', {
 								fields: ['name', 'type'],
 								autoLoad: true,
@@ -2705,7 +2718,10 @@ function OmicSubmittingPanel(nElem, options) {
 					return true;
 				}
 
-				if (this.queryById("omicNameField").getValue() === "") {
+				/* Ext.isEmpty, not === "": an omic name typed and then deleted leaves
+				   the combo's value null, which === "" let through and ExtJS's own
+				   allowBlank then refused with no field named. */
+				if (Ext.isEmpty(this.queryById("omicNameField").getValue())) {
 					valid = false;
 					this.queryById("omicNameField").markInvalid("Please, specify a Omic Name.");
 				}
