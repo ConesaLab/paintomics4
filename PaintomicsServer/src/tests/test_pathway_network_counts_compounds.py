@@ -346,6 +346,34 @@ class CoverageDenominatorTest(unittest.TestCase):
         total = self.coverage({}, {}, {"genes": False, "compounds": True})
         self.assertIsNone(total)
 
+    def test_a_database_that_never_had_the_filter_does_not_gain_one(self):
+        """The regression this guards, and the reason the installed node is
+        the gate rather than just a fallback.
+
+        `total_features * minFeatures > matched` can never be true when
+        total_features is absent (NaN) or zero, so those databases have no
+        coverage filter and never have had one: OmniPath writes no such field,
+        all 70 ath MapMan bins carry 0 (the installer counts only 20-character
+        gene ids), and so do 220 of mmu's 584 KEGG maps. The job's own counts
+        are a real number for every one of them, so using them unconditionally
+        would switch a 50% filter on for the first time -- on ath MapMan bins
+        holding 21,446 genes, which is a blank canvas again."""
+        mapman = self.coverage({"genes": 21446, "compounds": 0},
+                               {"total_features": 0},
+                               {"genes": True, "compounds": False})
+        self.assertIsNone(mapman, "MapMan has never had a coverage filter")
+
+        omnipath = self.coverage({"genes": 20, "compounds": 0}, {},
+                                 {"genes": True, "compounds": False})
+        self.assertIsNone(omnipath, "OmniPath ships no total_features at all")
+
+        kegg_without_genes = self.coverage({"genes": 0, "compounds": 128},
+                                           {"total_features": 0},
+                                           {"genes": False, "compounds": True})
+        self.assertIsNone(kegg_without_genes,
+                          "a KEGG map with no genes in pathway2gene.list was "
+                          "never filtered on coverage either")
+
     def test_zero_is_a_known_answer_not_a_missing_one(self):
         """A pathway with no compounds in a compound-only job is genuinely
         uncoverable, but 0 * anything is 0 so it can never be excluded."""
@@ -375,6 +403,36 @@ class DefaultMinFeaturesTest(unittest.TestCase):
 
     def test_a_job_with_no_omic_at_all_keeps_the_shipped_default(self):
         self.assertEqual(0.5, self.defaults(False, False))
+
+
+class OmicClassFallbackTest(unittest.TestCase):
+    """A job recording neither class is read as gene-based on BOTH sides.
+
+    clusters.py says so outright (`genes or not compounds`). The client used to
+    report {genes: false, compounds: false}, which leaves the denominator
+    unknown for every class, switches the coverage filter off, and still shows
+    the slider at 50% -- a control that visibly does nothing."""
+
+    def test_the_server_reads_a_job_with_no_omic_as_gene_based(self):
+        from src.classes.AIInterpret import clusters
+
+        class _Job(object):
+            def getGeneBasedInputOmics(self):
+                return []
+
+            def getCompoundBasedInputOmics(self):
+                return []
+
+        self.assertEqual({"genes": True, "compounds": False},
+                         clusters._omic_classes(_Job()))
+
+    def test_the_client_agrees(self):
+        with open(STEP3_VIEWS, "r", encoding="utf-8") as handle:
+            source = handle.read()
+        start = source.index("this.omicClasses = {\n\t\t\t/*")
+        window = source[start:start + 900]
+        self.assertIn("|| !hasCompoundOmics", window,
+                      "the client must fall back to genes the way the server does")
 
 
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")
@@ -462,6 +520,19 @@ class ClientWiringTest(unittest.TestCase):
                          source,
                          "the gene-only denominator must be gone from the filter")
         self.assertIn("paNetworkCoverageTotal(", source)
+
+    def test_the_cache_marker_was_bumped_with_app_js(self):
+        """PA_JOB_CACHE_SCHEMA went 2 -> 3 so a browser holding a job model
+        without the counts discards it. app.js is the ONE file loaded with a
+        static ?v= (the view/model files go through $.ajax dataType:"script",
+        which cache-busts itself), so without the bump a returning browser
+        keeps the old app.js, keeps schema 2, keeps its stored model, and the
+        fix never reaches it."""
+        index = os.path.join(CLIENT, "index.html")
+        with open(index, "r", encoding="utf-8") as handle:
+            markup = handle.read()
+        self.assertNotIn('src="app.js?v=0.4"', markup,
+                         "app.js changed (PA_JOB_CACHE_SCHEMA) but its ?v= did not")
 
     def test_the_help_no_longer_promises_something_it_does_not_do(self):
         with open(STEP3_VIEWS, "r", encoding="utf-8") as handle:

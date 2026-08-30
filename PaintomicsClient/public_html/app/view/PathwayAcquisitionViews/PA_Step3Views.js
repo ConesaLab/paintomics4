@@ -148,9 +148,15 @@ function PA_Step3JobView() {
 		   coverage filter divides by the pathway's features OF THESE CLASSES,
 		   and starts at a threshold these classes can reach - see
 		   paNetworkCoverageTotal and paNetworkDefaultMinFeatures. */
+		var hasCompoundOmics = (this.getModel().getCompoundBasedInputOmics() || []).length > 0;
 		this.omicClasses = {
-			genes: (this.getModel().getGeneBasedInputOmics() || []).length > 0,
-			compounds: (this.getModel().getCompoundBasedInputOmics() || []).length > 0
+			/* `|| !hasCompoundOmics` mirrors clusters.py::_omic_classes: a job
+			   that records no omic at all is read as gene-based, which is what
+			   every such job has always been treated as. Without it the
+			   denominator would be unknown for both classes, the filter would
+			   switch itself off, and the slider would still read 50%. */
+			genes: (this.getModel().getGeneBasedInputOmics() || []).length > 0 || !hasCompoundOmics,
+			compounds: hasCompoundOmics
 		};
 
 		/********************************************************/
@@ -432,9 +438,9 @@ function PA_Step3JobView() {
 			this.visualOptions[db][propertyName] = value;
 		}
 	};
-	/* Which feature classes the job measured, {genes, compounds}. Set in
-	   loadModel; defaults to genes-only so a view used before a model is
-	   attached behaves the way it always has. */
+	/* Which feature classes the job measured, {genes, compounds}. Always
+	   replaced by loadModel; this initialiser only keeps the field defined for
+	   a view read before a model is attached. */
 	this.omicClasses = {genes: true, compounds: false};
 	this.getOmicClasses = function() {
 		return this.omicClasses;
@@ -2048,22 +2054,34 @@ function paNetworkLabelInk() {
 * gene-based job divides by the pathway's genes, exactly as it always has; a
 * metabolomics job divides by its compounds; a job with both divides by both.
 *
-* Three sources, in order of authority:
+* The installed node still decides WHETHER the filter applies; the job's counts
+* only correct WHAT it divides by. `total_features` absent or zero is how a
+* database says it has never had a coverage filter, because `total_features *
+* minFeatures > matched` could not be true either way: OmniPath ships no such
+* field at all, every one of MapMan's 70 bins carries 0 (the installer counts
+* only 20-character gene ids), and so do 220 of mmu's 584 KEGG maps. Handing
+* those a denominator out of the job's own counts would switch a 50% filter on
+* for the first time - on ath MapMan bins holding 21,446 genes, and on OmniPath
+* pathways with a median of 20 - which is this bug again, moved to another
+* database.
+*
+* Two sources for the denominator, in order of authority:
 *  1. the job's own pathway, which the server fills from the full feature sets
 *     it already holds while matching - correct on every existing install;
-*  2. the installed network node, for jobs stored before (1) existed;
-*  3. nothing, which returns null and disables the filter rather than
-*     inventing a denominator. OmniPath ships no totals at all, and hiding a
-*     whole network over a number nobody knows is the worse failure.
+*  2. the installed network node, for jobs stored before (1) existed.
 *
 * @param {Object} pathwayCounts {genes, compounds} from the job's pathway
 * @param {Object} nodeData the installed node's data (total_features is GENES)
 * @param {Object} omicClasses {genes, compounds} - what the job submitted
-* @returns {Number|null}
+* @returns {Number|null} null means "no coverage filter here"
 */
 var paNetworkCoverageTotal = function (pathwayCounts, nodeData, omicClasses) {
 	var counts = pathwayCounts || {}, node = nodeData || {};
 	var total = 0, known = false;
+
+	if (!(typeof node.total_features === "number" && node.total_features > 0)) {
+		return null;
+	}
 
 	var take = function (primary, fallback) {
 		/* 0 is a real answer: a pathway with no compounds cannot be covered by
@@ -2082,6 +2100,12 @@ var paNetworkCoverageTotal = function (pathwayCounts, nodeData, omicClasses) {
 	if (omicClasses.compounds) {
 		take(counts.compounds, node.total_compounds);
 	}
+	/* A submitted class whose total is unknown - a job stored before the counts
+	   existed, on a species not yet reinstalled - contributes nothing to the
+	   denominator while its matches still count in the numerator, so coverage
+	   can read high. That is precisely what this filter did for every job
+	   before this change, and reproducing it is the point: an old job must
+	   draw the network it drew yesterday. */
 	return known ? total : null;
 };
 

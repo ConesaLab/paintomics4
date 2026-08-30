@@ -245,10 +245,16 @@ def _coverage_total(pathway, installed_total, classes):
     """The denominator of "min features in pathway" for one pathway.
 
     `installed_total` is total_features from the network file, which counts
-    GENES only, and is the fallback for jobs stored before the pathway carried
-    its own counts. None means no total is known for any submitted class, and
-    the filter is skipped rather than guessed at.
+    GENES only. It is both the fallback for jobs stored before the pathway
+    carried its own counts AND the gate: absent or zero is how a database says
+    it has never had a coverage filter (OmniPath ships no such field, every
+    MapMan bin carries 0), so a denominator is not invented from the job's own
+    counts there. Mirrors paNetworkCoverageTotal in PA_Step3Views.js. None
+    means "no coverage filter here".
     """
+    if not isinstance(installed_total, (int, float)) or installed_total <= 0:
+        return None
+
     total, known = 0, False
     for wanted, attribute, fallback in (
             ("genes", "totalGenes", installed_total),
@@ -320,6 +326,11 @@ def select_network_nodes(job_instance, params=None, always_include=None):
     # network file is missing, min_features is silently ignored and pathways the
     # caller asked to exclude come back in -- a difference between what was asked
     # for and what happened, with nothing anywhere to say so. Say so.
+    #
+    # Still exactly true now that a pathway can carry its own counts: the
+    # installed total is the GATE in _coverage_total, so with no totals at all
+    # the filter is applied to nothing, whatever the pathways know about
+    # themselves.
     if p["min_features"] > 0 and not totals:
         logger.warning("[clusters] min_features=%s requested for organism %r but "
                        "no pathway network totals were found; the filter was NOT "
