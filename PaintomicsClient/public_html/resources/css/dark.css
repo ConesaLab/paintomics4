@@ -1553,8 +1553,6 @@
 	border-color: var(--pa-border-control-hover);
 }
 [data-theme="dark"] .omicbox a.x-btn .x-btn-inner { color: var(--pa-btn-default-ink); }
-[data-theme="dark"] .omicbox a.x-btn .x-btn-wrap::after { border-top-color: var(--pa-ink-label); }
-[data-theme="dark"] .omicbox a.x-btn .x-btn-wrap::before { border-left-color: var(--pa-border-control); }
 [data-theme="dark"] .fieldBox,
 [data-theme="dark"] .container { background-color: var(--pa-surface); }
 [data-theme="dark"] .dragHerePanel {
