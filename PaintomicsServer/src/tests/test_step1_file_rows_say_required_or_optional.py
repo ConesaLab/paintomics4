@@ -11,6 +11,15 @@ somebody forgot, not a row with nothing to say, so this test refuses it. The
 rows whose requiredness follows a choice made elsewhere on the card flip it
 with setRequiredTag() from the same expression the validator reads.
 
+How it is shown: the convention every form reader already knows. A required
+row carries a red asterisk after its label ("Data file *:") and an optional
+row carries nothing -- the words "required" / "optional" that used to sit
+after the Browse button are gone, and the card's help column says once what
+the asterisk means. The label template renders the mark (afterLabelTextTpl),
+so the label text the refusal dialog quotes stays the plain words; the mark
+itself carries the word "required" (role="img") for readers that cannot see
+it.
+
 Usage:
     cd PaintomicsServer
     python -m src.tests.test_step1_file_rows_say_required_or_optional
@@ -94,20 +103,44 @@ class EveryFileRowIsTaggedTest(unittest.TestCase):
         self.assertIn('queryById("secondaryAssociationFileSelector").setRequiredTag(corrEnabled ? "optional" : "required")', handler)
         self.assertIn('queryById("rnaseqauxFileSelector").setRequiredTag(corrEnabled ? "required" : "optional")', handler)
 
+    def test_the_help_column_says_once_what_the_asterisk_means(self):
+        """One legend per form, next to the rows, instead of a word per row."""
+        self.assertIn('po-required-mark', self.source)
+        self.assertRegex(self.source, r"marks? (the )?files? (the job|this job|a job) needs",
+                         "the help text must explain the asterisk")
+
 
 class TheTagIsOneComponentTest(unittest.TestCase):
 
-    def test_the_selector_renders_and_updates_the_tag(self):
+    def test_the_selector_renders_the_mark_in_its_label(self):
         source = read(MY_DATA_VIEW)
         self.assertIn("requiredTag: null", source)
-        self.assertIn("buildRequiredTag: function(tag)", source)
+        self.assertIn("afterLabelTextTpl", source)
         self.assertIn("setRequiredTag: function(tag)", source)
-        self.assertIn('itemId: "requiredTag"', source)
+        # The mark is part of the label, not a box after the Browse button.
+        self.assertIn('class="po-required-mark" role="img" aria-label="required">*<', source)
+        # After the words and before the colon: ExtJS emits the template after
+        # its separator, so the separator is blank and the colon is in the
+        # template.
+        self.assertIn('labelSeparator: "",', source)
+        self.assertIn("'</span>:',", source)
+        self.assertNotIn('itemId: "requiredTag"', source)
+        self.assertNotIn("buildRequiredTag", source)
+        self.assertNotIn("po-file-tag", source)
 
-    def test_required_carries_the_weight_in_css(self):
+    def test_flipping_the_tag_shows_or_hides_the_mark(self):
+        """The conditional miRNA rows flip after render; the mark is always in
+        the label and the setter only shows or hides it."""
+        source = read(MY_DATA_VIEW)
+        setter = source[source.index("setRequiredTag: function(tag)"):]
+        setter = setter[:setter.index("\n\t},") + 4]
+        self.assertIn('setDisplayed(tag === "required")', setter)
+
+    def test_the_mark_is_red_and_the_words_are_gone(self):
         css = read(MAIN_CSS)
-        self.assertIn(".po-file-tag {", css)
-        self.assertIn(".po-file-tag-required {", css)
+        self.assertRegex(css, r"\.po-required-mark\s*\{[^}]*var\(--pa-status-error")
+        self.assertNotIn(".po-file-tag {", css)
+        self.assertNotIn(".po-file-tag-required {", css)
 
 
 if __name__ == "__main__":

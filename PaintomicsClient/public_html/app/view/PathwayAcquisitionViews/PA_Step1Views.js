@@ -382,8 +382,9 @@ var STATEGRA_EXPERIMENT_DESIGN = "STATegra multi-omics time-course experiment in
 * example submissions never reach saveFiles -- the servlets resolve their files
 * from the manifest and ignore the form entirely.
 *
-* setDisabled here disables the Browse button, which is the widget's whole
-* interactive surface; the text stays selectable so it can be read and copied.
+* setDisabled here greys out the Browse control inside the field and takes it
+* out of the tab order -- the widget's whole interactive surface; the field
+* itself stays enabled so the text can be read, copied and still posted.
 */
 function setExampleLabel(field, text) {
 	if (!field) { return; }
@@ -2302,7 +2303,7 @@ function PA_Step1JobView() {
 							margin: "10 20 10 10",
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" aria-hidden="true">*</span> marks the files the job needs; the rest are optional.</p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					
