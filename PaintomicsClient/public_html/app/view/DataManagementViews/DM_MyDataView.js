@@ -945,18 +945,27 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		this.queryById("visiblePathField").setRawValue("");
 		this.queryById("originField").setValue("");
 	},
-	/* Greys the in-field control out and takes it out of the tab order. The
+	/* Locks the in-field control: greyed out and out of the tab order. The
 	   read-only path field itself stays enabled: a disabled input is dropped
 	   from the form post, and its text should stay readable. Remembered so a
 	   call made before the field is rendered (the example scenarios disable
 	   their rows straight away) still lands once wireBrowse() runs. */
 	setDisabled: function(disabled) {
-		var field = this.queryById("visiblePathField");
-		var buttons = (field && field.rendered) ? field.bodyEl.query(".po-browse button") : [];
+		this.browseLocked = !!disabled;
+		return this.applyBrowseState();
+	},
+	/* Two doors, one state. The widget's own lock (example rows, through
+	   setDisabled) and the path field's own disabled state (a panel switching
+	   the row off through the field or its container) each grey the control
+	   out; either is enough, and a container enable cascade -- the miRNA
+	   correlation box, the Region-based own-associations toggle -- cannot lift
+	   the widget's lock, which is how example rows once came back to life. */
+	applyBrowseState: function() {
+		var off = !!(this.browseLocked || this.fieldDisabled);
+		var buttons = this.browseButtons || [];
 		var i;
-		this.browseDisabled = !!disabled;
 		for (i = 0; i < buttons.length; i++) {
-			buttons[i].disabled = this.browseDisabled;
+			buttons[i].disabled = off;
 		}
 		return this;
 	},
@@ -1021,31 +1030,36 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		if (!control || !text || !caret) {
 			return;
 		}
+		me.browseCaret = caret;
+		me.browseButtons = [text.dom, caret.dom];
 		text.dom.textContent = me.buttonText;
 		caret.set({"aria-label": "More options for " + me.rowName()});
 		text.on("click", function() {
 			me.openFilePicker();
 		});
+		/* Ext.menu.Manager hides every open menu on a document mousedown. The
+		   caret's own mousedown must not reach it, or the click that follows
+		   would show the menu straight back; with that stopped, the click is a
+		   plain toggle on what is visible. */
+		caret.on("mousedown", function(e) {
+			e.stopPropagation();
+		});
 		caret.on("click", function() {
-			me.toggleOptionsMenu(caret);
+			me.toggleOptionsMenu();
 		});
 		caret.on("keydown", function(e) {
 			if (e.getKey() === e.DOWN) {
 				e.stopEvent();
-				me.showOptionsMenu(caret);
+				me.showOptionsMenu();
 			}
 		});
-		/* Ext.menu.Manager hides every open menu on the mousedown that precedes
-		   a click on the caret; without remembering when that happened, the
-		   click would show the menu straight back. The split button kept the
-		   same 250 ms grace, and gave focus back to itself when its menu hid. */
+		/* The split button gave focus back to itself when its menu hid. */
 		me.optionsMenu.on({
 			show: function() {
 				caret.set({"aria-expanded": "true"});
 			},
 			hide: function() {
 				caret.set({"aria-expanded": "false"});
-				me.menuHiddenAt = Ext.Date.now();
 				if (!caret.dom.disabled) {
 					caret.focus();
 				}
@@ -1057,33 +1071,35 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		   a hidden container (the Region-based panel's own-associations rows)
 		   measures 0 here, so a zero is never written, and the field's resize
 		   -- which fires when that container is shown and laid out -- measures
-		   again. */
+		   again; an unchanged figure is not written back. */
 		var measure = function() {
-			if (control.getWidth() > 0) {
-				field.inputEl.setStyle("padding-right", (control.getWidth() + 2) + "px");
+			var width = control.getWidth();
+			var padding = (width + 2) + "px";
+			if (width > 0 && field.inputEl.getStyle("padding-right") !== padding) {
+				field.inputEl.setStyle("padding-right", padding);
 			}
 		};
 		measure();
 		field.on("resize", measure);
 		me.setRequiredTag(me.requiredTag);
-		me.setDisabled(me.browseDisabled);
+		me.fieldDisabled = !!field.disabled;
+		me.applyBrowseState();
 	},
 	/* The field label as words, for the caret's name: four rows on one card
 	   would otherwise all announce as "More options". Six shipped labels carry
-	   a <br>, which JobController's plainFieldText strips. */
+	   a <br>, so the markup comes out. */
 	rowName: function() {
-		var label = String(this.fieldLabel);
-		return (typeof plainFieldText === "function") ? plainFieldText(label) : label;
+		return String(this.fieldLabel).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").replace(/^ | $/g, "");
 	},
-	showOptionsMenu: function(caret) {
-		this.optionsMenu.showBy(caret, "tr-br?");
+	showOptionsMenu: function() {
+		this.optionsMenu.showBy(this.browseCaret, "tr-br?");
 	},
-	toggleOptionsMenu: function(caret) {
+	toggleOptionsMenu: function() {
 		var menu = this.optionsMenu;
 		if (menu.isVisible()) {
 			menu.hide();
-		} else if (Ext.Date.now() - (this.menuHiddenAt || 0) > 250) {
-			this.showOptionsMenu(caret);
+		} else {
+			this.showOptionsMenu();
 		}
 	},
 	beforeDestroy: function() {
@@ -1174,12 +1190,15 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 					/* Panels disable a row through the field or its container
 					   (`down('container').setDisabled(...)`), and the container
 					   cascade reaches form fields and buttons only. The control
-					   follows the field's own events, so every door ends here. */
+					   follows the field's own events -- as its own flag, so the
+					   enable that follows cannot lift a lock set through setDisabled. */
 					disable: function() {
-						me.setDisabled(true);
+						me.fieldDisabled = true;
+						me.applyBrowseState();
 					},
 					enable: function() {
-						me.setDisabled(false);
+						me.fieldDisabled = false;
+						me.applyBrowseState();
 					}
 				},
 				style: {

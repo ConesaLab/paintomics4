@@ -80,7 +80,7 @@ def path_field_config(widget):
     return between(widget, 'itemId: "visiblePathField"', "xtype: 'filefield'")
 
 
-class BrowseLivesInsideTheField(unittest.TestCase):
+class BrowseLivesInsideTheFieldTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -136,8 +136,30 @@ class BrowseLivesInsideTheField(unittest.TestCase):
         under Browse once the row is shown. Measure only a drawn control and
         again when the field is laid out."""
         wire = between(self.widget, "wireBrowse: function(field)", "\n\t},")
-        self.assertRegex(wire, r"getWidth\(\)[^;]*>\s*0|>\s*0[^;]*getWidth", "guard the zero measurement")
+        self.assertRegex(wire, r"\bwidth\s*>\s*0", "guard the zero measurement")
         self.assertRegex(wire, r"[\"']resize[\"']", "re-measure on the field's resize")
+
+    def test_a_container_enable_cannot_lift_the_example_lock(self):
+        """Example rows are locked through the widget's setDisabled; a panel
+        that disables and re-enables the row's container (the miRNA
+        correlation box, the Region-based own-associations toggle) fires the
+        field's enable, which must not unlock them. Two flags, one state."""
+        self.assertIn("applyBrowseState: function()", self.widget)
+        self.assertRegex(self.widget, r"browseLocked\s*\|\|\s*this\.fieldDisabled")
+        listeners = between(self.field, "listeners: {", "\n\t\t\t\t},")
+        self.assertNotIn("setDisabled(false)", listeners)
+        self.assertIn("fieldDisabled = false", listeners)
+
+    def test_the_caret_toggles_its_menu_without_a_timer(self):
+        """Ext.menu.Manager hides every menu on a document mousedown; the
+        caret's own mousedown must not reach it, and then a plain
+        isVisible() toggle is deterministic -- no grace period a slow press
+        can outlast."""
+        wire = between(self.widget, "wireBrowse: function(field)", "\n\t},")
+        self.assertRegex(wire, r"[\"']mousedown[\"'][^}]*stopPropagation")
+        toggle = between(self.widget, "toggleOptionsMenu: function()", "\n\t},")
+        self.assertIn("isVisible()", toggle)
+        self.assertNotIn("menuHiddenAt", self.widget)
 
     def test_the_menu_still_offers_the_three_actions(self):
         for entry in ("Upload file from my PC", "Use a file from My Data",

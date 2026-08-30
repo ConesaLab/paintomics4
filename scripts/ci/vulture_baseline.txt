@@ -253,7 +253,6 @@ PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'React
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'TranslatedSource' (60% confidence)
 PaintomicsServer/src/tests/test_quote_source_covers_full_text.py: unused class 'QuoteSourceCoversFullText' (60% confidence)
 PaintomicsServer/src/tests/test_reactome_matches_get_symbol_names.py: unused class 'ReactomeMatchesGetSymbolNames' (60% confidence)
-PaintomicsServer/src/tests/test_step1_browse_lives_inside_the_field.py: unused class 'BrowseLivesInsideTheField' (60% confidence)
 PaintomicsServer/src/tests/test_svg_export_is_sandboxed.py: unused method 'testEntityDefinitionsAreRefused' (60% confidence)
 PaintomicsServer/src/tests/test_svg_export_is_sandboxed.py: unused method 'testLegitimateExportStillRenders' (60% confidence)
 PaintomicsServer/src/tests/test_svg_export_is_sandboxed.py: unused method 'testLocalFileIsNotReadIntoTheRender' (60% confidence)
