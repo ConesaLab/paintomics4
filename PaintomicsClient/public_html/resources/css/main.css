@@ -6361,6 +6361,15 @@ div.lateralOptionsPanel-header .toolbarOption.downloadTool:hover {
 	   At 24 this one sat 14px further from the card above it than any other
 	   pair on the page. */
 	margin: 10px 0 0;
+	/* The flex row above is gated on `:has()` and promises that a browser
+	   without it "gets exactly the previous behaviour" - the odd/even floats.
+	   This section used to be structurally immune to that because it lived
+	   outside the column layout; inside it, it is a block following floated
+	   cards. Simulated by dropping the flex off the row: the section came out
+	   at top -174 while the last floated card still ran to -44, i.e. beside it.
+	   `clear` is inert on a flex item, so this costs the supported path
+	   nothing and restores the documented fallback for the rest. */
+	clear: both;
 }
 
 #mainViewCenterPanel.mobileMode div.omicSummaryBox,

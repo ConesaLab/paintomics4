@@ -344,7 +344,13 @@ function PA_Step2JobView() {
 			var dbs_omicNames = Object.keys(matchingPerDB[databases[0]] || {});
 
 			var dbs_rows = dbs_omicNames.map(function(omicName) {
-				return '<tr><th scope="row">' + Ext.String.htmlEncode(omicName) + '</th>' +
+				/* title, because the label column is fixed at 210px and clips with an
+				   ellipsis. Omic names come from Step 1 and are routinely longer than
+				   that ("Transcriptomics - liver - 24 h post treatment" measures 308px
+				   against the 246px it is given); in the old wrapping cell they were
+				   always readable, and nothing else on this card carries the name. */
+				return '<tr><th scope="row" title="' + Ext.String.htmlEncode(omicName) + '">' +
+				Ext.String.htmlEncode(omicName) + '</th>' +
 				databases.map(function(dbname) {
 					/* A missing entry means the omic matched nothing in that
 					   database - which is a zero, not an unknown. An empty cell
@@ -387,7 +393,21 @@ function PA_Step2JobView() {
 				'is keyed on. Read across a row to compare one omic between databases &mdash; the ' +
 				'bar is that share of the omic\'s input features.</p>' +
 				'  <div class="paDbMatrixWrap">' +
-				'    <table class="paDbMatrix">' +
+				/* A floor, so the wrapper's overflow-x has something to scroll. The
+				   table is `width: 100%` under `table-layout: fixed`, so without one
+				   it can never be wider than its wrapper - the scroll was dead code -
+				   and each database column just kept shrinking. A cell's contents do
+				   NOT shrink with it: 24 (bar) + 66 (count) + 34 (share) + 24 (gaps)
+				   + 36 (padding) = 184px is a hard minimum, and below that the flex
+				   row overflows LEFT (`justify-content: flex-end`) into the column
+				   beside it. Measured: at a 163px column the numbers already sit on
+				   the omic names, at 103px they spill 63px. Reachable on a 4-database
+				   organism at 1200px, and on any organism in a narrow window.
+
+				   190 per database leaves 6px over that minimum; 210 is the label
+				   column. Inline because it depends on how many databases this job
+				   has, which no stylesheet knows. */
+				'    <table class="paDbMatrix" style="min-width:' + (210 + databases.length * 190) + 'px">' +
 				'      <thead><tr><th scope="col">Omic</th>' + dbs_head + '</tr></thead>' +
 				'      <tbody>' + dbs_rows + '</tbody>' +
 				'    </table>' +
@@ -445,9 +465,15 @@ function PA_Step2JobView() {
 				}, {
 					xtype: 'form',
 					cls: 'paClassMain',
-					/* Configured, not flexed: see the note on #classActivityBox.
-					   Plan and controls side by side need 26 + 626 + 24 + 440. */
-					width: paClassColumnsSideBySide() ? 1116 : 692,
+					/* Configured, not flexed: see the note on #classActivityBox. Plan
+					   and controls side by side need 26 + 600 + 24 + 446 = 1096; this
+					   said 1116, which was the old columns and 20px more than the row
+					   it sizes. Measured at three viewports, ExtJS writes the card's
+					   own inner width here regardless (1122 at 1459, 1171 at 1512), so
+					   the value is the intent for the columns inside rather than the
+					   width that renders - which is all the more reason for it not to
+					   contradict them. */
+					width: paClassColumnsSideBySide() ? 1096 : 692,
 					bodyCls: "divForm",
 					style: "margin: 0 0 4px 0;",
 					layout: {type: 'vbox', align: 'left'},
