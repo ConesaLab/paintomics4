@@ -402,8 +402,12 @@ class Step1DropsEmptyOmicPanelsTest(unittest.TestCase):
         """The plain path said "provide at least Gene expression..." whatever
         was wrong; both paths now go through showInvalidStep1FormMessage."""
         source = read(JOB_CONTROLLER)
-        self.assertEqual(source.count("showInvalidStep1FormMessage(jobView);"), 2,
-                         "both submit paths must call it")
+        # Twice for checkForm()'s refusal on each submit path, once more for
+        # the complex path's refusal raised by ExtJS inside submit() (its
+        # temporary form is gone by then, so the main form names the field).
+        self.assertEqual(source.count("showInvalidStep1FormMessage(jobView);"), 3,
+                         "both submit paths must call it, and the complex path "
+                         "again for a client-side abort")
 
     def test_a_form_with_nothing_in_it_is_refused(self):
         self.assertFalse(self.results["everyPanelEmpty"]["accepted"])

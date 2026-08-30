@@ -76,7 +76,7 @@ function step1FailureReason(response) {
 	} catch (notJson) {
 		/* Not JSON. Show it as text rather than nothing -- a proxy's "504
 		   Gateway Timeout" is a better answer than "check the form". */
-		message = String(body).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+		message = plainFieldText(body);
 		if (message.length > 300) { message = message.slice(0, 300) + "..."; }
 	}
 	if (!message) { return ""; }
@@ -485,6 +485,13 @@ function JobController() {
 						_restoreElements();
 
 						me.endStep1Submission(jobView);
+						/* ExtJS refused inside submit(): the temporary form is gone
+						   already, but its fields are back on the main form, where
+						   checkForm()'s refusal knows how to name one. */
+						if (responseObj && responseObj.failureType === Ext.form.action.Action.CLIENT_INVALID) {
+							showInvalidStep1FormMessage(jobView);
+							return;
+						}
 						extJSErrorHandler(form, responseObj);
 					}
 				});

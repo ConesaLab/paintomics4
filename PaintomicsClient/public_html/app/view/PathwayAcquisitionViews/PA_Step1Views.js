@@ -391,6 +391,21 @@ function setExampleLabel(field, text) {
 	field.setDisabled(true);
 }
 
+/* Runs ExtJS's own validation -- allowBlank, maxLength, a validator function --
+   on every field under `container`, marking each one, and says whether all
+   passed. Every field, not up to the first failure: a form refused for one
+   field and then again for the next is the second round checkForm() promises
+   to spare the user. Shared by the four omic panels' isValid(). */
+function validateAllFields(container) {
+	var valid = true;
+	Ext.Array.each(container.query("field"), function(field) {
+		if (!field.validate()) {
+			valid = false;
+		}
+	});
+	return valid;
+}
+
 /**
 * Pipeline -> the single panel type that pipeline's example needs.
 *
@@ -1379,14 +1394,7 @@ function PA_Step1JobView() {
 	* @returns {Ext.form.field.Base|null}
 	*/
 	this.firstFormError = function() {
-		var fields = this.getComponent().query("field"), i;
-		for (i = 0; i < fields.length; i++) {
-			if (fields[i].hasActiveError && fields[i].hasActiveError() &&
-				fields[i].isVisible(true) && fields[i].getEl()) {
-				return fields[i];
-			}
-		}
-		return null;
+		return firstVisibleInvalidField(this.getComponent().query("field"));
 	};
 
 	//    this.showMyDataPanel = function () {
@@ -2572,6 +2580,9 @@ function OmicSubmittingPanel(nElem, options) {
 							/* A sixteen-row static list: the default remote mode re-fetched
 							   file_types.json on every dropdown open and every typed query. */
 							queryMode: 'local',
+							/* A typed space is not a file type; it would be posted as the
+							   file's label. */
+							allowOnlyWhitespace: false,
 							name: this.namePrefix + '_file_type',
 							hidden: this.omicName !== "",
 							displayField: 'name', valueField: 'name',
@@ -2600,6 +2611,7 @@ function OmicSubmittingPanel(nElem, options) {
 							xtype: 'combo', itemId: "relevantFileTypeSelector",
 							fieldLabel: 'File Type', emptyText: 'Type or choose the file type',
 							queryMode: 'local',
+							allowOnlyWhitespace: false,
 							name: this.namePrefix + '_relevant_file_type',
 							hidden: this.omicName !== "",
 							displayField: 'name', valueField: 'name',
@@ -2612,7 +2624,7 @@ function OmicSubmittingPanel(nElem, options) {
 							   type is needed exactly when a relevant file is attached. */
 							validator: function(value) {
 								var file = me.getComponent().queryById("secondaryFileSelector");
-								return (file && file.getValue() !== "" && Ext.isEmpty(value)) ? "Please, specify a File type." : true;
+								return (file && file.getValue() !== "" && Ext.isEmpty(Ext.String.trim(value || ""))) ? "Please, specify a File type." : true;
 							},
 							store: Ext.create('Ext.data.ArrayStore', {
 								fields: ['name', 'type'],
@@ -2722,11 +2734,7 @@ function OmicSubmittingPanel(nElem, options) {
 				   the Region-based, miRNA and MORE panels do, so they refuse through
 				   checkForm() (the field named and scrolled into view) rather than
 				   through the failure handler after submit() validates again. */
-				Ext.Array.each(this.query("field"), function(field) {
-					if (!field.validate()) {
-						valid = false;
-					}
-				});
+				valid = validateAllFields(this) && valid;
 
 				/* Ext.isEmpty, not === "": an omic name typed and then deleted leaves
 				   the combo's value null, which === "" let through and ExtJS's own
@@ -3515,10 +3523,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					component = this.queryById("itemsContainer");
 				}
 			}
-			var items = component.query("field");
-			for (var i in items) {
-				valid = valid && (this.items[i] || items[i].validate());
-			}
+			valid = validateAllFields(component) && valid;
 
 			if (component.queryById("mainFileSelector").getValue() === "") {
 				valid = false;
@@ -4254,10 +4259,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 			if (!component.isVisible()) {
 				component = this.queryById("itemsContainer");
 			}
-			var items = component.query("field");
-			for (var i in items) {
-				valid = valid && (this.items[i] || items[i].validate());
-			}
+			valid = validateAllFields(component) && valid;
 
 			if (component.queryById("mainFileSelector").getValue() === "") {
 				valid = false;
@@ -5066,10 +5068,7 @@ function MORESubmittingPanel(nElem, options) {
 					component = this.queryById("itemsContainer");
 				}
 				if (!component) return false;
-				var items = component.query("field");
-				for (var i in items) {
-					valid = valid && (this.items[i] || items[i].validate());
-				}
+				valid = validateAllFields(component) && valid;
 		
 				if (component.queryById("conditionsFileSelector") && component.queryById("conditionsFileSelector").getValue() === "") {
 					valid = false;

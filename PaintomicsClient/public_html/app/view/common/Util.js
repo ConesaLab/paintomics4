@@ -856,6 +856,22 @@ function fieldErrorText(field) {
     return plainFieldText(error);
 }
 
+/* The first field in `fields` (an array, in DOM order) that carries an active
+   error and can be shown: a hidden field is never named -- it cannot be shown
+   to anybody -- and an unrendered one cannot be scrolled to. Shared by
+   checkForm()'s refusal (PA_Step1JobView.firstFormError) and the failure
+   handler's client-abort branch, so both name the same field. */
+function firstVisibleInvalidField(fields) {
+    var i;
+    for (i = 0; i < fields.length; i++) {
+        if (fields[i].hasActiveError && fields[i].hasActiveError() &&
+            fields[i].isVisible(true) && fields[i].getEl()) {
+            return fields[i];
+        }
+    }
+    return null;
+}
+
 /* The refusal that names one field: scrolled into view first, so closing the
    dialog leaves the reader looking at it, then the dialog quoting its label
    and what it wants. Shared by checkForm()'s refusal (JobController's
@@ -899,10 +915,8 @@ function extJSErrorHandler(form, responseObj) {
         /* The complex-path caller destroys its temporary form before calling
            this handler (its monitor is gone), and a hidden field is never the
            one named: either falls through to the generic wording. */
-        var fields = (form && form.monitor) ? form.getFields() : null;
-        showInvalidFieldMessage(fields ? fields.findBy(function (field) {
-            return field.hasActiveError && field.hasActiveError() && field.isVisible(true);
-        }) : null);
+        var fields = (form && form.monitor) ? form.getFields().getRange() : [];
+        showInvalidFieldMessage(firstVisibleInvalidField(fields));
         return;
     }
 

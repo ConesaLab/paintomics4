@@ -68,7 +68,9 @@ CONTROLLER_HEADERS = {
 UTIL_HEADERS = {
     "plainFieldText": "function plainFieldText(html) {",
     "fieldErrorText": "function fieldErrorText(field) {",
+    "firstVisibleInvalidField": "function firstVisibleInvalidField(fields) {",
     "showInvalidFieldMessage": "function showInvalidFieldMessage(field) {",
+    "extJSErrorHandler": "function extJSErrorHandler(form, responseObj) {",
 }
 NO_DATA_STATEMENT = "var STEP1_NO_DATA_MESSAGE ="
 
@@ -133,16 +135,18 @@ def extract_statement(source, header, what):
 HARNESS = """
 var Ext = {String: {htmlEncode: function (s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}}};
-
+}}, form: {action: {Action: {CLIENT_INVALID: "client"}}}};
+var debugging = false;
 var shown = [];
 function showErrorMessage(title, opts) { shown.push({title: title, opts: opts}); }
 
 %(STEP1_NO_DATA_MESSAGE)s
 %(plainFieldText)s
 %(fieldErrorText)s
+%(firstVisibleInvalidField)s
 %(showInvalidFieldMessage)s
 %(showInvalidStep1FormMessage)s
+%(extJSErrorHandler)s
 
 function makeField(spec) {
     var field = {
@@ -183,7 +187,32 @@ function run(label, fields, formIsEmpty) {
     };
 }
 
+/* ExtJS's own submit-time refusal: failureType "client", no response. The
+   form is a BasicForm whose monitor is gone once the complex path has
+   destroyed it. */
+function runHandler(label, fields, formAlive) {
+    shown = [];
+    var form = formAlive
+        ? {monitor: {}, getFields: function () { return {getRange: function () { return fields; }}; }}
+        : {monitor: null};
+    var threw = null;
+    try { extJSErrorHandler(form, {failureType: "client"}); } catch (e) { threw = String(e && e.stack || e); }
+    return {label: label, threw: threw, shown: shown,
+            scrolled: fields.filter(function (f) { return f.scrolled; }).map(function (f) { return f.name; })};
+}
 var results = {};
+results.clientAbortNamesTheField = runHandler("clientAbortNamesTheField", [
+    makeField({name: "speciesCombobox", label: "Organism"}),
+    makeField({name: "omicNameField", label: "Omic Name",
+               error: '<ul class="x-list-plain"><li role="alert">The maximum length for this field is 100</li></ul>'})
+], true);
+results.clientAbortDestroyedForm = runHandler("clientAbortDestroyedForm", [
+    makeField({name: "omicNameField", label: "Omic Name", error: "This field is required"})
+], false);
+results.clientAbortHiddenOnly = runHandler("clientAbortHiddenOnly", [
+    makeField({name: "fileTypeSelector", label: "File Type", visible: false,
+               error: "This field is required"})
+], true);
 
 // The report: a MORE panel filled in at the bottom of the page, no organism
 // chosen at the top. ExtJS renders allowBlank errors wrapped in a <ul>.
@@ -323,6 +352,24 @@ class InvalidFormNamesTheFieldTest(unittest.TestCase):
     def test_several_errors_on_one_field_are_not_glued(self):
         title = self.results["twoErrors"]["shown"][0]["title"]
         self.assertIn("This field is required \u2014 Maximum length is 100", title)
+
+    def test_a_client_side_abort_names_and_scrolls_to_the_field(self):
+        """ExtJS refused inside submit(): the same dialog as checkForm()'s."""
+        result = self.results["clientAbortNamesTheField"]
+        self.assertIn("Omic Name", result["shown"][0]["title"])
+        self.assertIn("The maximum length for this field is 100", result["shown"][0]["title"])
+        self.assertEqual(result["scrolled"], ["omicNameField"])
+
+    def test_a_client_side_abort_on_a_destroyed_form_does_not_throw(self):
+        """The complex path destroys its temporary form before the handler
+        runs; the generic wording, not a TypeError, is what follows."""
+        entry = self.results["clientAbortDestroyedForm"]["shown"][0]
+        self.assertIn("Please check the form errors", entry["title"])
+
+    def test_a_client_side_abort_never_names_a_hidden_field(self):
+        entry = self.results["clientAbortHiddenOnly"]["shown"][0]
+        self.assertNotIn("File Type", entry["title"])
+        self.assertIn("Please check the form errors", entry["title"])
 
     def test_every_case_shows_exactly_one_dialog(self):
         for name, result in self.results.items():

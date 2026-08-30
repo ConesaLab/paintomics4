@@ -71,7 +71,11 @@ def read(path):
 def mask_strings_and_comments(source):
     """The source with the *contents* of string literals and comments replaced
     by spaces, same length, so indices into the original still hold and a brace
-    inside a helpTip or a block comment cannot fool a brace walker."""
+    inside a helpTip or a block comment cannot fool a brace walker.
+
+    Known limit: a regex literal containing a quote (/'/) or a template literal
+    would open a phantom string; the scan is scoped to the plain panel's
+    constructor, which has neither."""
     out = []
     i, n = 0, len(source)
     while i < n:
@@ -137,31 +141,34 @@ def enclosing_object(source, index, masked=None):
     return source[start:end + 1]
 
 
-def combo_configs(source, item_id):
+def combo_configs(source, item_id, span=None):
     """(line_number, config_text) for every *combo* whose `itemId` is
-    `item_id`; at least one, or the test that asked cannot pass vacuously.
+    `item_id`, looking only inside `span` (start, end) when given; at least
+    one, or the test that asked cannot pass vacuously. Line numbers count
+    from the top of the file, whatever the span.
 
     The named panels (Region-based, miRNA, MORE) carry a hidden `textfield`
     under the same itemId with a preset value; those never read
     file_types.json and are skipped."""
-    masked = mask_strings_and_comments(source)
+    start, end = span if span else (0, len(source))
+    masked = mask_strings_and_comments(source[start:end])
     found = []
-    for match in re.finditer(r'itemId:\s*"%s"' % re.escape(item_id), source):
-        config = enclosing_object(source, match.start(), masked)
+    for match in re.finditer(r'itemId:\s*"%s"' % re.escape(item_id), source[start:end]):
+        config = enclosing_object(source[start:end], match.start(), masked)
         if not re.search(r"xtype:\s*['\"]combo(box)?['\"]", config):
             continue
-        found.append((source.count("\n", 0, match.start()) + 1, config))
+        found.append((source.count("\n", 0, start + match.start()) + 1, config))
     if not found:
         raise AssertionError("no combo with itemId %s" % item_id)
     return found
 
 
-def plain_panel(source):
-    """The OmicSubmittingPanel constructor: the one panel whose File Type
-    combos are visible, and the scope every scan here is anchored to so a
-    quote or brace elsewhere in the file cannot shift it."""
-    return between(source, "function OmicSubmittingPanel(nElem, options) {",
-                   "\nOmicSubmittingPanel.prototype")
+def plain_panel_span(source):
+    """(start, end) of the OmicSubmittingPanel constructor: the one panel whose
+    File Type combos are visible, and the scope every scan here is anchored
+    to so a quote or brace elsewhere in the file cannot shift it."""
+    start = source.index("function OmicSubmittingPanel(nElem, options) {")
+    return start, source.index("\nOmicSubmittingPanel.prototype", start)
 
 
 def between(source, start_marker, end_marker):
@@ -169,10 +176,10 @@ def between(source, start_marker, end_marker):
     return source[start:source.index(end_marker, start)]
 
 
-def combo_declarations(source, item_id):
+def combo_declarations(source, item_id, span=None):
     """Yield (line_number, displayField, valueField) for every combo whose
     `itemId` is `item_id`."""
-    for line, config in combo_configs(source, item_id):
+    for line, config in combo_configs(source, item_id, span):
         display = re.search(r"displayField:\s*" + QUOTED, config)
         value = re.search(r"valueField:\s*" + QUOTED, config)
         yield (line,
@@ -204,17 +211,22 @@ class FileTypeComboStoresThePickTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.source = plain_panel(read(STEP1_VIEWS))
+        cls.full = read(STEP1_VIEWS)
+        cls.span = plain_panel_span(cls.full)
+        cls.source = cls.full[cls.span[0]:cls.span[1]]
         cls.records = json.loads(read(FILE_TYPES))["types"]
         if not cls.records:
             raise AssertionError("file_types.json has no records")
+
+    def configs(self, item_id):
+        return combo_configs(self.full, item_id, self.span)
 
     def test_every_file_type_combo_stores_a_column_the_records_have(self):
         """Whatever column valueField names must exist on every record, or
         every pick from the list is stored as undefined -> null."""
         columns = set.intersection(*(set(r) for r in self.records))
         for item_id in COMBO_ITEM_IDS:
-            for line, _display, value in combo_declarations(self.source, item_id):
+            for line, _display, value in combo_declarations(self.full, item_id, self.span):
                 self.assertIn(
                     value, columns,
                     "%s at PA_Step1Views.js:%d stores valueField %r, which is "
@@ -226,7 +238,7 @@ class FileTypeComboStoresThePickTest(unittest.TestCase):
         """The server keeps the posted file type as the file's label, so the
         value must be the same human-readable name the box prints."""
         for item_id in COMBO_ITEM_IDS:
-            for line, display, value in combo_declarations(self.source, item_id):
+            for line, display, value in combo_declarations(self.full, item_id, self.span):
                 self.assertEqual(
                     (display, value), ("name", "name"),
                     "%s at PA_Step1Views.js:%d prints %r but stores %r"
@@ -240,19 +252,43 @@ class FileTypeComboStoresThePickTest(unittest.TestCase):
         file -- after the valueField fix the form still never left the
         browser, and extJSErrorHandler showed "Unable to parse the error
         message." for a client-side abort."""
-        for line, config in combo_configs(self.source, "relevantFileTypeSelector"):
+        for line, config in self.configs("relevantFileTypeSelector"):
             self.assertNotRegex(
                 config, r"allowBlank:\s*false",
                 "relevantFileTypeSelector at PA_Step1Views.js:%d is "
                 "allowBlank: false, so a panel with no relevant file cannot "
                 "be submitted" % line)
 
+    def test_a_line_number_in_a_failure_points_into_the_file(self):
+        line, _config = self.configs("fileTypeSelector")[0]
+        self.assertEqual(self.full.split("\n")[line - 1].strip(),
+                         """xtype: 'combo', itemId: "fileTypeSelector",""")
+
+    def test_a_whitespace_only_type_is_blank(self):
+        """A single space typed into a File Type box is not a type; it would
+        have been posted and become the file's label."""
+        for item_id in COMBO_ITEM_IDS:
+            for line, config in self.configs(item_id):
+                self.assertRegex(config, r"allowOnlyWhitespace:\s*false",
+                                 "%s at %d accepts whitespace" % (item_id, line))
+        for _line, config in self.configs("relevantFileTypeSelector"):
+            self.assertIn("Ext.String.trim(", config)
+
+    def test_the_four_panels_share_one_field_validation(self):
+        """Every field, not up to the first failure: the sibling loops
+        `valid = valid && (...validate())` stopped marking after the first
+        invalid field, so a user was refused twice for two mistakes."""
+        self.assertIn("function validateAllFields(container)", self.full)
+        self.assertEqual(self.full.count("validateAllFields("), 5,
+                         "one definition and four isValid() call sites")
+        self.assertNotIn("valid = valid && (this.items[i] || items[i].validate());", self.full)
+
     def test_the_relevant_file_type_keeps_its_own_rule_for_extjs(self):
         """With blank allowed, ExtJS's validate-on-blur would clear the mark
         the panel's isValid() put on the combo; a validator carrying the same
         rule -- a type is needed exactly when a relevant file is attached --
         keeps ExtJS and the panel in agreement."""
-        for line, config in combo_configs(self.source, "relevantFileTypeSelector"):
+        for line, config in self.configs("relevantFileTypeSelector"):
             self.assertRegex(config, r"validator:\s*function",
                              "relevantFileTypeSelector at %d has no validator" % line)
             self.assertIn('queryById("secondaryFileSelector")', config)
@@ -262,7 +298,7 @@ class FileTypeComboStoresThePickTest(unittest.TestCase):
         """A sixteen-row static list: the default remote queryMode re-fetched
         file_types.json on every dropdown open and every typed query."""
         for item_id in COMBO_ITEM_IDS:
-            for line, config in combo_configs(self.source, item_id):
+            for line, config in self.configs(item_id):
                 self.assertRegex(config, r"queryMode:\s*['\"]local['\"]",
                                  "%s at %d queries remotely" % (item_id, line))
 
@@ -280,8 +316,7 @@ class FileTypeComboStoresThePickTest(unittest.TestCase):
         checkForm() -- named and scrolled into view -- and the failure
         handler's client-abort branch stays the last resort."""
         is_valid = between(self.source, "isValid: function() {", "isEmpty: function() {")
-        self.assertRegex(is_valid, r'query\("field"\)')
-        self.assertIn(".validate()", is_valid)
+        self.assertIn("validateAllFields(this)", is_valid)
 
 
 class AClientSideAbortNamesTheFieldTest(unittest.TestCase):
@@ -305,8 +340,24 @@ class AClientSideAbortNamesTheFieldTest(unittest.TestCase):
         util = read(UTIL_JS)
         handler = between(util, "function extJSErrorHandler(form, responseObj)", "\n}\n")
         self.assertIn("form.monitor", handler)
-        self.assertIn("isVisible(true)", handler)
-        self.assertEqual(handler.count("findBy("), 1, "one pass: visible invalid fields only")
+        self.assertIn("firstVisibleInvalidField(", handler)
+        helper = between(util, "function firstVisibleInvalidField(fields)", "\n}\n")
+        self.assertIn("isVisible(true)", helper)
+        self.assertIn("getEl()", helper)
+        views = read(STEP1_VIEWS)
+        first = between(views, "this.firstFormError = function() {", "\n\t};")
+        self.assertIn("firstVisibleInvalidField(", first,
+                      "checkForm()'s refusal and the client-abort branch pick the field the same way")
+
+    def test_the_complex_path_routes_a_client_abort_to_the_named_refusal(self):
+        """The Region-based, miRNA and MORE panels submit through a temporary
+        form that their failure handler destroys before anything else runs;
+        its fields are back on the main form by then, where checkForm()'s
+        refusal knows how to name one."""
+        controller = read(os.path.join(CLIENT_ROOT, "app", "controller", "JobController.js"))
+        handler = between(controller, "_restoreElements();\n\n", "extJSErrorHandler(form, responseObj);")
+        self.assertIn("Ext.form.action.Action.CLIENT_INVALID", handler)
+        self.assertIn("showInvalidStep1FormMessage(jobView)", handler)
 
     def test_one_refusal_dialog_serves_checkform_and_extjs(self):
         """checkForm()'s refusal and the client-abort branch quote the field
@@ -321,6 +372,8 @@ class AClientSideAbortNamesTheFieldTest(unittest.TestCase):
         refusal = between(controller, "function showInvalidStep1FormMessage(jobView)", "\n}\n")
         self.assertIn("showInvalidFieldMessage(", refusal)
         self.assertNotIn("function plainFieldText", controller)
+        reason = between(controller, "function step1FailureReason(response)", "\n}\n")
+        self.assertIn("plainFieldText(", reason, "one tag-stripper in the client")
 
 
 if __name__ == "__main__":
