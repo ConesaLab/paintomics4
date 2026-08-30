@@ -139,9 +139,10 @@ var STEP1_NO_DATA_MESSAGE = "Invalid form. <br/> Please provide at least: " +
 *
 *   - nothing filled in at all: there is no field to point at, so it says so
 *     and does not offer Report error -- nothing here is a bug;
-*   - a field is wrong: name it, say what it wants, and scroll it into view.
-*     The form is three sections tall, so the field that refused the
-*     submission is routinely off screen behind the dialog. The user who
+*   - a field is wrong: name it, say what it wants, and scroll it into view,
+*     and -- like the empty form, and for the same reason -- do not offer
+*     Report error. The form is three sections tall, so the field that refused
+*     the submission is routinely off screen behind the dialog. The user who
 *     reported this on 2026-08-26 had filled in a MORE panel in section 3 and
 *     never chosen an organism in section 1 -- "please check the form errors"
 *     was true and still told her nothing;

@@ -878,7 +878,17 @@ function firstVisibleInvalidField(fields) {
    showInvalidStep1FormMessage) and by extJSErrorHandler when ExtJS's own
    submit-time validation is the one refusing. No field -- nothing marked
    anywhere, or only hidden fields -- keeps the old wording, which is the
-   shape of a bug and stays reportable. */
+   shape of a bug and stays reportable.
+
+   Naming a field is NOT reportable, for the same reason an empty form is not:
+   the software has just done its job. It found what was wrong, said what the
+   field wants and scrolled the reader to it, so what is left is a box to fill
+   in. Offering Report error there -- in an orange button sitting left of
+   Close, where it reads as the primary action -- invites the reader to mail
+   the developers about their own typing. Both "Error notification" mails of
+   2026-08-30 09:24 UTC were this branch, thirteen seconds apart, from one
+   guest who then fixed the form and ran the job (E7B07e2G5X) unaided. Every
+   such mail is one more thing between the maintainers and a real report. */
 function showInvalidFieldMessage(field) {
     if (!field) {
         showErrorMessage("Invalid Form. </br> Please check the form errors.",
@@ -898,7 +908,7 @@ function showInvalidFieldMessage(field) {
     showErrorMessage("Invalid Form. </br>" +
         (label ? " <b>" + Ext.String.htmlEncode(label) + "</b>: " : " ") +
         Ext.String.htmlEncode(reason),
-        {height: 150, width: 400, showReportButton: true});
+        {height: 150, width: 400, showReportButton: false});
 }
 
 function extJSErrorHandler(form, responseObj) {

@@ -110,8 +110,12 @@ PUBLISHED = {
     # v=2.6 names the field when ExtJS's own submit-time validation refuses
     # (the client-abort branch of extJSErrorHandler) and carries the refusal
     # composition, plainFieldText and fieldErrorText, shared with checkForm().
+    # v=2.7 stops offering Report error on the branch that names the field:
+    # a refusal that says which box to fill in is the software working, not a
+    # fault to mail to the developers. Only the no-field fallback stays
+    # reportable.
     "app/view/common/Util.js": (
-        "2.6", "926a7144091afe09310da492fc933cdd8a8312234374a90829fa77177bccacca"),
+        "2.7", "00d3b1589d28435e9c515fb87ce350f5d5904f9032880feb0c042912e64548cb"),
     "app/view/common/OrganismSearch.js": (
         "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
     "app/view/common/ExtJS_extensions.js": (
