@@ -107,8 +107,11 @@ PUBLISHED = {
     # v=2.5 drops revealPlotPanel and fitPlotPanel: the metabolite class
     # detail opens inside its own card now, so nothing reveals or fits a
     # separate plot panel any more.
+    # v=2.6 names the field when ExtJS's own submit-time validation refuses
+    # (the client-abort branch of extJSErrorHandler) and carries the refusal
+    # composition, plainFieldText and fieldErrorText, shared with checkForm().
     "app/view/common/Util.js": (
-        "2.5", "ca790958fec8c7d7bc91d8bdf0e93710097fd8c7a08f106487dea7f226f47cf2"),
+        "2.6", "926a7144091afe09310da492fc933cdd8a8312234374a90829fa77177bccacca"),
     "app/view/common/OrganismSearch.js": (
         "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
     "app/view/common/ExtJS_extensions.js": (

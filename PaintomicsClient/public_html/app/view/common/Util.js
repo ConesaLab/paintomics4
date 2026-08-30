@@ -838,9 +838,90 @@ function splitServerError(message) {
              technical: raw.slice(0, at).trim() };
 }
 
+/* Markup stripped to plain text: tags out, whitespace collapsed, edges trimmed. */
+function plainFieldText(html) {
+    return String(html || "")
+        .replace(/<\/li>\s*<li[^>]*>/gi, " \u2014 ")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^ | $/g, "");
+}
+
+/* The plain text of a field's error. ExtJS wraps several in a <ul>, and a
+   custom markInvalid() message only ever appears in the active error, not in
+   getErrors(), so this reads the active error and strips the markup. Several
+   errors are joined with a dash rather than glued into one sentence. */
+function fieldErrorText(field) {
+    var error = (field && field.getActiveError) ? field.getActiveError() : "";
+    return plainFieldText(error);
+}
+
+/* The first field in `fields` (an array, in DOM order) that carries an active
+   error and can be shown: a hidden field is never named -- it cannot be shown
+   to anybody -- and an unrendered one cannot be scrolled to. Shared by
+   checkForm()'s refusal (PA_Step1JobView.firstFormError) and the failure
+   handler's client-abort branch, so both name the same field. */
+function firstVisibleInvalidField(fields) {
+    var i;
+    for (i = 0; i < fields.length; i++) {
+        if (fields[i].hasActiveError && fields[i].hasActiveError() &&
+            fields[i].isVisible(true) && fields[i].getEl()) {
+            return fields[i];
+        }
+    }
+    return null;
+}
+
+/* The refusal that names one field: scrolled into view first, so closing the
+   dialog leaves the reader looking at it, then the dialog quoting its label
+   and what it wants. Shared by checkForm()'s refusal (JobController's
+   showInvalidStep1FormMessage) and by extJSErrorHandler when ExtJS's own
+   submit-time validation is the one refusing. No field -- nothing marked
+   anywhere, or only hidden fields -- keeps the old wording, which is the
+   shape of a bug and stays reportable. */
+function showInvalidFieldMessage(field) {
+    if (!field) {
+        showErrorMessage("Invalid Form. </br> Please check the form errors.",
+            {height: 150, width: 400, showReportButton: true});
+        return;
+    }
+    try {
+        field.getEl().dom.scrollIntoView({block: "center"});
+    } catch (ignored) {
+        /* An unrendered field cannot be scrolled to; the message still names it. */
+    }
+    /* Six shipped labels carry a <br> ("Regions file <br>(BED + Quantification)"),
+       and that is the label the file widget's inner textfield inherits, so the
+       markup is stripped exactly as the error text is. */
+    var label = plainFieldText(field.fieldLabel).replace(/\s*:\s*$/, "");
+    var reason = fieldErrorText(field) || "Please check this field.";
+    showErrorMessage("Invalid Form. </br>" +
+        (label ? " <b>" + Ext.String.htmlEncode(label) + "</b>: " : " ") +
+        Ext.String.htmlEncode(reason),
+        {height: 150, width: 400, showReportButton: true});
+}
+
 function extJSErrorHandler(form, responseObj) {
     if (debugging === true)
         debugger
+
+    /* ExtJS runs form.isValid() again inside submit(), and when one of its own
+       validators refuses -- allowBlank, maxLength, a validator function -- it
+       calls this handler with failureType "client" and no response at all. That
+       used to be reported as "Oops..Internal error! Unable to parse the error
+       message.", which reads as a server fault. Nothing reached the server:
+       name the field and what it wants, the way checkForm()'s refusal does. */
+    if (responseObj && responseObj.failureType === Ext.form.action.Action.CLIENT_INVALID) {
+        /* The complex-path caller destroys its temporary form before calling
+           this handler (its monitor is gone), and a hidden field is never the
+           one named: either falls through to the generic wording. */
+        /* The form panel's fields in DOM order, as checkForm()'s refusal reads
+           them; the form's own Monitor keeps insertion order, and a container
+           put back on the form lands last. */
+        var fields = (form && form.monitor && form.owner) ? form.owner.query("field") : [];
+        showInvalidFieldMessage(firstVisibleInvalidField(fields));
+        return;
+    }
 
     var err;
     try {

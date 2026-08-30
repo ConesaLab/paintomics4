@@ -382,13 +382,36 @@ var STATEGRA_EXPERIMENT_DESIGN = "STATegra multi-omics time-course experiment in
 * example submissions never reach saveFiles -- the servlets resolve their files
 * from the manifest and ignore the form entirely.
 *
-* setDisabled here disables the Browse button, which is the widget's whole
-* interactive surface; the text stays selectable so it can be read and copied.
+* setDisabled here greys out the Browse control inside the field and takes it
+* out of the tab order -- the widget's whole interactive surface; the field
+* itself stays enabled so the text can be read, copied and still posted. (A
+* row its panel switches off, like the miRNA associations row under the
+* correlation box, is disabled through the field instead, which also drops it
+* from the post; the control follows that door too.)
 */
 function setExampleLabel(field, text) {
 	if (!field) { return; }
 	field.setValue("[example dataset] " + text, "example");
 	field.setDisabled(true);
+}
+
+/* Runs ExtJS's own validation -- allowBlank, maxLength, a validator function --
+   on every field under `container`, marking each one, and says whether all
+   passed. Every field, not up to the first failure: a form refused for one
+   field and then again for the next is the second round checkForm() promises
+   to spare the user. Shared by the four omic panels' isValid(). */
+function validateAllFields(container) {
+	var valid = true;
+	/* One layout for the whole pass, as Ext.form.Basic.isValid does, instead
+	   of one per field whose validity flips. */
+	Ext.suspendLayouts();
+	Ext.Array.each(container.query("field"), function(field) {
+		if (!field.validate()) {
+			valid = false;
+		}
+	});
+	Ext.resumeLayouts(true);
+	return valid;
 }
 
 /**
@@ -1379,14 +1402,7 @@ function PA_Step1JobView() {
 	* @returns {Ext.form.field.Base|null}
 	*/
 	this.firstFormError = function() {
-		var fields = this.getComponent().query("field"), i;
-		for (i = 0; i < fields.length; i++) {
-			if (fields[i].hasActiveError && fields[i].hasActiveError() &&
-				fields[i].isVisible(true) && fields[i].getEl()) {
-				return fields[i];
-			}
-		}
-		return null;
+		return firstVisibleInvalidField(this.getComponent().query("field"));
 	};
 
 	//    this.showMyDataPanel = function () {
@@ -2302,7 +2318,7 @@ function PA_Step1JobView() {
 							margin: "10 20 10 10",
 							layout: {type: 'vbox',align: "stretch"},
 							items: [
-								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
+								{xtype: 'box',html: '<div class="content"><h5><i class="fa fa-info-circle"></i> Help</h5><p>Drag <i>omics</i> from <b>Available omics</b> to <b>Selected omics</b>, or click the <i class="fa fa-plus-circle"></i> button.</p><p>Remove any you do not need with <span class="po-nowrap"><i class="fa fa-trash"></i>.</span></p><p><span class="po-required-mark" role="img" aria-label="asterisk">*</span> marks the files the job needs; the rest are optional.</p><p>Files are checked as you pick them; the <b>PaintOmics AI agent</b> converts any that are not in PaintOmics’ format.</p><p>When you are done, click <b>Run PaintOmics</b> in the top-right corner.</p></div>'}
 							]
 						}]
 					}					
@@ -2540,6 +2556,8 @@ function OmicSubmittingPanel(nElem, options) {
 							value: this.omicName,
 							hidden: this.omicName !== "",
 							itemId: "omicNameField",
+							/* A typed space is not an omic name; it would be posted as the omic's label. */
+							allowOnlyWhitespace: false,
 							displayField: 'name',
 							valueField: 'name',
 							emptyText: 'Type or choose the omic type',
@@ -2569,9 +2587,15 @@ function OmicSubmittingPanel(nElem, options) {
 						}, {
 							xtype: 'combo', itemId: "fileTypeSelector",
 							fieldLabel: 'File Type', emptyText: 'Type or choose the file type',
+							/* A sixteen-row static list: the default remote mode re-fetched
+							   file_types.json on every dropdown open and every typed query. */
+							queryMode: 'local',
+							/* A typed space is not a file type; it would be posted as the
+							   file's label. */
+							allowOnlyWhitespace: false,
 							name: this.namePrefix + '_file_type',
 							hidden: this.omicName !== "",
-							displayField: 'name', valueField: ' name',
+							displayField: 'name', valueField: 'name',
 							editable: true, allowBlank: false,
 							value: (this.fileType !== null) ? this.fileType : null,
 							store: Ext.create('Ext.data.ArrayStore', {
@@ -2596,11 +2620,21 @@ function OmicSubmittingPanel(nElem, options) {
 						}, {
 							xtype: 'combo', itemId: "relevantFileTypeSelector",
 							fieldLabel: 'File Type', emptyText: 'Type or choose the file type',
+							queryMode: 'local',
 							name: this.namePrefix + '_relevant_file_type',
 							hidden: this.omicName !== "",
 							displayField: 'name', valueField: 'name',
-							editable: true, allowBlank: false,
+							editable: true, allowBlank: true,
 							value: (this.relevantFileType !== null) ? this.relevantFileType : null,
+							/* ExtJS validates on blur as well as on submit. With blank allowed
+							   (the file is optional), its validation would clear the mark
+							   isValid() puts on this combo the moment the combo was focused and
+							   left, while the panel still refused. Same rule as isValid(): a
+							   type is needed exactly when a relevant file is attached. */
+							validator: function(value) {
+								var file = me.getComponent().queryById("secondaryFileSelector");
+								return (file && file.getValue() !== "" && Ext.isEmpty(Ext.String.trim(value || ""))) ? "Please, specify a File type." : true;
+							},
 							store: Ext.create('Ext.data.ArrayStore', {
 								fields: ['name', 'type'],
 								autoLoad: true,
@@ -2705,7 +2739,16 @@ function OmicSubmittingPanel(nElem, options) {
 					return true;
 				}
 
-				if (this.queryById("omicNameField").getValue() === "") {
+				/* ExtJS's own rules first -- maxLength, allowBlank, a validator -- as
+				   the Region-based, miRNA and MORE panels do, so they refuse through
+				   checkForm() (the field named and scrolled into view) rather than
+				   through the failure handler after submit() validates again. */
+				valid = validateAllFields(this) && valid;
+
+				/* Ext.isEmpty, not === "": an omic name typed and then deleted leaves
+				   the combo's value null, which === "" let through and ExtJS's own
+				   allowBlank then refused with no field named. */
+				if (Ext.isEmpty(Ext.String.trim(this.queryById("omicNameField").getValue() || ""))) {
 					valid = false;
 					this.queryById("omicNameField").markInvalid("Please, specify a Omic Name.");
 				}
@@ -3489,10 +3532,7 @@ function RegionBasedOmicSubmittingPanel(nElem, options) {
 					component = this.queryById("itemsContainer");
 				}
 			}
-			var items = component.query("field");
-			for (var i in items) {
-				valid = valid && (this.items[i] || items[i].validate());
-			}
+			valid = validateAllFields(component) && valid;
 
 			if (component.queryById("mainFileSelector").getValue() === "") {
 				valid = false;
@@ -4228,10 +4268,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 			if (!component.isVisible()) {
 				component = this.queryById("itemsContainer");
 			}
-			var items = component.query("field");
-			for (var i in items) {
-				valid = valid && (this.items[i] || items[i].validate());
-			}
+			valid = validateAllFields(component) && valid;
 
 			if (component.queryById("mainFileSelector").getValue() === "") {
 				valid = false;
@@ -5040,10 +5077,7 @@ function MORESubmittingPanel(nElem, options) {
 					component = this.queryById("itemsContainer");
 				}
 				if (!component) return false;
-				var items = component.query("field");
-				for (var i in items) {
-					valid = valid && (this.items[i] || items[i].validate());
-				}
+				valid = validateAllFields(component) && valid;
 		
 				if (component.queryById("conditionsFileSelector") && component.queryById("conditionsFileSelector").getValue() === "") {
 					valid = false;

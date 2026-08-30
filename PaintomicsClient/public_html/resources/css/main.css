@@ -198,6 +198,7 @@ root {
      own fill - which is why the green and red button fills do not constrain
      the choice. */
   --pa-focus-ring: #0A84FF;
+  --pa-status-error-ink: #C84D2F;   /* the refusal dialog's ink and the asterisk on a required row; dark.css keeps --pa-status-error for fills */
 
   /* Surfaces and controls ----------------------------------------------------
      The app had three corner radii in play - 2px on cards, 3px on form fields,
@@ -2547,7 +2548,7 @@ body > .x-mask {
 	border-top-color: rgb(211, 96, 68);
 }
 #messageDialog.errorDialog h4 {
-	color: #C84D2F; /* was rgb(211,96,68) - 3.80:1 on the dialog's white fill */
+	color: var(--pa-status-error-ink, #C84D2F); /* was rgb(211,96,68) - 3.80:1 on the dialog's white fill */
 }
 #messageDialog.warningDialog {
 	border-top-color: #CB7505;
@@ -7038,34 +7039,6 @@ div.omicSummaryBox.expandedBox, div.metaboliteBox.expandedBox{
   color: #3F3F46;
   font-weight: 500;
 }
-/* The split arrow and its divider come from the Neptune sprite, drawn light for
-   a dark button - on white they disappear, and with them the only sign that
-   this button opens a menu. Drawn here instead, so they follow the text colour
-   rather than the theme image. */
-.omicbox a.x-btn .x-btn-wrap {
-  background-image: none;
-  position: relative;
-}
-.omicbox a.x-btn .x-btn-wrap::after {
-  content: "";
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  margin-top: -2px;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid #71717A;
-  pointer-events: none;
-}
-.omicbox a.x-btn .x-btn-wrap::before {
-  content: "";
-  position: absolute;
-  right: 21px;
-  top: 4px;
-  bottom: 4px;
-  border-left: 1px solid var(--pa-border);
-  pointer-events: none;
-}
 /* About / How It Works Section */
 .po-about-section {
   padding: 0;
@@ -7602,21 +7575,108 @@ a.po-ghost-action > i.fa {
   color: var(--pa-ink-muted);
 }
 
-/* The same note, one per file row on Step 1: does the job need this file or not.
-   It sits after the Browse button, in the 24px the row already has, so no card
-   grows by a pixel. "required" is the one that has to be read, so it carries the
-   weight; "optional" is a background fact and steps back. Both are qualifiers
-   next to the field, not badges -- a form with 28 pills on it reads as an alarm. */
-.po-file-tag {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--pa-ink-muted);
-  opacity: 0.72;
-  line-height: 24px;
-  white-space: nowrap;
-}
-.po-file-tag-required {
+/* The requiredness mark, in every file row's label after the words and
+   before the colon: a red asterisk for a row the job needs, nothing for an
+   optional one -- the convention every form reader already knows. It replaces
+   the word "required" or "optional" that sat after each Browse button; the
+   card's help column says once what the asterisk means. */
+.po-required-mark {
+  color: var(--pa-status-error-ink, #C84D2F);
   font-weight: 600;
+}
+/* A hair of air between the words and the mark, in the labels only: the
+   legend in the help column starts with the mark and sits on the column's
+   rail. */
+.x-form-item-label .po-required-mark {
+  margin-left: 2px;
+}
+
+/* Browse lives inside the file field.
+
+   Every file row used to be two boxes side by side: the read-only path field
+   and, beside it, a bordered ExtJS split button reading "Browse...", with the
+   upload / My Data / clear menu behind its arrow. Two borders per row, three
+   controls with the tag, and the card's right edge set by the widest of them.
+
+   The control is now rendered by the path field itself (afterSubTpl), sitting
+   at the field's right edge as quiet text: "Browse..." opens the file picker,
+   the caret beside it opens the same menu. The field keeps its one border, the
+   input leaves room for the control so a long file name is clipped before it
+   rather than running under it, and the tag and help tip stay where they were.
+   Neptune already positions .x-form-item-body, which is the containing block.
+   The colour is the same muted ink as the tag; hover and keyboard focus bring
+   it up to the control ink so it still reads as something that can be
+   pressed. The two controls are native buttons, so Enter, Space, the disabled
+   attribute and the global focus ring all come for free. */
+.po-file-path .x-form-text {
+  /* A guess for the first paint; wireBrowse() measures the drawn control and
+     sets the exact figure, so a longer label or another font cannot let the
+     file name run underneath. */
+  padding-right: 92px;
+}
+.po-browse {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px 0 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--pa-ink-muted);
+  white-space: nowrap;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.po-browse button {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.po-browse button:hover,
+.po-browse button:focus-visible {
+  color: var(--pa-ink-control, #3F3F46);
+}
+.po-browse .po-browse-text {
+  padding: 0 6px;
+}
+/* The caret is its own target, separated from the text by a hairline, so the
+   menu and the picker cannot be confused for one another. */
+.po-browse .po-browse-caret {
+  width: 18px;
+  justify-content: center;
+  margin-left: 2px;
+  border-left: 1px solid var(--pa-border, rgba(24, 24, 27, 0.10));
+  border-radius: 0 3px 3px 0;
+}
+.po-browse .po-browse-caret::after {
+  content: "";
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+}
+.po-browse button:disabled {
+  color: var(--pa-ink-muted);
+  opacity: 0.45;
+  cursor: default;
+}
+/* A row switched off by its panel (the miRNA associations row when the
+   correlation box is ticked) is disabled through the field. Neptune fades
+   that row's label and input to .3 but not the control, which sits beside
+   the input in the body cell: the control fades to the same .3 itself, and
+   its buttons' own .45 does not stack on top. */
+.x-item-disabled .po-browse {
+  opacity: 0.3;
+}
+.x-item-disabled .po-browse button:disabled {
   opacity: 1;
 }
 

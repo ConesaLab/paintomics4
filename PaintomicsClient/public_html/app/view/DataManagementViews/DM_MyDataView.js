@@ -920,9 +920,15 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	fieldLabel: "label",
 	namePrefix: "filefield",
 	buttonText: "Browse...",
+	/* The drawn width of the in-field control, per label: measured once on
+	   the first row that can be measured and reused by every other row. */
+	statics: {
+		measuredWidths: {}
+	},
 	/* "required" or "optional": whether the job needs this file. Every file row on
 	   Step 1 sets it, so a row that says nothing is a row somebody forgot, not a
-	   row with nothing to say. Conditional rows flip it with setRequiredTag(). */
+	   row with nothing to say. Shown as the asterisk in the label; conditional
+	   rows flip it with setRequiredTag(). */
 	requiredTag: null,
 	labelAlign: "right",
 	labelWidth: 200,
@@ -944,22 +950,209 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		this.queryById("visiblePathField").setRawValue("");
 		this.queryById("originField").setValue("");
 	},
+	/* Locks the in-field control: greyed out and out of the tab order. The
+	   read-only path field itself stays enabled: a disabled input is dropped
+	   from the form post, and its text should stay readable. Remembered so a
+	   call made before the field is rendered (the example scenarios disable
+	   their rows straight away) still lands once wireBrowse() runs. */
 	setDisabled: function(disabled) {
-		this.queryById("optionsButton").setDisabled(disabled);
+		this.browseLocked = !!disabled;
+		return this.applyBrowseState();
 	},
+	/* Two doors, one state. The widget's own lock (example rows, through
+	   setDisabled) and the path field's own disabled state (a panel switching
+	   the row off through the field or its container; read from the field, not
+	   mirrored) each grey the control out; either is enough, and a container
+	   enable cascade -- the miRNA correlation box, the Region-based
+	   own-associations toggle -- cannot lift the widget's lock, which is how
+	   example rows once came back to life. */
+	applyBrowseState: function() {
+		var field = this.queryById("visiblePathField");
+		var off = !!(this.browseLocked || (field && field.disabled));
+		var buttons = this.browseButtons || [];
+		var i;
+		for (i = 0; i < buttons.length; i++) {
+			buttons[i].disabled = off;
+		}
+		return this;
+	},
+	openFilePicker: function() {
+		this.queryById("fileField").fileInputEl.el.dom.click();
+	},
+	/* The panels mark a row that is missing its file through the widget; a
+	   Container has no markInvalid of its own, so it lands on the path field. */
 	markInvalid: function(errorMessage) {
 		return this.queryById("visiblePathField").markInvalid(errorMessage);
 	},
-	buildRequiredTag: function(tag) {
-		return '<span class="po-file-tag' + (tag === "required" ? " po-file-tag-required" : "") + '">' + tag + '</span>';
+	/* The menu behind the caret: the three entries the split button used to
+	   carry, plus whatever the panel adds through extraButtons. Built once and
+	   torn down with the widget -- a menu renders to the document body and would
+	   otherwise outlive the row it belongs to.
+
+	   The widget is named as the menu's owner. The extraButtons handlers (the
+	   Region-based panel's GTF picker, the miRNA panel's "other omic" picker)
+	   climb `this.up("myFilesSelectorButton")` from the menu item, and
+	   Menu.getRefOwner walks parentMenu -> ownerButton -> ownerCt; the split
+	   button used to be that owner, and an ownerless menu dead-ends the walk. */
+	buildOptionsMenu: function() {
+		var me = this;
+		var menu = new Ext.menu.Menu({
+			items: [
+				{
+					text: 'Upload file from my PC',
+					handler: function() {
+						me.openFilePicker();
+					}
+				}, {
+					text: 'Use a file from My Data',
+					disabled: (Ext.util.Cookies.get("userID") === null),
+					handler: function() {
+						var _callback = function(selectedItem) {
+							if (selectedItem !== null) {
+								me.clearValue();
+								me.setValue(selectedItem[0].get("fileName"));
+							}
+						};
+						Ext.widget("myFilesSelectorDialog").showDialog(_callback);
+					}
+				}, {
+					text: 'Clear selection',
+					handler: function() {
+						me.clearValue();
+					}
+				}
+			].concat(me.extraButtons || [])
+		});
+		menu.ownerButton = me;
+		return menu;
 	},
-	/* For the rows whose requiredness is a consequence of a choice made elsewhere
-	   on the card -- the correlation checkbox on a miRNA panel, say. The caller
-	   passes the same expression the validator reads, so the two cannot drift. */
+	/* Attaches the in-field control once the path field is rendered. The text
+	   opens the picker; the caret opens the menu under itself (Down arrow too,
+	   as the split button did) and closes it again on a second press. */
+	wireBrowse: function(field) {
+		var me = this;
+		var control = field.bodyEl.down(".po-browse");
+		var text = field.bodyEl.down(".po-browse-text");
+		var caret = field.bodyEl.down(".po-browse-caret");
+		if (!control || !text || !caret) {
+			return;
+		}
+		me.browseCaret = caret;
+		me.browseButtons = [text.dom, caret.dom];
+		text.dom.textContent = me.buttonText;
+		caret.set({"aria-label": "More options for " + me.rowName()});
+		text.on("click", function() {
+			me.openFilePicker();
+		});
+		/* Ext.menu.Manager hides every open menu on a document mousedown, so
+		   the click that follows a press on the caret would show its own menu
+		   straight back. The press records whether the menu was open -- the
+		   caret's listener runs before the document's -- and still propagates:
+		   combos and tooltips close on that same document mousedown. */
+		caret.on("mousedown", function() {
+			me.menuWasOpen = me.optionsMenu.isVisible();
+		});
+		caret.on("click", function(e) {
+			/* A keyboard activation is a click with no mousedown before it
+			   (detail 0); a press released off the caret leaves the flag stale,
+			   so the keyboard does not read it. */
+			me.toggleOptionsMenu(!!(e.browserEvent && e.browserEvent.detail === 0));
+		});
+		caret.on("keydown", function(e) {
+			if (e.getKey() === e.DOWN) {
+				e.stopEvent();
+				me.showOptionsMenu();
+			}
+		});
+		/* The split button gave focus back to itself when its menu hid. */
+		me.optionsMenu.on({
+			show: function() {
+				caret.set({"aria-expanded": "true"});
+			},
+			hide: function() {
+				caret.set({"aria-expanded": "false"});
+				if (!caret.dom.disabled) {
+					caret.focus();
+				}
+			}
+		});
+		/* The stylesheet's padding-right is a guess for the first paint; the
+		   control's real width depends on the text and the font, so measure it
+		   and let the input end exactly where it begins. A row rendered inside
+		   a hidden container (the Region-based panel's own-associations rows)
+		   measures 0 here, so a zero is never written, and the field's resize
+		   -- which fires when that container is shown and laid out -- measures
+		   again; an unchanged figure is not written back. */
+		var widths = me.self.measuredWidths;
+		var measure = function() {
+			/* Every row on the page shares one label and one font, so one drawn
+			   control answers for all of them: the first figure is kept and the
+			   other rows read it instead of forcing a layout each. */
+			var width = widths[me.buttonText] || control.getWidth();
+			var padding = (width + 2) + "px";
+			if (width <= 0) {
+				return false;
+			}
+			widths[me.buttonText] = width;
+			if (field.inputEl.getStyle("padding-right") !== padding) {
+				field.inputEl.setStyle("padding-right", padding);
+			}
+			field.un("resize", measure);
+			return true;
+		};
+		if (!measure()) {
+			field.on("resize", measure);
+		}
+		/* The web font can land after the first paint and change the width. */
+		if (document.fonts && document.fonts.ready) {
+			document.fonts.ready.then(function() {
+				if (!me.isDestroyed && field.rendered) {
+					delete widths[me.buttonText];
+					measure();
+				}
+			});
+		}
+		me.setRequiredTag(me.requiredTag);
+		me.applyBrowseState();
+	},
+	/* The field label as words, for the caret's name: four rows on one card
+	   would otherwise all announce as "More options". Six shipped labels carry
+	   a <br>, so the markup comes out. */
+	rowName: function() {
+		return String(this.fieldLabel).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").replace(/^ | $/g, "");
+	},
+	showOptionsMenu: function() {
+		this.optionsMenu.showBy(this.browseCaret, "tr-br?");
+	},
+	toggleOptionsMenu: function(keyboard) {
+		var menu = this.optionsMenu;
+		var wasOpen = !keyboard && this.menuWasOpen;
+		this.menuWasOpen = false;
+		if (wasOpen || menu.isVisible()) {
+			menu.hide();
+		} else {
+			this.showOptionsMenu();
+		}
+	},
+	beforeDestroy: function() {
+		Ext.destroy(this.optionsMenu);
+		this.callParent(arguments);
+	},
+	/* Shows or hides the requiredness mark in the label. The mark is always
+	   rendered (afterLabelTextTpl on the path field) and this only toggles it,
+	   so the rows whose requiredness is a consequence of a choice made elsewhere
+	   on the card -- the correlation checkbox on a miRNA panel, say -- can flip
+	   after render. The caller passes the same expression the validator reads,
+	   so the two cannot drift. Remembered when called before render; wireBrowse()
+	   applies it. */
 	setRequiredTag: function(tag) {
-		var box = this.queryById("requiredTag");
-		if (box && box.rendered) {
-			box.update(this.buildRequiredTag(tag));
+		var field = this.queryById("visiblePathField");
+		var mark = (field && field.rendered && field.labelEl) ? field.labelEl.down(".po-required") : null;
+		this.requiredTag = tag;
+		if (mark) {
+			/* setDisplayed, not setVisible: the latter keeps the box (visibility:
+			   hidden) and an optional row would show a gap before its colon. */
+			mark.setDisplayed(tag === "required");
 		}
 		return this;
 	},
@@ -969,6 +1162,7 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	initComponent: function() {
 		var me = this;
 
+		me.optionsMenu = me.buildOptionsMenu();
 		me.items = [{
 			xtype: "container",
 			layout: {
@@ -991,53 +1185,57 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 				labelWidth: me.labelWidth,
 				readOnly: true,
 				fieldLabel: me.fieldLabel,
+				/* The requiredness mark, after the words and before the colon, the way
+				   every form reader expects: a red asterisk for a row the job needs,
+				   nothing for an optional one. It used to be the word "required" or
+				   "optional" after the Browse button. Rendered by the label template
+				   rather than written into fieldLabel, so the label text the refusal
+				   dialog quotes stays the plain words; the mark carries the word for
+				   readers that cannot see it. setRequiredTag() shows or hides it. ExtJS puts
+				   this template after the separator, so the separator is blank and the
+				   colon is written here, after the mark: "Data file *:". */
+				labelSeparator: "",
+				afterLabelTextTpl: '<span class="po-required">' +
+					'<span class="po-required-mark" role="img" aria-label="required">*</span>' +
+					'</span>:',
+				cls: "po-file-path",
+				/* The Browse control is part of the field. "Browse..." at the field's
+				   right edge opens the file picker; the caret beside it opens the menu
+				   that used to hang off a split button standing next to the field as a
+				   second bordered box. The field's own template renders it, so it sits
+				   inside the one border the row has, and wireBrowse() attaches the
+				   handlers once the field is on the page.
+
+				   Native buttons on purpose: Enter and Space, the disabled attribute
+				   (out of the tab order, click-inert) and non-navigation come with the
+				   element, and the dark theme's blanket anchor colour never applies.
+				   The text is written in wireBrowse(), not here: afterSubTpl is an
+				   XTemplate, and a brace in buttonText would read as a placeholder. */
+				afterSubTpl: '<span class="po-browse">' +
+					'<button type="button" class="po-browse-text"></button>' +
+					'<button type="button" class="po-browse-caret" aria-haspopup="true" aria-expanded="false"></button>' +
+					'</span>',
+				listeners: {
+					afterrender: function(field) {
+						me.wireBrowse(field);
+					},
+					/* Panels disable a row through the field or its container
+					   (`down('container').setDisabled(...)`), and the container
+					   cascade reaches form fields and buttons only. The control
+					   follows the field's own events and reads the field's own disabled
+					   state, so the enable that follows cannot lift a lock set through
+					   setDisabled. */
+					disable: function() {
+						me.applyBrowseState();
+					},
+					enable: function() {
+						me.applyBrowseState();
+					}
+				},
 				style: {
 					"margin-right": "3px"
 				}
-			}, {
-				xtype: "splitbutton",
-				itemId: "optionsButton",
-				text: me.buttonText,
-				maxHeight: 24,
-				menu: new Ext.menu.Menu({
-					items: [
-						// these will render as dropdown menu items when the arrow is clicked:
-						{
-							text: 'Upload file from my PC',
-							scope: me,
-							handler: function() {
-								me.queryById("fileField").fileInputEl.el.dom.click();
-							}
-						}, {
-							text: 'Use a file from My Data',
-							disabled: (Ext.util.Cookies.get("userID") === null),
-							handler: function() {
-								var _callback = function(selectedItem) {
-									if (selectedItem !== null) {
-										me.clearValue();
-										me.setValue(selectedItem[0].get("fileName"));
-									}
-								};
-								Ext.widget("myFilesSelectorDialog").showDialog(_callback);
-							}
-						}, {
-							text: 'Clear selection',
-							handler: function() {
-								me.clearValue();
-							}
-						}
-					].concat(me.extraButtons)
-				}),
-				handler: function() {
-					this.showMenu();
-				}
-			}, (me.requiredTag ? {
-				xtype: "box",
-				itemId: "requiredTag",
-				width: 56,
-				margin: "0 0 0 8",
-				html: me.buildRequiredTag(me.requiredTag)
-			} : null), (me.helpTip !== undefined ? {
+			}, (me.helpTip !== undefined ? {
 				xtype: "label",
 				html: '<span class="helpTip" style="float:right;" title="' + this.helpTip + '""></span>'
 			} : null)]
