@@ -398,11 +398,15 @@ function setExampleLabel(field, text) {
    to spare the user. Shared by the four omic panels' isValid(). */
 function validateAllFields(container) {
 	var valid = true;
+	/* One layout for the whole pass, as Ext.form.Basic.isValid does, instead
+	   of one per field whose validity flips. */
+	Ext.suspendLayouts();
 	Ext.Array.each(container.query("field"), function(field) {
 		if (!field.validate()) {
 			valid = false;
 		}
 	});
+	Ext.resumeLayouts(true);
 	return valid;
 }
 
@@ -2548,6 +2552,8 @@ function OmicSubmittingPanel(nElem, options) {
 							value: this.omicName,
 							hidden: this.omicName !== "",
 							itemId: "omicNameField",
+							/* A typed space is not an omic name; it would be posted as the omic's label. */
+							allowOnlyWhitespace: false,
 							displayField: 'name',
 							valueField: 'name',
 							emptyText: 'Type or choose the omic type',
@@ -2611,7 +2617,6 @@ function OmicSubmittingPanel(nElem, options) {
 							xtype: 'combo', itemId: "relevantFileTypeSelector",
 							fieldLabel: 'File Type', emptyText: 'Type or choose the file type',
 							queryMode: 'local',
-							allowOnlyWhitespace: false,
 							name: this.namePrefix + '_relevant_file_type',
 							hidden: this.omicName !== "",
 							displayField: 'name', valueField: 'name',
@@ -2739,7 +2744,7 @@ function OmicSubmittingPanel(nElem, options) {
 				/* Ext.isEmpty, not === "": an omic name typed and then deleted leaves
 				   the combo's value null, which === "" let through and ExtJS's own
 				   allowBlank then refused with no field named. */
-				if (Ext.isEmpty(this.queryById("omicNameField").getValue())) {
+				if (Ext.isEmpty(Ext.String.trim(this.queryById("omicNameField").getValue() || ""))) {
 					valid = false;
 					this.queryById("omicNameField").markInvalid("Please, specify a Omic Name.");
 				}

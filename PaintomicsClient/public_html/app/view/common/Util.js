@@ -915,7 +915,10 @@ function extJSErrorHandler(form, responseObj) {
         /* The complex-path caller destroys its temporary form before calling
            this handler (its monitor is gone), and a hidden field is never the
            one named: either falls through to the generic wording. */
-        var fields = (form && form.monitor) ? form.getFields().getRange() : [];
+        /* The form panel's fields in DOM order, as checkForm()'s refusal reads
+           them; the form's own Monitor keeps insertion order, and a container
+           put back on the form lands last. */
+        var fields = (form && form.monitor && form.owner) ? form.owner.query("field") : [];
         showInvalidFieldMessage(firstVisibleInvalidField(fields));
         return;
     }

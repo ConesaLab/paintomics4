@@ -76,7 +76,7 @@ function step1FailureReason(response) {
 	} catch (notJson) {
 		/* Not JSON. Show it as text rather than nothing -- a proxy's "504
 		   Gateway Timeout" is a better answer than "check the form". */
-		message = plainFieldText(body);
+		message = String(body).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 		if (message.length > 300) { message = message.slice(0, 300) + "..."; }
 	}
 	if (!message) { return ""; }

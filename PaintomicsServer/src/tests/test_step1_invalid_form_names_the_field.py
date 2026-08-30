@@ -193,7 +193,7 @@ function run(label, fields, formIsEmpty) {
 function runHandler(label, fields, formAlive) {
     shown = [];
     var form = formAlive
-        ? {monitor: {}, getFields: function () { return {getRange: function () { return fields; }}; }}
+        ? {monitor: {}, owner: {query: function () { return fields; }}}
         : {monitor: null};
     var threw = null;
     try { extJSErrorHandler(form, {failureType: "client"}); } catch (e) { threw = String(e && e.stack || e); }

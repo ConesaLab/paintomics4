@@ -264,21 +264,28 @@ class FileTypeComboStoresThePickTest(unittest.TestCase):
         self.assertEqual(self.full.split("\n")[line - 1].strip(),
                          """xtype: 'combo', itemId: "fileTypeSelector",""")
 
-    def test_a_whitespace_only_type_is_blank(self):
-        """A single space typed into a File Type box is not a type; it would
-        have been posted and become the file's label."""
-        for item_id in COMBO_ITEM_IDS:
+    def test_a_whitespace_only_name_or_type_is_blank(self):
+        """A single space typed into the Omic Name or the File Type box is
+        not a value; it would have been posted and become the omic's or the
+        file's label. The relevant File Type is blank-allowed (its file is
+        optional), so there its validator does the trimming."""
+        for item_id in ("omicNameField", "fileTypeSelector"):
             for line, config in self.configs(item_id):
                 self.assertRegex(config, r"allowOnlyWhitespace:\s*false",
                                  "%s at %d accepts whitespace" % (item_id, line))
         for _line, config in self.configs("relevantFileTypeSelector"):
             self.assertIn("Ext.String.trim(", config)
+        is_valid = between(self.source, "isValid: function() {", "isEmpty: function() {")
+        self.assertIn('Ext.isEmpty(Ext.String.trim(this.queryById("omicNameField").getValue() || ""))', is_valid)
 
     def test_the_four_panels_share_one_field_validation(self):
         """Every field, not up to the first failure: the sibling loops
         `valid = valid && (...validate())` stopped marking after the first
         invalid field, so a user was refused twice for two mistakes."""
         self.assertIn("function validateAllFields(container)", self.full)
+        helper = between(self.full, "function validateAllFields(container)", "\n}\n")
+        self.assertIn("Ext.suspendLayouts();", helper)
+        self.assertIn("Ext.resumeLayouts(true);", helper)
         self.assertEqual(self.full.count("validateAllFields("), 5,
                          "one definition and four isValid() call sites")
         self.assertNotIn("valid = valid && (this.items[i] || items[i].validate());", self.full)
@@ -307,7 +314,7 @@ class FileTypeComboStoresThePickTest(unittest.TestCase):
         and the old `=== ""` let checkForm() pass a form ExtJS then refused
         with no field named."""
         is_valid = between(self.source, "isValid: function() {", "isEmpty: function() {")
-        self.assertIn('Ext.isEmpty(this.queryById("omicNameField").getValue())', is_valid)
+        self.assertIn('Ext.isEmpty(Ext.String.trim(this.queryById("omicNameField").getValue() || ""))', is_valid)
         self.assertNotIn('queryById("omicNameField").getValue() === ""', is_valid)
 
     def test_the_panel_runs_extjs_validation_before_its_own_checks(self):
@@ -340,6 +347,9 @@ class AClientSideAbortNamesTheFieldTest(unittest.TestCase):
         util = read(UTIL_JS)
         handler = between(util, "function extJSErrorHandler(form, responseObj)", "\n}\n")
         self.assertIn("form.monitor", handler)
+        # DOM order, like checkForm()'s refusal: the form's Monitor keeps
+        # insertion order, and a container put back on the form lands last.
+        self.assertIn('form.owner.query("field")', handler)
         self.assertIn("firstVisibleInvalidField(", handler)
         helper = between(util, "function firstVisibleInvalidField(fields)", "\n}\n")
         self.assertIn("isVisible(true)", helper)
@@ -372,8 +382,8 @@ class AClientSideAbortNamesTheFieldTest(unittest.TestCase):
         refusal = between(controller, "function showInvalidStep1FormMessage(jobView)", "\n}\n")
         self.assertIn("showInvalidFieldMessage(", refusal)
         self.assertNotIn("function plainFieldText", controller)
-        reason = between(controller, "function step1FailureReason(response)", "\n}\n")
-        self.assertIn("plainFieldText(", reason, "one tag-stripper in the client")
+        # step1FailureReason stays self-contained: its own test lifts it into
+        # node verbatim, where no Util.js global exists.
 
 
 if __name__ == "__main__":
