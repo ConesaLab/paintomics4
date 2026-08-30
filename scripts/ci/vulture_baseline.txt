@@ -246,6 +246,7 @@ PaintomicsServer/src/tests/test_organism_search.py: unused class 'MultiWordQueri
 PaintomicsServer/src/tests/test_organism_search.py: unused class 'RequestDialogScale' (60% confidence)
 PaintomicsServer/src/tests/test_organism_search.py: unused class 'Typos' (60% confidence)
 PaintomicsServer/src/tests/test_organism_search.py: unused class 'Wiring' (60% confidence)
+PaintomicsServer/src/tests/test_other_omic_file_type_combo_stores_the_pick.py: unused class 'FileTypeComboStoresThePick' (60% confidence)
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'EvidenceClassification' (60% confidence)
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'KeggRelationGraph' (60% confidence)
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'PrintedObstacles' (60% confidence)
