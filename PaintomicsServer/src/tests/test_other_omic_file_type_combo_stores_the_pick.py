@@ -373,10 +373,10 @@ class AClientSideAbortNamesTheFieldTest(unittest.TestCase):
         """checkForm()'s refusal and the client-abort branch quote the field
         the same way, from one helper that also scrolls it into view."""
         util = read(UTIL_JS)
-        self.assertIn("function showInvalidFieldMessage(field)", util)
+        self.assertIn("function showInvalidFieldMessage(field, opts)", util)
         self.assertIn("function plainFieldText(html)", util)
         self.assertIn("function fieldErrorText(field)", util)
-        helper = between(util, "function showInvalidFieldMessage(field)", "\n}\n")
+        helper = between(util, "function showInvalidFieldMessage(field, opts)", "\n}\n")
         self.assertIn("scrollIntoView", helper)
         controller = read(os.path.join(CLIENT_ROOT, "app", "controller", "JobController.js"))
         refusal = between(controller, "function showInvalidStep1FormMessage(jobView)", "\n}\n")

@@ -112,10 +112,13 @@ PUBLISHED = {
     # composition, plainFieldText and fieldErrorText, shared with checkForm().
     # v=2.7 stops offering Report error on the branch that names the field:
     # a refusal that says which box to fill in is the software working, not a
-    # fault to mail to the developers. Only the no-field fallback stays
-    # reportable.
+    # fault to mail to the developers.
+    # v=2.8 keeps the button on the one named-field refusal that is not the
+    # user's doing -- extJSErrorHandler's CLIENT_INVALID, which is only reached
+    # after checkForm()/isValid() already approved the form, so it means ExtJS
+    # refused something the app had just passed. That is #109's shape.
     "app/view/common/Util.js": (
-        "2.7", "00d3b1589d28435e9c515fb87ce350f5d5904f9032880feb0c042912e64548cb"),
+        "2.8", "5e32bd98a485def921b7c64292bc735e43c08381871632e18e3d2202d27bd1f5"),
     "app/view/common/OrganismSearch.js": (
         "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
     "app/view/common/ExtJS_extensions.js": (
