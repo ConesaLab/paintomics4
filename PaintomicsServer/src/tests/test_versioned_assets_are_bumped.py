@@ -110,8 +110,15 @@ PUBLISHED = {
     # v=2.6 names the field when ExtJS's own submit-time validation refuses
     # (the client-abort branch of extJSErrorHandler) and carries the refusal
     # composition, plainFieldText and fieldErrorText, shared with checkForm().
+    # v=2.7 stops offering Report error on the branch that names the field:
+    # a refusal that says which box to fill in is the software working, not a
+    # fault to mail to the developers.
+    # v=2.8 keeps the button on the one named-field refusal that is not the
+    # user's doing -- extJSErrorHandler's CLIENT_INVALID, which is only reached
+    # after checkForm()/isValid() already approved the form, so it means ExtJS
+    # refused something the app had just passed. That is #109's shape.
     "app/view/common/Util.js": (
-        "2.6", "926a7144091afe09310da492fc933cdd8a8312234374a90829fa77177bccacca"),
+        "2.8", "5e32bd98a485def921b7c64292bc735e43c08381871632e18e3d2202d27bd1f5"),
     "app/view/common/OrganismSearch.js": (
         "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
     "app/view/common/ExtJS_extensions.js": (

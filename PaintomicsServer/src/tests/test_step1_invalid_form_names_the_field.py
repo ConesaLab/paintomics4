@@ -69,7 +69,7 @@ UTIL_HEADERS = {
     "plainFieldText": "function plainFieldText(html) {",
     "fieldErrorText": "function fieldErrorText(field) {",
     "firstVisibleInvalidField": "function firstVisibleInvalidField(fields) {",
-    "showInvalidFieldMessage": "function showInvalidFieldMessage(field) {",
+    "showInvalidFieldMessage": "function showInvalidFieldMessage(field, opts) {",
     "extJSErrorHandler": "function extJSErrorHandler(form, responseObj) {",
 }
 NO_DATA_STATEMENT = "var STEP1_NO_DATA_MESSAGE ="
@@ -333,6 +333,21 @@ class InvalidFormNamesTheFieldTest(unittest.TestCase):
         self.assertFalse(entry["opts"]["showReportButton"],
                          "an empty form is the user's to fill in, not a bug to report")
 
+    def test_a_named_field_is_not_reportable(self):
+        """The branch that names a field is the one proving the form works.
+
+        checkForm() found the field, said what it wants and scrolled it into
+        view: that is the software telling the user which box to fill in, not
+        a fault to mail to the developers. Both "Error notification" mails of
+        2026-08-30 09:24 UTC came from here -- "Organism: This field is
+        required" and "Data file: Please, provide a Data file." -- from a
+        guest whose next act was to fix the form and run the job.
+        """
+        entry = self.results["organismMissing"]["shown"][0]
+        self.assertIn("Organism", entry["title"])
+        self.assertFalse(entry["opts"]["showReportButton"],
+                         "a named field is the user's to fill in, not a bug to report")
+
     def test_a_refusal_with_nothing_marked_keeps_the_old_wording(self):
         entry = self.results["nothingMarked"]["shown"][0]
         self.assertIn("Please check the form errors", entry["title"])
@@ -360,16 +375,39 @@ class InvalidFormNamesTheFieldTest(unittest.TestCase):
         self.assertIn("The maximum length for this field is 100", result["shown"][0]["title"])
         self.assertEqual(result["scrolled"], ["omicNameField"])
 
+    def test_a_client_side_abort_that_names_a_field_stays_reportable(self):
+        """The one named-field refusal that IS worth reporting.
+
+        checkForm()'s refusal runs before the app tries to submit, so it is the
+        user's to fix. This one runs after: every caller of extJSErrorHandler
+        gates on checkForm() or form.isValid() first, so reaching it means
+        ExtJS's submit-time revalidation refused a form the app had just
+        approved -- the software disagreeing with itself.
+
+        That is the exact shape of #109, where an allowBlank on an optional
+        field made the Other data type panel unsubmittable while naming a real
+        field. It hid for five years on guest sessions that leave no job and no
+        server-side trace, and a user pressing Report error on this dialog is
+        what surfaced it.
+        """
+        entry = self.results["clientAbortNamesTheField"]["shown"][0]
+        self.assertTrue(entry["opts"]["showReportButton"],
+                        "a form that fails validation it just passed is a bug, not typing")
+
     def test_a_client_side_abort_on_a_destroyed_form_does_not_throw(self):
         """The complex path destroys its temporary form before the handler
         runs; the generic wording, not a TypeError, is what follows."""
         entry = self.results["clientAbortDestroyedForm"]["shown"][0]
         self.assertIn("Please check the form errors", entry["title"])
+        self.assertTrue(entry["opts"]["showReportButton"],
+                        "nothing marked anywhere is the shape of a bug")
 
     def test_a_client_side_abort_never_names_a_hidden_field(self):
         entry = self.results["clientAbortHiddenOnly"]["shown"][0]
         self.assertNotIn("File Type", entry["title"])
         self.assertIn("Please check the form errors", entry["title"])
+        self.assertTrue(entry["opts"]["showReportButton"],
+                        "nothing marked anywhere is the shape of a bug")
 
     def test_every_case_shows_exactly_one_dialog(self):
         for name, result in self.results.items():
