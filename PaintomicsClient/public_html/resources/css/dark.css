@@ -2029,3 +2029,18 @@
 :root[data-theme="dark"] #threshold_box .paClassPill-off { background: rgba(255, 255, 255, 0.08) !important; color: #A1B0C0; }
 :root[data-theme="dark"] #threshold_box .paClassPillDot { background: #7DD87F !important; }
 :root[data-theme="dark"] .metaboliteHead > h3.metaboliteTitle { color: #E3EAF2; }
+
+/* The Browse control inside every Step 1 file field (main.css .po-browse) is
+   muted ink, not a link, but the blanket anchor rule above paints any <a> in
+   the link blue. Restated here at the same specificity so the control keeps
+   the field's ink in the dark theme too; hover brings it up to the control
+   ink exactly as in the light theme. */
+[data-theme="dark"] .po-browse a {
+  color: inherit;
+}
+[data-theme="dark"] .po-browse a:hover {
+  color: var(--pa-ink-strong, #FFFFFF);
+}
+[data-theme="dark"] .po-browse-caret {
+  border-left-color: var(--pa-border, rgba(255, 255, 255, 0.14));
+}

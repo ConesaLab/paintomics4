@@ -944,8 +944,93 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		this.queryById("visiblePathField").setRawValue("");
 		this.queryById("originField").setValue("");
 	},
+	/* Greys the in-field control out and makes it ignore clicks; the read-only
+	   path field stays readable. Remembered so a call made before the field is
+	   rendered (the example scenarios disable their rows straight away) still
+	   lands once wireBrowse() runs. */
 	setDisabled: function(disabled) {
-		this.queryById("optionsButton").setDisabled(disabled);
+		var field = this.queryById("visiblePathField");
+		var control = (field && field.rendered) ? field.bodyEl.down(".po-browse") : null;
+		this.browseDisabled = !!disabled;
+		if (control) {
+			control[disabled ? "addCls" : "removeCls"]("po-browse-disabled");
+			control.set({"aria-disabled": disabled ? "true" : "false"});
+		}
+	},
+	openFilePicker: function() {
+		this.queryById("fileField").fileInputEl.el.dom.click();
+	},
+	/* The menu behind the caret: the three entries the split button used to
+	   carry, plus whatever the panel adds through extraButtons. Built once and
+	   torn down with the widget -- a menu renders to the document body and would
+	   otherwise outlive the row it belongs to. */
+	buildOptionsMenu: function() {
+		var me = this;
+		return new Ext.menu.Menu({
+			items: [
+				{
+					text: 'Upload file from my PC',
+					handler: function() {
+						me.openFilePicker();
+					}
+				}, {
+					text: 'Use a file from My Data',
+					disabled: (Ext.util.Cookies.get("userID") === null),
+					handler: function() {
+						var _callback = function(selectedItem) {
+							if (selectedItem !== null) {
+								me.clearValue();
+								me.setValue(selectedItem[0].get("fileName"));
+							}
+						};
+						Ext.widget("myFilesSelectorDialog").showDialog(_callback);
+					}
+				}, {
+					text: 'Clear selection',
+					handler: function() {
+						me.clearValue();
+					}
+				}
+			].concat(me.extraButtons || [])
+		});
+	},
+	/* Attaches the in-field control once the path field is rendered: the text
+	   opens the picker, the caret opens the menu under itself. An anchor answers
+	   Enter on its own; Space is what a button answers, so it is added here. */
+	wireBrowse: function(field) {
+		var me = this;
+		var text = field.bodyEl.down(".po-browse-text");
+		var caret = field.bodyEl.down(".po-browse-caret");
+		if (!text || !caret) {
+			return;
+		}
+		text.on("click", function(e) {
+			e.stopEvent();
+			if (!me.browseDisabled) {
+				me.openFilePicker();
+			}
+		});
+		caret.on("click", function(e) {
+			e.stopEvent();
+			if (!me.browseDisabled) {
+				me.optionsMenu.showBy(caret, "tr-br?");
+			}
+		});
+		field.bodyEl.on("keydown", function(e, target) {
+			if (e.getKey() === e.SPACE) {
+				e.stopEvent();
+				target.click();
+			}
+		}, me, {delegate: ".po-browse a"});
+		if (me.browseDisabled) {
+			me.setDisabled(true);
+		}
+	},
+	onDestroy: function() {
+		if (this.optionsMenu) {
+			this.optionsMenu.destroy();
+		}
+		this.callParent(arguments);
 	},
 	markInvalid: function(errorMessage) {
 		return this.queryById("visiblePathField").markInvalid(errorMessage);
@@ -969,6 +1054,7 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	initComponent: function() {
 		var me = this;
 
+		me.optionsMenu = me.buildOptionsMenu();
 		me.items = [{
 			xtype: "container",
 			layout: {
@@ -991,45 +1077,24 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 				labelWidth: me.labelWidth,
 				readOnly: true,
 				fieldLabel: me.fieldLabel,
+				cls: "po-file-path",
+				/* The Browse control is part of the field. "Browse..." at the field's
+				   right edge opens the file picker; the caret beside it opens the menu
+				   that used to hang off a split button standing next to the field as a
+				   second bordered box. The field's own template renders it, so it sits
+				   inside the one border the row has, and wireBrowse() attaches the
+				   handlers once the field is on the page. */
+				afterSubTpl: '<span class="po-browse">' +
+					'<a class="po-browse-text" href="javascript:void(0)" role="button">' + me.buttonText + '</a>' +
+					'<a class="po-browse-caret" href="javascript:void(0)" role="button" aria-haspopup="true" aria-label="More options for this file"></a>' +
+					'</span>',
+				listeners: {
+					afterrender: function(field) {
+						me.wireBrowse(field);
+					}
+				},
 				style: {
 					"margin-right": "3px"
-				}
-			}, {
-				xtype: "splitbutton",
-				itemId: "optionsButton",
-				text: me.buttonText,
-				maxHeight: 24,
-				menu: new Ext.menu.Menu({
-					items: [
-						// these will render as dropdown menu items when the arrow is clicked:
-						{
-							text: 'Upload file from my PC',
-							scope: me,
-							handler: function() {
-								me.queryById("fileField").fileInputEl.el.dom.click();
-							}
-						}, {
-							text: 'Use a file from My Data',
-							disabled: (Ext.util.Cookies.get("userID") === null),
-							handler: function() {
-								var _callback = function(selectedItem) {
-									if (selectedItem !== null) {
-										me.clearValue();
-										me.setValue(selectedItem[0].get("fileName"));
-									}
-								};
-								Ext.widget("myFilesSelectorDialog").showDialog(_callback);
-							}
-						}, {
-							text: 'Clear selection',
-							handler: function() {
-								me.clearValue();
-							}
-						}
-					].concat(me.extraButtons)
-				}),
-				handler: function() {
-					this.showMenu();
 				}
 			}, (me.requiredTag ? {
 				xtype: "box",
