@@ -920,6 +920,11 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	fieldLabel: "label",
 	namePrefix: "filefield",
 	buttonText: "Browse...",
+	/* The drawn width of the in-field control, per label: measured once on
+	   the first row that can be measured and reused by every other row. */
+	statics: {
+		measuredWidths: {}
+	},
 	/* "required" or "optional": whether the job needs this file. Every file row on
 	   Step 1 sets it, so a row that says nothing is a row somebody forgot, not a
 	   row with nothing to say. Shown as the asterisk in the label; conditional
@@ -956,12 +961,14 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	},
 	/* Two doors, one state. The widget's own lock (example rows, through
 	   setDisabled) and the path field's own disabled state (a panel switching
-	   the row off through the field or its container) each grey the control
-	   out; either is enough, and a container enable cascade -- the miRNA
-	   correlation box, the Region-based own-associations toggle -- cannot lift
-	   the widget's lock, which is how example rows once came back to life. */
+	   the row off through the field or its container; read from the field, not
+	   mirrored) each grey the control out; either is enough, and a container
+	   enable cascade -- the miRNA correlation box, the Region-based
+	   own-associations toggle -- cannot lift the widget's lock, which is how
+	   example rows once came back to life. */
 	applyBrowseState: function() {
-		var off = !!(this.browseLocked || this.fieldDisabled);
+		var field = this.queryById("visiblePathField");
+		var off = !!(this.browseLocked || (field && field.disabled));
 		var buttons = this.browseButtons || [];
 		var i;
 		for (i = 0; i < buttons.length; i++) {
@@ -1045,8 +1052,11 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		caret.on("mousedown", function() {
 			me.menuWasOpen = me.optionsMenu.isVisible();
 		});
-		caret.on("click", function() {
-			me.toggleOptionsMenu();
+		caret.on("click", function(e) {
+			/* A keyboard activation is a click with no mousedown before it
+			   (detail 0); a press released off the caret leaves the flag stale,
+			   so the keyboard does not read it. */
+			me.toggleOptionsMenu(!!(e.browserEvent && e.browserEvent.detail === 0));
 		});
 		caret.on("keydown", function(e) {
 			if (e.getKey() === e.DOWN) {
@@ -1073,28 +1083,36 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		   measures 0 here, so a zero is never written, and the field's resize
 		   -- which fires when that container is shown and laid out -- measures
 		   again; an unchanged figure is not written back. */
+		var widths = me.self.measuredWidths;
 		var measure = function() {
-			var width = control.getWidth();
+			/* Every row on the page shares one label and one font, so one drawn
+			   control answers for all of them: the first figure is kept and the
+			   other rows read it instead of forcing a layout each. */
+			var width = widths[me.buttonText] || control.getWidth();
 			var padding = (width + 2) + "px";
-			if (width > 0) {
-				if (field.inputEl.getStyle("padding-right") !== padding) {
-					field.inputEl.setStyle("padding-right", padding);
-				}
-				field.un("resize", measure);
+			if (width <= 0) {
+				return false;
 			}
+			widths[me.buttonText] = width;
+			if (field.inputEl.getStyle("padding-right") !== padding) {
+				field.inputEl.setStyle("padding-right", padding);
+			}
+			field.un("resize", measure);
+			return true;
 		};
-		measure();
-		field.on("resize", measure);
+		if (!measure()) {
+			field.on("resize", measure);
+		}
 		/* The web font can land after the first paint and change the width. */
 		if (document.fonts && document.fonts.ready) {
 			document.fonts.ready.then(function() {
 				if (!me.isDestroyed && field.rendered) {
+					delete widths[me.buttonText];
 					measure();
 				}
 			});
 		}
 		me.setRequiredTag(me.requiredTag);
-		me.fieldDisabled = !!field.disabled;
 		me.applyBrowseState();
 	},
 	/* The field label as words, for the caret's name: four rows on one card
@@ -1106,9 +1124,9 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	showOptionsMenu: function() {
 		this.optionsMenu.showBy(this.browseCaret, "tr-br?");
 	},
-	toggleOptionsMenu: function() {
+	toggleOptionsMenu: function(keyboard) {
 		var menu = this.optionsMenu;
-		var wasOpen = this.menuWasOpen;
+		var wasOpen = !keyboard && this.menuWasOpen;
 		this.menuWasOpen = false;
 		if (wasOpen || menu.isVisible()) {
 			menu.hide();
@@ -1204,14 +1222,13 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 					/* Panels disable a row through the field or its container
 					   (`down('container').setDisabled(...)`), and the container
 					   cascade reaches form fields and buttons only. The control
-					   follows the field's own events -- as its own flag, so the
-					   enable that follows cannot lift a lock set through setDisabled. */
+					   follows the field's own events and reads the field's own disabled
+					   state, so the enable that follows cannot lift a lock set through
+					   setDisabled. */
 					disable: function() {
-						me.fieldDisabled = true;
 						me.applyBrowseState();
 					},
 					enable: function() {
-						me.fieldDisabled = false;
 						me.applyBrowseState();
 					}
 				},

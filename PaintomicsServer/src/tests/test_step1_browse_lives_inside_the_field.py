@@ -115,9 +115,8 @@ class BrowseLivesInsideTheFieldTest(unittest.TestCase):
         control follows the field's own disable/enable events."""
         self.assertRegex(self.field, r"\bdisable:\s*function")
         self.assertRegex(self.field, r"\benable:\s*function")
-        set_disabled = between(self.widget, "setDisabled: function(disabled)",
-                               "openFilePicker: function")
-        self.assertIn(".disabled = ", set_disabled,
+        apply = between(self.widget, "applyBrowseState: function()", "\n\t},")
+        self.assertIn(".disabled = ", apply,
                       "the native disabled attribute is the one carrier")
 
     def test_the_widget_still_forwards_mark_invalid(self):
@@ -136,21 +135,24 @@ class BrowseLivesInsideTheFieldTest(unittest.TestCase):
         under Browse once the row is shown. Measure only a drawn control and
         again when the field is laid out."""
         wire = between(self.widget, "wireBrowse: function(field)", "\n\t},")
-        self.assertRegex(wire, r"\bwidth\s*>\s*0", "guard the zero measurement")
+        self.assertRegex(wire, r"\bwidth\s*<=\s*0", "guard the zero measurement")
         self.assertRegex(wire, r"[\"']resize[\"']", "re-measure on the field's resize")
-        self.assertIn('un("resize"', wire, "stop re-measuring once a figure has landed")
+        self.assertRegex(wire, r"if \(!measure\(\)\)", "listen for resize only until a figure has landed")
         self.assertIn("document.fonts", wire, "the web font can land after the first measurement")
+        self.assertIn("measuredWidths", self.widget, "one figure per label for every row on the page")
 
     def test_a_container_enable_cannot_lift_the_example_lock(self):
         """Example rows are locked through the widget's setDisabled; a panel
         that disables and re-enables the row's container (the miRNA
         correlation box, the Region-based own-associations toggle) fires the
         field's enable, which must not unlock them. Two flags, one state."""
-        self.assertIn("applyBrowseState: function()", self.widget)
-        self.assertRegex(self.widget, r"browseLocked\s*\|\|\s*this\.fieldDisabled")
+        apply = between(self.widget, "applyBrowseState: function()", "\n\t},")
+        self.assertIn("browseLocked", apply)
+        # The field's own disabled state, not a mirror of it kept in step by hand.
+        self.assertRegex(apply, r"field\s*&&\s*field\.disabled")
         listeners = between(self.field, "listeners: {", "\n\t\t\t\t},")
         self.assertNotIn("setDisabled(false)", listeners)
-        self.assertIn("fieldDisabled = false", listeners)
+        self.assertEqual(listeners.count("applyBrowseState()"), 2, "disable and enable both re-apply")
 
     def test_the_caret_toggles_its_menu_without_a_timer(self):
         """Ext.menu.Manager hides every menu on a document mousedown, so a
@@ -162,7 +164,10 @@ class BrowseLivesInsideTheFieldTest(unittest.TestCase):
         wire = between(self.widget, "wireBrowse: function(field)", "\n\t},")
         self.assertRegex(wire, r"[\"']mousedown[\"'][^}]*menuWasOpen\s*=")
         self.assertNotIn("stopPropagation", wire)
-        toggle = between(self.widget, "toggleOptionsMenu: function()", "\n\t},")
+        # A press released off the caret never becomes a click and would leave
+        # the flag stale; a keyboard activation (detail 0) must not read it.
+        self.assertIn("detail === 0", wire)
+        toggle = between(self.widget, "toggleOptionsMenu: function(keyboard)", "\n\t},")
         self.assertIn("menuWasOpen", toggle)
         self.assertIn("isVisible()", toggle)
 
