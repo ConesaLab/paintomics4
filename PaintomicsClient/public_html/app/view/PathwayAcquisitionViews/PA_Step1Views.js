@@ -2571,7 +2571,7 @@ function OmicSubmittingPanel(nElem, options) {
 							fieldLabel: 'File Type', emptyText: 'Type or choose the file type',
 							name: this.namePrefix + '_file_type',
 							hidden: this.omicName !== "",
-							displayField: 'name', valueField: ' name',
+							displayField: 'name', valueField: 'name',
 							editable: true, allowBlank: false,
 							value: (this.fileType !== null) ? this.fileType : null,
 							store: Ext.create('Ext.data.ArrayStore', {
@@ -2599,7 +2599,7 @@ function OmicSubmittingPanel(nElem, options) {
 							name: this.namePrefix + '_relevant_file_type',
 							hidden: this.omicName !== "",
 							displayField: 'name', valueField: 'name',
-							editable: true, allowBlank: false,
+							editable: true, allowBlank: true,
 							value: (this.relevantFileType !== null) ? this.relevantFileType : null,
 							store: Ext.create('Ext.data.ArrayStore', {
 								fields: ['name', 'type'],
