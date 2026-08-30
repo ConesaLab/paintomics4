@@ -105,9 +105,10 @@ class EveryFileRowIsTaggedTest(unittest.TestCase):
 
     def test_the_help_column_says_once_what_the_asterisk_means(self):
         """One legend per form, next to the rows, instead of a word per row."""
-        self.assertIn('po-required-mark', self.source)
-        self.assertRegex(self.source, r"marks? (the )?files? (the job|this job|a job) needs",
-                         "the help text must explain the asterisk")
+        legend = re.search(r'<p><span class="po-required-mark"[^>]*>\*</span> marks the files the job needs[^<]*</p>', self.source)
+        self.assertIsNotNone(legend, "the help text must explain the asterisk")
+        # Read aloud, the sentence needs its subject: the mark names itself.
+        self.assertIn('role="img" aria-label="asterisk"', legend.group(0))
 
 
 class TheTagIsOneComponentTest(unittest.TestCase):
@@ -122,8 +123,8 @@ class TheTagIsOneComponentTest(unittest.TestCase):
         # After the words and before the colon: ExtJS emits the template after
         # its separator, so the separator is blank and the colon is in the
         # template.
-        self.assertIn('labelSeparator: "",', source)
-        self.assertIn("'</span>:',", source)
+        self.assertRegex(source, r'labelSeparator:\s*""')
+        self.assertRegex(source, r"</span>:['\"]")
         self.assertNotIn('itemId: "requiredTag"', source)
         self.assertNotIn("buildRequiredTag", source)
         self.assertNotIn("po-file-tag", source)
@@ -133,12 +134,17 @@ class TheTagIsOneComponentTest(unittest.TestCase):
         the label and the setter only shows or hides it."""
         source = read(MY_DATA_VIEW)
         setter = source[source.index("setRequiredTag: function(tag)"):]
-        setter = setter[:setter.index("\n\t},") + 4]
+        setter = setter[:setter.index("return this;")]
         self.assertIn('setDisplayed(tag === "required")', setter)
 
     def test_the_mark_is_red_and_the_words_are_gone(self):
         css = read(MAIN_CSS)
         self.assertRegex(css, r"\.po-required-mark\s*\{[^}]*var\(--pa-status-error")
+        # The token is named after the refusal dialog's ink, so the dialog
+        # reads it too -- one source of truth for the colour.
+        dialog = css[css.index("#messageDialog.errorDialog h4 {"):]
+        dialog = dialog[:dialog.index("}")]
+        self.assertIn("var(--pa-status-error", dialog)
         self.assertNotIn(".po-file-tag {", css)
         self.assertNotIn(".po-file-tag-required {", css)
 

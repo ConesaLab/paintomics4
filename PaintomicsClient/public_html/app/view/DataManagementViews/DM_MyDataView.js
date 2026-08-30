@@ -963,6 +963,11 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 	openFilePicker: function() {
 		this.queryById("fileField").fileInputEl.el.dom.click();
 	},
+	/* The panels mark a row that is missing its file through the widget; a
+	   Container has no markInvalid of its own, so it lands on the path field. */
+	markInvalid: function(errorMessage) {
+		return this.queryById("visiblePathField").markInvalid(errorMessage);
+	},
 	/* The menu behind the caret: the three entries the split button used to
 	   carry, plus whatever the panel adds through extraButtons. Built once and
 	   torn down with the widget -- a menu renders to the document body and would
@@ -1048,15 +1053,27 @@ Ext.define('Paintomics.view.common.MyFilesSelectorButton', {
 		});
 		/* The stylesheet's padding-right is a guess for the first paint; the
 		   control's real width depends on the text and the font, so measure it
-		   once it is drawn and let the input end exactly where it begins. */
-		field.inputEl.setStyle("padding-right", (control.getWidth() + 2) + "px");
+		   and let the input end exactly where it begins. A row rendered inside
+		   a hidden container (the Region-based panel's own-associations rows)
+		   measures 0 here, so a zero is never written, and the field's resize
+		   -- which fires when that container is shown and laid out -- measures
+		   again. */
+		var measure = function() {
+			if (control.getWidth() > 0) {
+				field.inputEl.setStyle("padding-right", (control.getWidth() + 2) + "px");
+			}
+		};
+		measure();
+		field.on("resize", measure);
 		me.setRequiredTag(me.requiredTag);
 		me.setDisabled(me.browseDisabled);
 	},
-	/* The field label without its trailing colon, for the caret's name: four
-	   rows on one card would otherwise all announce as "More options". */
+	/* The field label as words, for the caret's name: four rows on one card
+	   would otherwise all announce as "More options". Six shipped labels carry
+	   a <br>, which JobController's plainFieldText strips. */
 	rowName: function() {
-		return Ext.String.trim(String(this.fieldLabel || "this file").replace(/:\s*$/, "")) || "this file";
+		var label = String(this.fieldLabel);
+		return (typeof plainFieldText === "function") ? plainFieldText(label) : label;
 	},
 	showOptionsMenu: function(caret) {
 		this.optionsMenu.showBy(caret, "tr-br?");

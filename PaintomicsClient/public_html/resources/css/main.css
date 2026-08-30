@@ -198,7 +198,7 @@ root {
      own fill - which is why the green and red button fills do not constrain
      the choice. */
   --pa-focus-ring: #0A84FF;
-  --pa-status-error: #C84D2F;   /* the refusal dialog's ink; the asterisk on a required row */
+  --pa-status-error: #C84D2F;   /* the refusal dialog's ink and the asterisk on a required row */
 
   /* Surfaces and controls ----------------------------------------------------
      The app had three corner radii in play - 2px on cards, 3px on form fields,
@@ -2548,7 +2548,7 @@ body > .x-mask {
 	border-top-color: rgb(211, 96, 68);
 }
 #messageDialog.errorDialog h4 {
-	color: #C84D2F; /* was rgb(211,96,68) - 3.80:1 on the dialog's white fill */
+	color: var(--pa-status-error, #C84D2F); /* was rgb(211,96,68) - 3.80:1 on the dialog's white fill */
 }
 #messageDialog.warningDialog {
 	border-top-color: #CB7505;
@@ -7667,6 +7667,12 @@ a.po-ghost-action > i.fa {
   color: var(--pa-ink-muted);
   opacity: 0.45;
   cursor: default;
+}
+/* A row switched off by its panel (the miRNA associations row when the
+   correlation box is ticked) is disabled through the field, which Neptune
+   already fades to .3; the control's own fade would stack on top of it. */
+.x-item-disabled .po-browse button:disabled {
+  opacity: 1;
 }
 
 /* The "Request an organism" dialog, opened by the pill above.

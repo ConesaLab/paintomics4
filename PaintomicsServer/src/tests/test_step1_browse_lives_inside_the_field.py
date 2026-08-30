@@ -120,10 +120,35 @@ class BrowseLivesInsideTheField(unittest.TestCase):
         self.assertIn(".disabled = ", set_disabled,
                       "the native disabled attribute is the one carrier")
 
+    def test_the_widget_still_forwards_mark_invalid(self):
+        """Eleven Step 1 validators call markInvalid() on the widget (a
+        Container, which has none of its own) to mark a row that is missing
+        its file; the forwarder to the path field must survive any rewrite
+        of the widget or every such refusal throws instead of marking."""
+        self.assertIn('up("myFilesSelectorButton")', self.step1)
+        self.assertIn('.markInvalid("Please, provide', self.step1)
+        forwarder = between(self.widget, "markInvalid: function(errorMessage)", "\n\t},")
+        self.assertIn('queryById("visiblePathField").markInvalid(errorMessage)', forwarder)
+
+    def test_the_control_is_measured_when_it_is_actually_drawn(self):
+        """A row rendered inside a hidden container measures 0 at afterrender;
+        writing that into the input's padding would let the file name run
+        under Browse once the row is shown. Measure only a drawn control and
+        again when the field is laid out."""
+        wire = between(self.widget, "wireBrowse: function(field)", "\n\t},")
+        self.assertRegex(wire, r"getWidth\(\)[^;]*>\s*0|>\s*0[^;]*getWidth", "guard the zero measurement")
+        self.assertRegex(wire, r"[\"']resize[\"']", "re-measure on the field's resize")
+
     def test_the_menu_still_offers_the_three_actions(self):
         for entry in ("Upload file from my PC", "Use a file from My Data",
                       "Clear selection"):
             self.assertIn(entry, self.widget)
+
+    def test_a_row_disabled_through_its_container_fades_once(self):
+        """Neptune fades a disabled field (.x-item-disabled, opacity .3) and
+        the control fades its disabled buttons (.45); stacked, the control
+        all but vanishes on the miRNA associations row."""
+        self.assertRegex(self.css, r"\.x-item-disabled\s+\.po-browse\s+button:disabled\s*\{[^}]*opacity:\s*1")
 
     def test_the_stylesheet_puts_browse_inside_the_field(self):
         self.assertRegex(self.css, r"\.po-browse\s*\{[^}]*position:\s*absolute")
