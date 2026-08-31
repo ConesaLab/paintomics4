@@ -36,8 +36,15 @@ updates:
     commit-message:
       prefix: "deps"
 
+  # Two directories: "/" reaches .github/workflows, and the composite action has
+  # to be named separately -- dependabot does not recurse into
+  # .github/actions/*/action.yml, and that file pins six actions of its own. It
+  # is also the file CODEOWNERS singles out as able to turn the gate green
+  # without running anything, so it is the last one that should go unwatched.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/setup-paintomics"
     schedule:
       interval: "weekly"
       day: "monday"

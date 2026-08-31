@@ -115,7 +115,7 @@ scripts/regression.sh 01-gene-single-condition
 ```
 
 Note that the installer needs the *other* interpreter: `DBManager.py` depends on
-`scriptine`, which dies on Python 3.11's removed `inspect.formatargspec`.
+`scriptine`, which dies on Python 3.11's removed `inspect.getargspec`.
 Installer under the conda 3.9 environment, pipeline under the 3.11 venv.
 
 **A field you added showing up as a diff in datasets you did not think about.**
@@ -136,7 +136,7 @@ intend to change are byte-identical with `diff -r`.
 `--write-baseline` creates **missing** baselines only and never overwrites one.
 To regenerate a baseline, delete its directory on purpose and re-run.
 
-After any baseline change, dispatch the nightly — the gate sees four of twelve
+After any baseline change, dispatch the nightly — the gate sees five of twelve
 datasets, so a stale baseline in the other eight is invisible until 03:17.
 
 ## Running the gate locally
@@ -147,8 +147,11 @@ Lint is the cheapest job to fail, and the whole of it runs locally:
 pip install ruff==0.14.13 vulture==2.16
 ruff check --output-format concise .
 scripts/ci/vulture_gate.sh
-for s in scripts/*.sh scripts/ci/*.sh deploy/*.sh; do bash -n "$s" || break; done
-python -m compileall -q PaintomicsServer/src scripts
+for s in scripts/*.sh scripts/ci/*.sh deploy/*.sh; do bash -n "$s" || exit 1; done
+find PaintomicsClient -name '*.js' \
+  | grep -vEi '/(lib|libs|vendor|ext-[0-9]|extjs|jquery|node_modules)/' \
+  | xargs -n1 node --check
+python -m compileall -q scripts/ci/vulture_whitelist.py
 ```
 
 The unit sweep runs through the same script CI uses:
@@ -174,6 +177,6 @@ it: a page added to `docs/` but left out of the nav, or a link that resolves to
 nothing, fails here instead of quietly never appearing on the published site.
 
 ```bash
-python -m pip install -r docs/requirements.txt
+python -m pip install -r docs/mkdocs-pins.txt
 mkdocs build --strict
 ```

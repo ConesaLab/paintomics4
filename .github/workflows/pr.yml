@@ -67,6 +67,23 @@ jobs:
       # here instead, and the duplicate pass over the other 467 is gone.
       - name: The one file ruff does not parse
         run: python -m compileall -q scripts/ci/vulture_whitelist.py
+      # `gate` carries a hand-written `needs:` list and branch protection
+      # requires only `gate`. A seventh job added below and forgotten there
+      # would report success without waiting for it -- the same silent
+      # degradation `gate` itself exists to prevent, one level up.
+      - name: The gate waits on every job in this workflow
+        run: |
+          python -m pip install --quiet pyyaml
+          python - <<'CHECK'
+          import sys, yaml
+          jobs = yaml.safe_load(open(".github/workflows/pr.yml"))["jobs"]
+          waits_on = set(jobs["gate"].get("needs") or [])
+          missing = set(jobs) - waits_on - {"gate"}
+          if missing:
+              print("::error::gate does not wait on: " + ", ".join(sorted(missing)))
+              sys.exit(1)
+          print("gate waits on all %d other jobs" % len(waits_on))
+          CHECK
 
   unit-tests:
     # Two shards: the single job crept from 7 to 10 minutes as suites were
@@ -165,7 +182,7 @@ jobs:
           python-version: "3.11"
       - name: Build the documentation
         run: |
-          python -m pip install --quiet -r docs/requirements.txt
+          python -m pip install --quiet -r docs/mkdocs-pins.txt
           mkdocs build --strict --site-dir "${RUNNER_TEMP}/site"
 
   gate:

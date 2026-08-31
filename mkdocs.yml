@@ -39,26 +39,27 @@ nav:
 
 theme: readthedocs
 
-# docs/requirements.txt is the Read the Docs build input (see /.readthedocs.yaml).
-# It is not documentation and must not be copied into the built site.
-exclude_docs: |
-   requirements.txt
-
-# Pages that are deliberately absent from the nav. Listing them here records the
-# decision and keeps `mkdocs build --strict` quiet about them.
-#   - dev/ is maintainer documentation: it says so on its own first line and asks
-#     to stay out of this nav;
+# Pages that must NOT reach the published site. `exclude_docs` is the mechanism
+# that actually keeps them off it: `not_in_nav` only drops a page from the
+# navigation, and mkdocs still builds and publishes it at its URL, unlinked.
+#   - mkdocs-pins.txt is build input, not documentation;
+#   - dev/ is maintainer documentation -- deployment procedure and internal
+#     traps -- and says on its own first line that it is not for users;
 #   - the two engineering directories hold dated implementation plans and design
-#     specs, not user documentation;
-#   - ai-agent-benchmark.md and ai-agent-tooling-notes.md are running measurement
-#     records for an internal comparison of the two AI interpretation arms;
-#   - 5_2_detailed_views.md and 5_3_heatmaps.md are unwritten stubs: each holds
-#     the shared logo header and the contact line and nothing else.
-not_in_nav: |
+#     specs;
+#   - ai-agent-benchmark.md and ai-agent-tooling-notes.md are running
+#     measurement records for an internal comparison of the two AI arms.
+exclude_docs: |
+   mkdocs-pins.txt
    dev/
    superpowers/
    frontend-modernization/
    ai-agent-benchmark.md
    ai-agent-tooling-notes.md
+
+# Published, but deliberately absent from the nav: both are unwritten stubs
+# holding the shared logo header and the contact line and nothing else. Listing
+# them here records the decision and keeps `mkdocs build --strict` quiet.
+not_in_nav: |
    5_2_detailed_views.md
    5_3_heatmaps.md

@@ -1,4 +1,0 @@
-# Documentation toolchain only. The application manifest is the root
-# requirements.txt; it is not needed and must not be installed to build the docs.
-# Read the Docs installs this file (see /.readthedocs.yaml).
-mkdocs==1.6.1

@@ -19,7 +19,7 @@ Flask application (PaintomicsServer/src/paintomicsserver.py)
   |            \                    \                  \
 MongoDB      PySiQ queue          Rscript            more-rs
              (in-process,         generateMetaGenes.R  (Rust MORE PLS1)
-              N_WORKERS threads)  hubAnalysis.R
+              N_WORKERS threads)
 ```
 
 Entry points:
@@ -173,7 +173,7 @@ reproducible from the source databases but takes hours to refetch.
 The application shells out on the user-facing request path, so a host that
 serves pages perfectly can still fail the moment someone clicks a button:
 
-- **R** — `src/common/bioscripts/generateMetaGenes.R` and `hubAnalysis.R` for
+- **R** — `src/common/bioscripts/generateMetaGenes.R` for
   Metagenes and Hub Analysis. `deploy/smoke-test.sh` checks that `purrr`,
   `cluster`, `mclust`, `amap`, `factoextra`, `igraph`, `ggplot2`, `jsonlite`,
   `stringr` and `dplyr` all import.
@@ -209,7 +209,7 @@ CI is the mirror image: the PR gate and the nightly run with
 `PaintomicsClient/public_html` is an ExtJS 4.2.1 application served as static
 files. Two mechanics matter operationally:
 
-- **Cache markers.** `index.html` references assets as `Util.js?v=2.6` and
+- **Cache markers.** `index.html` references assets as `Util.js?v=2.8` and
   friends. `revalidateEntryDocument` in `paintomicsserver.py` serves
   `index.html` itself as `no-cache, must-revalidate` while every asset gets
   `max-age=43200`. An edited asset whose `?v=` marker did not change is served

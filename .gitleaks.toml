@@ -8,14 +8,26 @@ title = "Paintomics secret scanning"
 useDefault = true
 
 [allowlist]
-description = "Ignore third-party/vendor and minified code to reduce false positives"
+description = "Vendored code, and the gitignored files a working instance has"
+# `gitleaks dir` walks the filesystem and does NOT honour .gitignore, so without
+# the second group below the documented local command reports leaks on every
+# correctly configured developer machine -- from the very files SECURITY.md
+# tells operators to create. Each path here is gitignored (see .gitignore lines
+# 81, 90 and 99), so nothing allowlisted can ever be committed and this cannot
+# mask a real leak. CI is unaffected either way: actions/checkout produces a
+# tree with none of these files in it.
 paths = [
   '''^PaintomicsClient/public_html/js/libs/''',
   '''^PaintomicsClient/public_html/admin/lib/bootstrap/node_modules/''',
   '''^.*node_modules/''',
   '''^.*vendor/''',
   '''^.*\.min\.js$''',
-  '''^\.idea/'''
+  '''^\.idea/''',
+  # gitignored, and therefore uncommittable, secret locations
+  '''^(.*/)?\.env$''',
+  '''(^|/)conf/serverconf\.py$''',
+  '''(^|/)conf/local_serverconf\.py$''',
+  '''^deploy/nginx/certs/'''
 ]
 
 # Run it the way the pull-request gate does:

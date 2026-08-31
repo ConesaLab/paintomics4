@@ -3,7 +3,9 @@
 These pages are for people who run, deploy and debug PaintOmics — not for
 people who use it. The user guide is at
 [paintomics.readthedocs.io](https://paintomics.readthedocs.io/en/latest/), built
-from the rest of `docs/`. These four pages are deliberately not in `mkdocs.yml`.
+from the rest of `docs/`. These pages are listed under `exclude_docs` in
+`mkdocs.yml`, so they are not built into that site at all — `not_in_nav`
+would only unlink them, leaving them published at their URLs.
 
 They exist because the operational knowledge of this project has lived in one
 person's head and in private notes. Everything here is reconstructed from the
@@ -51,7 +53,9 @@ Python 3.11, MongoDB, R, and the `libcairo2` shared library:
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-Rscript -e 'install.packages(c("purrr","amap","cluster","factoextra","mclust","optparse"))'
+Rscript -e 'install.packages(c("purrr","cluster","mclust","amap","factoextra",
+                               "igraph","ggplot2","jsonlite","stringr","dplyr",
+                               "optparse"))'
 
 cd PaintomicsServer
 python src/launch_server.py            # http://localhost:8000

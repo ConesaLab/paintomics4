@@ -38,7 +38,14 @@ cd PaintOmics
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-Rscript -e 'install.packages(c("purrr","amap","cluster","factoextra","mclust","optparse"))'
+Rscript -e 'install.packages(c("purrr","cluster","mclust","amap","factoextra",
+                               "igraph","ggplot2","jsonlite","stringr","dplyr",
+                               "optparse"))'
+# The first ten are the set deploy/smoke-test.sh checks for; a machine without
+# them passes the unit tests and fails the smoke test. The MORE R engines
+# additionally need the MORE package, which is not on CRAN -- see
+# https://github.com/BiostatOmics/MORE. The default MORE engine is the Rust
+# port and needs none of this.
 
 cd PaintomicsServer
 python src/launch_server.py                # http://localhost:8000
@@ -59,10 +66,16 @@ A fresh instance has an empty database and does nothing useful until at least on
 species is installed. This is the expensive step, measured in hours and hundreds
 of gigabytes, not minutes.
 
+The installer is the one thing that must **not** run in the 3.11 virtual
+environment above: `DBManager.py` calls into `scriptine`, which uses
+`inspect.getargspec` — removed in Python 3.11 — so it dies on the first
+command. Run it under a Python 3.9 interpreter (the conda `paintomics4`
+environment); the pipeline itself stays on 3.11.
+
 ```bash
 cd PaintomicsServer
-python src/AdminTools/DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=1 --reactome=1
-python src/AdminTools/DBManager.py install  --specie=mmu
+python3.9 src/AdminTools/DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=1 --reactome=1
+python3.9 src/AdminTools/DBManager.py install  --specie=mmu
 ```
 
 Install **mmu**: every bundled example dataset uses it, and so does the whole
@@ -133,8 +146,8 @@ scripts/regression.sh                                    # all 12 datasets
 scripts/regression.sh 01-gene-single-condition           # one
 ```
 
-It needs, on the host: MongoDB with mmu installed, `Rscript` with the metagene and
-hub packages, `examplefiles/GTF/sorted_mmu.gtf`, and a `more-rs` binary at
+It needs, on the host: MongoDB with mmu installed, `Rscript` with the metagene
+packages, `examplefiles/GTF/sorted_mmu.gtf`, and a `more-rs` binary at
 `src/common/bioscripts/more-rs` (or named by `PAINTOMICS_MORE_RS`) for the MORE
 datasets. It refuses to start without the last one rather than reporting R's
 different table ordering as a regression.
@@ -185,7 +198,7 @@ pip install ruff==0.14.13 vulture==2.16
 
 ruff check --output-format concise .
 scripts/ci/vulture_gate.sh
-for s in scripts/*.sh scripts/ci/*.sh deploy/*.sh; do bash -n "$s" || break; done
+for s in scripts/*.sh scripts/ci/*.sh deploy/*.sh; do bash -n "$s" || exit 1; done
 find PaintomicsClient -name '*.js' \
   | grep -vEi '/(lib|libs|vendor|ext-[0-9]|extjs|jquery|node_modules)/' \
   | xargs -n1 node --check
@@ -278,7 +291,7 @@ numbers were before and after. Read `ae55c611` or `4ddb86e9` for the shape.
 Pull requests land either as a squash whose subject carries `(#NNN)`, or as a
 merge commit `Merge pull request #NNN from ConesaLab/<branch>`. Either is fine.
 
-Before you open one: the four required checks must pass, and any change to the
+Before you open one: `Gate` must pass, and any change to the
 UI or to server behaviour should have been exercised in a browser against a
 running instance, not only in the diff.
 

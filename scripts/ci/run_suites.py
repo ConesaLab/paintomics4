@@ -55,6 +55,26 @@ def run_suite(name, timeout):
             "tail": "\n".join(out.strip().splitlines()[-TAIL_LINES:])}
 
 
+def baseline_failures(suite):
+    """How many failures this suite is known to have on master.
+
+    `None` means the suite is not baselined at all, so any failure is this
+    branch's. Otherwise it is the count stated by run_all.BASELINE's own text
+    ("3 failures: the stub gateway ..."), and a run that fails MORE times than
+    that has introduced something even though the suite name is on the list.
+
+    Matching on the suite name alone was the hole: a suite baselined for one
+    known failure absorbed a brand-new second one and the gate stayed green.
+    An entry with no parseable count still shields the whole suite -- keep the
+    counts in BASELINE so it does not.
+    """
+    note = run_all.BASELINE.get(suite)
+    if note is None:
+        return None
+    match = re.match(r"\s*(\d+)\s+failures?\b", note)
+    return int(match.group(1)) if match else sys.maxsize
+
+
 SUITE_TIMES = os.path.join(HERE, "suite_times.txt")
 
 
@@ -152,8 +172,18 @@ def main(argv=None):
         results = list(pool.map(lambda name: run_suite(name, args.timeout), names))
 
     bad = [r for r in results if r["state"] != "PASS"]
-    inherited = [r for r in bad if r["suite"] in run_all.BASELINE]
-    introduced = [r for r in bad if r["suite"] not in run_all.BASELINE]
+    inherited, introduced = [], []
+    for result in bad:
+        expected = baseline_failures(result["suite"])
+        seen = len(result["failing"])
+        if expected is None or seen > expected:
+            # Not baselined at all, or baselined and now failing MORE than it
+            # was: either way this branch is answerable for it.
+            if expected is not None:
+                result["grew"] = (expected, seen)
+            introduced.append(result)
+        else:
+            inherited.append(result)
     skipped = [r for r in results if r["skipped"]]
     total = sum(r["secs"] for r in results)
 
@@ -173,9 +203,11 @@ def main(argv=None):
         for r in skipped:
             print("   %s" % r["suite"])
     if introduced:
-        print("\nFAILED (not in BASELINE):")
+        print("\nFAILED (new, or worse than BASELINE records):")
         for r in introduced:
-            print("   %-50s %s %s" % (r["suite"], r["state"], ", ".join(r["failing"])[:80]))
+            grew = ("  [was %d failure(s) on master, now %d]" % r["grew"]) if "grew" in r else ""
+            print("   %-50s %s %s%s"
+                  % (r["suite"], r["state"], ", ".join(r["failing"])[:80], grew))
         for r in introduced:
             print("\n----- %s (%s): last %d lines -----" % (r["suite"], r["state"], TAIL_LINES))
             print(r["tail"])

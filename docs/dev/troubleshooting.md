@@ -95,7 +95,7 @@ checks an interpreter version. Set `PYTHON` explicitly to the pinned 3.11
 interpreter and re-run before reverting anything.
 
 **A field you added appearing everywhere.** An additive output change is still a
-diff, and the pull-request gate only samples four of the twelve datasets. Before
+diff, and the pull-request gate only samples five of the twelve datasets. Before
 rewriting any baseline, classify every difference — `ADDED` / `REMOVED` /
 `VALUE CHANGE` / `TYPE CHANGE` / `LIST LENGTH`. Additive-only means stale;
 anything else is a regression hiding behind one. Regenerate by deleting the

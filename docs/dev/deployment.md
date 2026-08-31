@@ -160,9 +160,13 @@ is intended.
 Pathway data is installed per species and is the slow, destructive part —
 measured in hours and hundreds of gigabytes, not minutes.
 
+Run the installer under a Python 3.9 interpreter, not the 3.11 environment the
+application uses: `DBManager.py` goes through `scriptine`, which calls
+`inspect.getargspec`, removed in 3.11.
+
 ```bash
-python src/AdminTools/DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=1 --reactome=1
-python src/AdminTools/DBManager.py install  --specie=mmu
+python3.9 src/AdminTools/DBManager.py download --specie=mmu --kegg=1 --mapping=1 --common=1 --reactome=1
+python3.9 src/AdminTools/DBManager.py install  --specie=mmu
 ```
 
 Use `--common=0` for every species after the first; the common step re-downloads
