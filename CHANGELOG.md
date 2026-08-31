@@ -60,6 +60,7 @@ merged them where one exists.
 - A compound omic reported more mapped features than it contained, and features cloned across databases doubled their omic values.
 - Reactome class enrichment was computed and then discarded after every analysis, and features were marked eligible for a hardcoded pair of databases rather than for every database selected.
 - An analysis that matched nothing died with a division error, and the metagenes step crashed on an empty file instead of saying nothing matched (#97).
+- Dependabot resolved the Python dependency group against the newest interpreter instead of the 3.11 this project pins, so its first pull request proposed a NumPy and a SciPy that cannot install here and took the other twenty bumps down with them; the interpreter is now declared in `.python-version`, and `test_dependencies_declared.py` fails if that file and the seven places CI and the images name an interpreter ever disagree.
 - A relevance-file header heuristic that only worked for Arabidopsis was replaced with an organism-agnostic one, and a legacy two-column parser dropped the suffix from every row after the first, costing 14 pathways.
 - Identifiers that sit two hops away in the cross-reference graph were unreachable, so features that needed an intermediate database were reported as unmapped (#49), and a symbol lookup returned 38 rows for the 13 genes asked for, duplicating features downstream.
 - An empty identifier was used as a join key, and association rows were written without a target gene identifier (#95).

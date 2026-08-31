@@ -17,8 +17,34 @@
 # before merging a major bump; a green PR here is not evidence that the
 # scientific stack still behaves the same.
 #
+# `/.python-version` at the repository root is what tells dependabot the
+# interpreter is 3.11. Without it dependabot resolves against the newest Python
+# it knows, and the first pip group it opened proposed `numpy==2.5.2`, which
+# declares `Requires-Python >= 3.12` and so cannot install here at all: the
+# whole pull request died at `pip install` before one test ran (#118, run
+# 33437005065). numpy was not the only casualty of that miss, only the first
+# one pip reached — `scipy==1.18.1` in the same group also requires 3.12 and
+# publishes no cp311 wheel.
+#
 # Updates are grouped so that a week produces one pull request per ecosystem
 # rather than a dozen.
+#
+# Splitting each ecosystem in two on `update-types` — a patch/minor pull
+# request that merges on a green gate, a major one reviewed on purpose — was
+# tried and rejected, because requirements.txt pins every package with `==` and
+# those pins constrain each other across exactly that boundary:
+#
+#   * `openai-agents` 0.8.4 -> 0.22.0 keeps its leading zero, so dependabot
+#     calls it a minor, but 0.22.0 requires `openai>=3.0.0,<4` — and `openai`
+#     2.25.0 -> 3.x is a major, in the other group.
+#   * The newest numpy for 3.11 is 2.4.6, a major; `scipy` 1.13.1, which would
+#     stay behind in the minor group, requires `numpy<2.3`.
+#
+# Each half would install a package whose own dependency is pinned in the other
+# half, so both pull requests would end at `ResolutionImpossible` — #118 twice
+# over instead of not at all. One group per ecosystem keeps the set consistent;
+# the interpreter pin above is what stops an unusable member from being
+# proposed in the first place.
 
 version: 2
 

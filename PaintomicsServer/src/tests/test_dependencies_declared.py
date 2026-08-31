@@ -21,6 +21,7 @@ import ast
 import importlib.util
 import os
 import pathlib
+import re
 import sys
 import traceback
 
@@ -141,6 +142,75 @@ def test_there_is_exactly_one_requirements_file():
         "the root requirements.txt is missing"
 
 
+def test_the_interpreter_pin_agrees_everywhere():
+    """`.python-version`, the workflows and the image must name one interpreter.
+
+    The version is written down in six places (three `FROM python:` stages, two
+    `setup-python` steps and the composite action) and, since 2026-08-31, in
+    `/.python-version` as well. That seventh copy is not decoration: it is the
+    only signal dependabot reads. Without it dependabot resolves the pip group
+    against the newest Python it knows, and the first group it opened proposed
+    `numpy==2.5.2`, whose `Requires-Python >= 3.12` made the whole pull request
+    fail at `pip install` before a test ran (#118).
+
+    So the file has to exist, has to name exactly one version, and has to agree
+    with what actually runs. A pin that drifts from CI is worse than no pin,
+    because dependabot would then resolve confidently against an interpreter
+    nothing uses.
+
+    `.readthedocs.yaml` is deliberately not checked: it builds the docs from
+    docs/mkdocs-pins.txt and never installs the application, so its toolchain
+    is independent of the runtime.
+    """
+    pin_file = _REPO_ROOT / ".python-version"
+    assert pin_file.is_file(), (
+        ".python-version is missing. dependabot needs it to resolve "
+        "requirements.txt against Python 3.11 instead of the newest release; "
+        "see .github/dependabot.yml")
+
+    raw = pin_file.read_text()
+    # A comment is allowed. dependabot-core#6650 was that a comment here made
+    # the parse fall back to "newest", but #9519 fixed it on 2024-04-19 and the
+    # parser now strips `#` to end-of-line, as pyenv does. What must not happen
+    # is two versions, or something that is not a version at all.
+    versions = [text for text in (line.split("#", 1)[0].strip()
+                                  for line in raw.splitlines()) if text]
+    assert len(versions) == 1 and re.fullmatch(r"\d+\.\d+", versions[0]), (
+        ".python-version must name exactly one bare <major>.<minor> version "
+        "(comments are allowed, anything else is not): dependabot reads this "
+        f"file to choose the interpreter it resolves against. Found: {raw!r}")
+    pin = versions[0]
+
+    found = {}
+
+    workflow_files = sorted((_REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    workflow_files += sorted((_REPO_ROOT / ".github" / "actions").glob("*/action.yml"))
+    for path in workflow_files:
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            match = re.search(r"""python-version:\s*["']?(\d+\.\d+)""", line)
+            if match:
+                found[f"{path.relative_to(_REPO_ROOT)}:{number}"] = match.group(1)
+
+    for path in sorted(_REPO_ROOT.glob("deploy/Dockerfile*")):
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            match = re.match(r"FROM\s+python:(\d+\.\d+)", line.strip())
+            if match:
+                found[f"{path.relative_to(_REPO_ROOT)}:{number}"] = match.group(1)
+
+    assert found, (
+        "no interpreter pin was found in any workflow or Dockerfile, so this "
+        "test is no longer checking anything -- the search patterns have gone "
+        "stale")
+
+    disagree = {where: version for where, version in found.items() if version != pin}
+    assert not disagree, (
+        f".python-version says {pin}, but these disagree: "
+        + ", ".join(f"{where} -> {version}" for where, version in sorted(disagree.items()))
+        + ". Every copy must name the same interpreter; if a workflow now "
+          "deliberately tests a second version, teach this test about it "
+          "rather than deleting it.")
+
+
 def test_known_previously_missing_dependencies_are_declared():
     """Regression guard for the three that actually broke."""
     requirements = (_REPO_ROOT / "requirements.txt").read_text().lower()
@@ -153,6 +223,7 @@ def main():
     tests = [
         test_every_external_import_resolves,
         test_there_is_exactly_one_requirements_file,
+        test_the_interpreter_pin_agrees_everywhere,
         test_known_previously_missing_dependencies_are_declared,
     ]
     for t in tests:
