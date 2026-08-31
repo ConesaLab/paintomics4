@@ -153,11 +153,10 @@ def test_the_interpreter_pin_agrees_everywhere():
     `numpy==2.5.2`, whose `Requires-Python >= 3.12` made the whole pull request
     fail at `pip install` before a test ran (#118).
 
-    So the file has to exist, has to be a bare version on one line
-    (dependabot-core#6650: a comment in it silently restores the "newest"
-    behaviour), and has to agree with what actually runs. A pin that drifts from
-    CI is worse than no pin, because dependabot would then resolve confidently
-    against an interpreter nothing uses.
+    So the file has to exist, has to name exactly one version, and has to agree
+    with what actually runs. A pin that drifts from CI is worse than no pin,
+    because dependabot would then resolve confidently against an interpreter
+    nothing uses.
 
     `.readthedocs.yaml` is deliberately not checked: it builds the docs from
     docs/mkdocs-pins.txt and never installs the application, so its toolchain
@@ -170,12 +169,17 @@ def test_the_interpreter_pin_agrees_everywhere():
         "see .github/dependabot.yml")
 
     raw = pin_file.read_text()
-    lines = [line for line in raw.splitlines() if line.strip()]
-    assert len(lines) == 1 and re.fullmatch(r"\d+\.\d+", lines[0]), (
-        ".python-version must contain exactly one bare version and nothing "
-        "else -- dependabot-core#6650 is that a comment inside it makes the "
-        f"parse fall back to the newest Python. Found: {raw!r}")
-    pin = lines[0]
+    # A comment is allowed. dependabot-core#6650 was that a comment here made
+    # the parse fall back to "newest", but #9519 fixed it on 2024-04-19 and the
+    # parser now strips `#` to end-of-line, as pyenv does. What must not happen
+    # is two versions, or something that is not a version at all.
+    versions = [text for text in (line.split("#", 1)[0].strip()
+                                  for line in raw.splitlines()) if text]
+    assert len(versions) == 1 and re.fullmatch(r"\d+\.\d+", versions[0]), (
+        ".python-version must name exactly one bare <major>.<minor> version "
+        "(comments are allowed, anything else is not): dependabot reads this "
+        f"file to choose the interpreter it resolves against. Found: {raw!r}")
+    pin = versions[0]
 
     found = {}
 
