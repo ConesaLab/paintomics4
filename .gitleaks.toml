@@ -1,5 +1,12 @@
 title = "Paintomics secret scanning"
 
+# `useDefault` is what makes this configuration scan for anything at all.
+# Without it gitleaks loads no rules and reports a clean tree however many keys
+# are in it -- this file had an [allowlist] and no rules from its introduction
+# until 2026-08-31, so it would have passed everything had anything run it.
+[extend]
+useDefault = true
+
 [allowlist]
 description = "Ignore third-party/vendor and minified code to reduce false positives"
 paths = [
@@ -11,4 +18,7 @@ paths = [
   '''^\.idea/'''
 ]
 
-# You can run: gitleaks detect --config=.gitleaks.toml
+# Run it the way the pull-request gate does:
+#   gitleaks dir . --config .gitleaks.toml --redact
+# Over the whole history (slow, run out of band):
+#   gitleaks git . --config .gitleaks.toml --redact --log-opts="--all"

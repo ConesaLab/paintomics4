@@ -1,8 +1,11 @@
-# Pull-request gate: lint, the unit-test sweep, and the fastest example
-# dataset of each pipeline class through the regression harness.
+# Pull-request gate: lint, the unit-test sweep, the fastest example dataset of
+# each pipeline class through the regression harness, a secret scan and a
+# documentation build.
 #
-# Budget: under 10 minutes wall clock. The three jobs run in parallel, so the
-# wall clock is the slowest of them; each has a hard timeout below it.
+# Budget: under 10 minutes wall clock. The five jobs run in parallel, so the
+# wall clock is the slowest of them; each has a hard timeout below it. A sixth
+# job, `gate`, waits on the other five and is the single status check that
+# branch protection on master requires -- see the comment on it below.
 #
 # No secrets. The pipeline jobs restore the species-data snapshot from the
 # Actions cache (seeded by data-cache.yml) and run with outbound networking
@@ -128,3 +131,61 @@ jobs:
           path: ${{ runner.temp }}/regression
           retention-days: 7
           if-no-files-found: ignore
+
+  secret-scan:
+    # gitleaks over the checked-out tree. Not the history: a full-history scan
+    # is minutes per pull request and the history is scanned once, out of band.
+    # GitHub's push protection catches provider-pattern secrets before they
+    # reach a branch; this catches what a bespoke config would otherwise miss.
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -fsSL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks dir . --config .gitleaks.toml --redact --no-banner
+
+  docs:
+    # mkdocs --strict, so a page that is added to docs/ but left out of the
+    # nav, or a link that points at nothing, fails here instead of quietly
+    # never appearing on the published site.
+    name: Docs build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build the documentation
+        run: |
+          python -m pip install --quiet -r docs/requirements.txt
+          mkdocs build --strict --site-dir "${RUNNER_TEMP}/site"
+
+  gate:
+    # One status check for branch protection to require. The unit-test job is a
+    # matrix, so its check names carry the shard ("1/2") and change whenever the
+    # shard count does -- a ruleset pinned to those names would silently stop
+    # gating the moment the matrix is edited. This job's name never changes.
+    name: Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    needs: [lint, unit-tests, fixtures, secret-scan, docs]
+    if: always()
+    steps:
+      - name: Every gate job succeeded
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          echo "job results: ${results}"
+          for result in ${results}; do
+            if [ "${result}" != "success" ]; then
+              echo "::error::the pull-request gate did not pass (${results})"
+              exit 1
+            fi
+          done

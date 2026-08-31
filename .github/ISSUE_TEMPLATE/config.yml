@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://paintomics.readthedocs.io/en/latest/
+    about: How the analyses work, what the input formats are, and how to install your own instance.
+  - name: Email the team
+    url: mailto:paintomicsai@gmail.com
+    about: Questions about using PaintOmics on your data, collaborations, and anything you cannot post publicly.

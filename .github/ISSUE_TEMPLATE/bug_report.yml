@@ -1,0 +1,167 @@
+name: Bug report
+description: Something in PaintOmics did not work, or produced a result you can show is wrong.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most reports we cannot act on are missing the same few facts: which job it was,
+        which organism, and what the input file looked like. The fields below ask for them.
+
+        This issue is public. Do not paste data you cannot publish. If the bug can only be
+        shown with data you cannot share, open the issue with everything except the data
+        and send the file to paintomicsai@gmail.com, naming the issue number.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what PaintOmics did in response. Include the exact error text if there was one.
+      placeholder: |
+        Uploaded three omic files, clicked "Run PaintOmics", and the job stopped at
+        "Matching identifiers" with the message ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: input
+    id: job-id
+    attributes:
+      label: Job ID
+      description: >-
+        The job identifier. It is in the address bar of the results page as `?jobID=...`,
+        and in the "Job ID" column of the "My jobs" table. If the job never got created,
+        write "no job".
+      placeholder: e.g. YoLTIjvH6t
+    validations:
+      required: true
+
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where in the workflow it happened
+      description: >-
+        The interface numbers three steps. "Pathway visualization" is the single-pathway
+        view you reach by opening a pathway from the step 3 results.
+      options:
+        - Step 1 - Upload and run (organism / databases / file upload)
+        - Step 2 - Identifier and name matching (mapping summary and compound disambiguation)
+        - Step 3 - Explore results (enrichment / networks / hub / class activity / metagenes)
+        - Pathway visualization (a single pathway diagram and its heatmaps)
+        - AI interpretation
+        - Regions to Genes or miRNA to Genes conversion
+        - My jobs or file management
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: organism
+    attributes:
+      label: Organism
+      description: >-
+        The organism you selected, as it appears in the picker. Write "not applicable" if
+        the bug does not involve an analysis.
+      placeholder: e.g. Mus musculus (mmu)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: omics
+    attributes:
+      label: Omic types submitted
+      description: Every omic panel present in the job, not only the one that failed.
+      multiple: true
+      options:
+        - Gene expression
+        - Metabolomics
+        - Proteomics
+        - Regulatory Omic
+        - Region-based omic
+        - Other omics
+    validations:
+      required: true
+
+  - type: dropdown
+    id: databases
+    attributes:
+      label: Pathway databases selected
+      description: KEGG is always included; tick every other database that was ticked in step 1.
+      multiple: true
+      options:
+        - KEGG
+        - Reactome
+        - MapMan
+        - OmniPath
+    validations:
+      required: true
+
+  - type: textarea
+    id: input-head
+    attributes:
+      label: First two lines of the input file
+      description: >-
+        The header line and the first data line of the file the bug involves, pasted as text
+        rather than as a screenshot. Two lines are enough to show the separator, the identifier
+        type and the column layout. Do not paste unpublished data - replace the identifiers and
+        values with made-up ones that keep the same shape, or send the real file to
+        paintomicsai@gmail.com instead. Write "not applicable" if the bug does not involve
+        an input file.
+      render: text
+      placeholder: |
+        #NAME	Control_1	Control_2	Treated_1	Treated_2
+        ENSMUSG00000000001	1.24	1.31	-0.88	-0.91
+    validations:
+      required: true
+
+  - type: dropdown
+    id: instance
+    attributes:
+      label: Which instance
+      options:
+        - https://paintomics.uv.es/
+        - A self-hosted instance
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version, if self-hosted
+      description: >-
+        The commit you deployed - `git rev-parse --short HEAD` in your checkout - or the image
+        tag you built. Leave blank if you used paintomics.uv.es.
+      placeholder: e.g. 97260ce1
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      description: The full version string, from the browser's About dialog.
+      placeholder: e.g. Chrome 139.0.7258.67 on macOS 15.5
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console output
+      description: >-
+        Optional, and useful when the interface misbehaves rather than the analysis. Open the
+        developer tools console, reproduce the problem, and paste what appears.
+      render: text
+
+  - type: checkboxes
+    id: data-check
+    attributes:
+      label: Before you submit
+      options:
+        - label: The lines I pasted above contain nothing I am not free to publish.
+          required: true
