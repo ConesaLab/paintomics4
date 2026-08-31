@@ -45,15 +45,89 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 # running them in a master worktree with this checkout's serverconf.py copied in.
 # A failure here is inherited, not caused. Trim this list when master goes green;
 # never add to it to make a branch look clean.
+# The count is FAIL plus ERROR, not the "failures=N" that unittest prints in its
+# last line: an exception is a test that broke before it reached an assertion,
+# and unittest reports those separately. test_more_servlet_step1 is why this is
+# spelled out -- it ran for months recorded as "17 failures" while producing 17
+# failures and one error (ERROR: test_queues_step2_with_the_job), so the
+# eighteenth broken test was outside the count by construction.
 BASELINE = {
-    "test_ai_agent_endtoend": "3 failures: the stub gateway cannot satisfy the "
+    "test_ai_agent_endtoend": "4 failures: the stub gateway cannot satisfy the "
                               "quote extractor, so reference [1] renders with no "
                               "Cited Text and every citation is then redacted",
-    "test_more_servlet_step1": "17 failures",
+    "test_more_servlet_step1": "18 failures: 17 assertions and one error, "
+                               "ERROR: test_queues_step2_with_the_job",
     "test_pathway_universe_database_filter": "1 failure",
     "test_relevance_file_shape_and_conditions": "2 failures",
     "test_dependencies_declared": "1 failure: an external import does not resolve",
 }
+
+# Both conventions the suites use to name a broken test: unittest's
+# "FAIL: test_x" / "ERROR: test_x", and the hand-rolled runners' "FAIL name:" /
+# "ERROR name:".
+FAILING_TEST = re.compile(r"^(?:FAIL|ERROR)[: ]+(\S+)", re.M)
+
+
+def baseline_failures(suite):
+    """How many failing tests this suite is known to have on master.
+
+    `None` means the suite is not baselined at all, so any failure belongs to
+    this branch. Otherwise it is the count BASELINE's own text states, and a run
+    that fails MORE times than that has introduced something even though the
+    suite name is on the list.
+
+    A note with no parseable count raises rather than shielding the suite. The
+    silent version of that used to be printable: `--baseline` emitted an entry
+    per failing suite with an empty note, and pasting it back would have made
+    every listed suite absorb an unlimited number of new failures forever.
+    """
+    note = BASELINE.get(suite)
+    if note is None:
+        return None
+    match = re.match(r"\s*(\d+)\s+failures?\b", note)
+    if not match:
+        raise ValueError(
+            "BASELINE[%r] does not begin with a count: %r. Write it as "
+            "'<n> failures: why', because a baseline entry without a number "
+            "shields the suite from every new failure it acquires." % (suite, note))
+    return int(match.group(1))
+
+
+def check_baseline():
+    """Every BASELINE note states a count -- checked before anything runs."""
+    for suite in BASELINE:
+        baseline_failures(suite)
+
+
+def split_by_baseline(bad):
+    """Partition failing suites into (inherited, introduced).
+
+    Matching on the suite NAME alone was the original hole: a suite baselined
+    for one known failure absorbed a brand-new second one and the gate stayed
+    green. Counting closed that. This closes the two ways a count can still be
+    fooled: a failure reported as ERROR was never counted at all, and a suite
+    that crashes before running anything names no test, so `0 <= expected` read
+    as "no worse than master" while the whole suite stopped being checked.
+
+    Annotates each result in place with `seen`, and with `collapsed` or `grew`
+    where they apply, so the caller can say which of the three it is.
+    """
+    inherited, introduced = [], []
+    for result in bad:
+        expected = baseline_failures(result["suite"])
+        seen = len(result["failing"])
+        result["seen"] = seen
+        if expected is None:
+            introduced.append(result)
+        elif seen == 0:
+            result["collapsed"] = expected
+            introduced.append(result)
+        elif seen > expected:
+            result["grew"] = (expected, seen)
+            introduced.append(result)
+        else:
+            inherited.append(result)
+    return inherited, introduced
 
 
 def classify(returncode, out):
@@ -90,7 +164,7 @@ def run_one(name, timeout):
         out, state, skipped = "", "TIMEOUT", False
     return {"suite": name, "state": state, "skipped": skipped,
             "secs": round(time.time() - started, 1),
-            "failing": re.findall(r"^FAIL[: ]+(\S+)", out, re.M)}
+            "failing": FAILING_TEST.findall(out)}
 
 
 def main(argv=None):
@@ -116,10 +190,10 @@ def main(argv=None):
                   % args.only, file=sys.stderr)
             return 2
 
+    check_baseline()
     results = [run_one(n, args.timeout) for n in names]
     bad = [r for r in results if r["state"] != "PASS"]
-    inherited = [r for r in bad if r["suite"] in BASELINE]
-    introduced = [r for r in bad if r["suite"] not in BASELINE]
+    inherited, introduced = split_by_baseline(bad)
     skipped = [r for r in results if r["skipped"]]
 
     print("%d suites | %d pass | %d inherited | %d INTRODUCED"
@@ -131,16 +205,28 @@ def main(argv=None):
     if inherited:
         print("\ninherited from master (not this branch):")
         for r in inherited:
-            print("   %-46s %s" % (r["suite"], BASELINE[r["suite"]][:60]))
+            print("   %-46s %2d/%-2d %s"
+                  % (r["suite"], r["seen"], baseline_failures(r["suite"]),
+                     BASELINE[r["suite"]][:60]))
     if introduced:
         print("\nINTRODUCED BY THIS BRANCH:")
         for r in introduced:
-            print("   %-46s %s" % (r["suite"], ", ".join(r["failing"])[:60]))
+            if "collapsed" in r:
+                note = ("  [baselined for %d failing test(s) and named none: "
+                        "the suite did not run]" % r["collapsed"])
+            elif "grew" in r:
+                note = "  [was %d on master, now %d]" % r["grew"]
+            else:
+                note = ""
+            print("   %-46s %s%s" % (r["suite"], ", ".join(r["failing"])[:60], note))
 
     if args.baseline:
+        # The count is the point. Printing an empty note used to produce a
+        # BASELINE that let every listed suite absorb any number of new
+        # failures, and baseline_failures() now refuses to load one.
         print("\nBASELINE = {")
         for r in bad:
-            print('    "%s": "",' % r["suite"])
+            print('    "%s": "%d failures: WHY",' % (r["suite"], len(r["failing"])))
         print("}")
 
     return 1 if introduced else 0
