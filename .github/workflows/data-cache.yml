@@ -29,10 +29,10 @@ jobs:
     env:
       DATA_SNAPSHOT: v1-kegg20260813
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Is it already cached?
         id: probe
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/paintomics-ci/data
           key: paintomics-ci-data-${{ env.DATA_SNAPSHOT }}
@@ -44,7 +44,7 @@ jobs:
         run: scripts/ci/fetch-data.sh ~/paintomics-ci/data
       - name: Save it
         if: steps.probe.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/paintomics-ci/data
           key: paintomics-ci-data-${{ env.DATA_SNAPSHOT }}

@@ -26,7 +26,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 360
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-paintomics
       - name: scripts/regression.sh
         env:
@@ -36,7 +36,7 @@ jobs:
         run: scripts/regression.sh
       - name: Keep the differing outputs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: regression-nightly-${{ github.run_id }}
           path: ${{ runner.temp }}/regression
@@ -48,7 +48,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-paintomics
       - name: scripts/ci/installer_smoke.py
         run: >-
@@ -57,7 +57,7 @@ jobs:
           --seed-common "$PAINTOMICS_KEGG_DATA"
       - name: Keep the logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installer-smoke-${{ github.run_id }}
           path: ${{ runner.temp }}/installer-smoke/mongod.log

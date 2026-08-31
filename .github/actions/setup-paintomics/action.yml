@@ -20,7 +20,7 @@ runs:
   using: composite
   steps:
     - name: Python 3.11
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: "3.11"
         cache: pip
@@ -50,7 +50,7 @@ runs:
     # packages in 20 s and then sat for eight minutes in its "check whether
     # quarto is needed" step, which was the entire PR budget.
     - name: R package library (cache)
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/paintomics-ci/Rlib
         key: r-packages-${{ inputs.r-version }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci/setup-r-packages.sh') }}
@@ -60,7 +60,7 @@ runs:
       run: scripts/ci/setup-r-packages.sh
 
     - name: MongoDB distribution (cache)
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/paintomics-ci/mongodb-dist
         key: mongodb-macos-arm64-8.2.9-tools-100.16.1
@@ -70,7 +70,7 @@ runs:
       run: scripts/ci/setup-mongo.sh
 
     - name: Species data snapshot (cache, seeded by data-cache.yml)
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: ~/paintomics-ci/data
         key: paintomics-ci-data-${{ inputs.data-snapshot }}
@@ -81,7 +81,7 @@ runs:
       run: scripts/ci/restore-data.sh ~/paintomics-ci/data
 
     - name: more-rs binary (cache)
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/paintomics-ci/more-rs
         key: more-rs-d261f9c8ea39aefd371bfb46afc596957a9dd7c5-${{ runner.os }}-${{ runner.arch }}
