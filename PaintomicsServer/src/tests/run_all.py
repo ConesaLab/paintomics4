@@ -63,9 +63,38 @@ BASELINE = {
 }
 
 # Both conventions the suites use to name a broken test: unittest's
-# "FAIL: test_x" / "ERROR: test_x", and the hand-rolled runners' "FAIL name:" /
-# "ERROR name:".
-FAILING_TEST = re.compile(r"^(?:FAIL|ERROR)[: ]+(\S+)", re.M)
+# "FAIL: test_x (mod.Class)" / "ERROR: test_x (mod.Class)", and the hand-rolled
+# runners' "FAIL  name". The separator must be a colon FOLLOWED by whitespace,
+# or two spaces -- not a bare colon. `logging.error()` writes "ERROR:root:..."
+# at the start of a line once basicConfig has run, and the server logs on every
+# report, mail and hub failure path, so the looser `[: ]+` counted log records
+# as failing tests: it inflated the number written into BASELINE, and a suite
+# whose logging then went quiet could acquire that many real failures unnoticed.
+FAILING_TEST = re.compile(r"^(?:FAIL|ERROR)(?::[ \t]+|[ \t]{2,})(\S+)", re.M)
+
+# How many tests a suite actually executed, in whichever convention it used --
+# unittest's "Ran 29 tests in 5.076s", the hand-rolled runners' "Passed: 3 / 4".
+# None means neither line appeared, which is what a suite that died on import
+# looks like.
+_RAN_UNITTEST = re.compile(r"^Ran (\d+) tests?\b", re.M)
+_RAN_HANDROLLED = re.compile(r"Passed:\s*\d+\s*/\s*(\d+)")
+
+
+def tests_run(out):
+    """The number of tests the run reported executing, or None if it never said."""
+    match = _RAN_UNITTEST.search(out) or _RAN_HANDROLLED.search(out)
+    return int(match.group(1)) if match else None
+
+
+# A class or module fixture that raises: unittest prints one `ERROR: setUpClass`
+# line and then silently does not run that class's tests, while the OTHER
+# classes in the file run normally -- so the suite still reports a healthy
+# "Ran 8 tests". The count rule is blind to it, because the dead fixture is
+# exactly one name: a suite baselined for one failure can trade its known
+# failure for an entire class that stopped executing and still compare equal.
+# Whatever else is true, a run in that state has not reproduced the baseline,
+# so it is never credited with it.
+BROKEN_FIXTURE = re.compile(r"^ERROR:[ \t]+((?:setUp|tearDown)(?:Class|Module))\b", re.M)
 
 
 def baseline_failures(suite):
@@ -104,22 +133,39 @@ def split_by_baseline(bad):
 
     Matching on the suite NAME alone was the original hole: a suite baselined
     for one known failure absorbed a brand-new second one and the gate stayed
-    green. Counting closed that. This closes the two ways a count can still be
+    green. Counting closed that. This closes the ways a count can still be
     fooled: a failure reported as ERROR was never counted at all, and a suite
-    that crashes before running anything names no test, so `0 <= expected` read
-    as "no worse than master" while the whole suite stopped being checked.
+    that never reaches its tests still compares favourably against its baseline.
 
-    Annotates each result in place with `seen`, and with `collapsed` or `grew`
-    where they apply, so the caller can say which of the three it is.
+    That last one is not only the import crash, which names nothing. unittest
+    reports a broken class fixture as a single `ERROR: setUpClass (...)` line
+    and then runs none of that class's tests -- one name against a baseline of
+    four, which read as "no worse than master" while a whole class had stopped
+    executing. If the file holds a second class the count does not even drop:
+    planting a `raise` in one setUpClass of test_pathway_universe_database_filter
+    still reported `Ran 8 tests`, one failing name, baseline 1, inherited, exit
+    0. So the COUNT is consulted only once the run is known to have executed its
+    tests with its fixtures intact; a broken fixture, a run of zero tests and a
+    suite that never finished are all this branch's, whatever the number says.
+
+    Annotates each result in place with `seen`, and with `fixture`, `collapsed`,
+    `timedout` or `grew` where they apply, so the caller can say which it is.
     """
     inherited, introduced = [], []
     for result in bad:
         expected = baseline_failures(result["suite"])
         seen = len(result["failing"])
+        ran = result.get("ran")
         result["seen"] = seen
         if expected is None:
             introduced.append(result)
-        elif seen == 0:
+        elif result.get("state") == "TIMEOUT":
+            result["timedout"] = expected
+            introduced.append(result)
+        elif result.get("fixtures"):
+            result["fixture"] = result["fixtures"]
+            introduced.append(result)
+        elif ran == 0 or (ran is None and seen == 0):
             result["collapsed"] = expected
             introduced.append(result)
         elif seen > expected:
@@ -164,6 +210,8 @@ def run_one(name, timeout):
         out, state, skipped = "", "TIMEOUT", False
     return {"suite": name, "state": state, "skipped": skipped,
             "secs": round(time.time() - started, 1),
+            "ran": tests_run(out),
+            "fixtures": BROKEN_FIXTURE.findall(out),
             "failing": FAILING_TEST.findall(out)}
 
 
@@ -211,9 +259,19 @@ def main(argv=None):
     if introduced:
         print("\nINTRODUCED BY THIS BRANCH:")
         for r in introduced:
-            if "collapsed" in r:
-                note = ("  [baselined for %d failing test(s) and named none: "
-                        "the suite did not run]" % r["collapsed"])
+            if "fixture" in r:
+                note = ("  [%s failed, so a class never ran: this run did not "
+                        "reproduce the baseline]"
+                        % ", ".join(sorted(set(r["fixture"]))))
+            elif "timedout" in r:
+                note = ("  [baselined for %d failing test(s) but did not "
+                        "finish: nothing can be credited to master]"
+                        % r["timedout"])
+            elif "collapsed" in r:
+                note = ("  [baselined for %d failing test(s) but this run %s: "
+                        "it did not get that far]"
+                        % (r["collapsed"], "ran 0 tests" if r.get("ran") == 0
+                           else "named no failing test"))
             elif "grew" in r:
                 note = "  [was %d on master, now %d]" % r["grew"]
             else:

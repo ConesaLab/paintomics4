@@ -15,9 +15,10 @@ Exit status 1 when a suite fails that run_all's BASELINE does not already
 account for -- exactly run_all's rule, and literally its code: the comparison
 lives in run_all.split_by_baseline so the two runners cannot disagree.
 A suite is answerable to this branch when it is not baselined at all, when it
-names MORE failing tests than BASELINE records, or when it is baselined and
-names NONE while still not passing (it crashed before running anything). Suites that skipped every test are listed
-(a skip is not a pass) but, as in run_all, do not fail the run.
+names MORE failing tests than BASELINE records, or when it is baselined but did
+not reproduce that baseline intact -- a class fixture died, no test ran, or it
+timed out. Suites that skipped every
+test are listed (a skip is not a pass) but, as in run_all, do not fail the run.
 """
 import argparse
 import glob
@@ -55,6 +56,8 @@ def run_suite(name, timeout):
         state, skipped = "TIMEOUT", False
     return {"suite": name, "state": state, "skipped": skipped,
             "secs": round(time.time() - started, 1),
+            "ran": run_all.tests_run(out),
+            "fixtures": run_all.BROKEN_FIXTURE.findall(out),
             "failing": run_all.FAILING_TEST.findall(out),
             "tail": "\n".join(out.strip().splitlines()[-TAIL_LINES:])}
 
@@ -185,9 +188,18 @@ def main(argv=None):
     if introduced:
         print("\nFAILED (new, or worse than BASELINE records):")
         for r in introduced:
-            if "collapsed" in r:
-                note = ("  [baselined for %d failing test(s) and named none: the "
-                        "suite did not run]" % r["collapsed"])
+            if "fixture" in r:
+                note = ("  [%s failed, so a class never ran: this run did not "
+                        "reproduce the baseline]"
+                        % ", ".join(sorted(set(r["fixture"]))))
+            elif "timedout" in r:
+                note = ("  [baselined for %d failing test(s) but did not finish: "
+                        "nothing can be credited to master]" % r["timedout"])
+            elif "collapsed" in r:
+                note = ("  [baselined for %d failing test(s) but this run %s: it "
+                        "did not get that far]"
+                        % (r["collapsed"], "ran 0 tests" if r.get("ran") == 0
+                           else "named no failing test"))
             elif "grew" in r:
                 note = "  [was %d failing test(s) on master, now %d]" % r["grew"]
             else:
