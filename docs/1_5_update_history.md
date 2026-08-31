@@ -4,5 +4,5 @@
 
 # PaintOmics Update history:
 - New tutorial video (07/18/2022)
-- New user guide (https://paintomics.readthedocs.io/en/latest/) (07/01/2022)
+- New user guide (https://conesalab.github.io/PaintOmics/) (07/01/2022)
 - Release of PaintOmics (v1.0.0) (05/31/2022)

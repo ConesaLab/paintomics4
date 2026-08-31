@@ -1,0 +1,70 @@
+# Publish the user guide.
+#
+# `.readthedocs.yaml` describes a build that has not run since July 2022: the
+# repository has no webhook, and the Read the Docs project still points at
+# github.com/ConesaLab/paintomics4, the name this repository had before it was
+# renamed. So https://paintomics.readthedocs.io/ still serves "PaintOmics v4.0
+# documentation", and the pages for the two AI features return 404 -- while
+# pr.yml's `Docs build` job proved on every pull request that the site compiles.
+# Something built the docs; nothing published them.
+#
+# This publishes them from the repository itself, so the site cannot drift from
+# master again. The Read the Docs config is left in place: if that project is
+# ever reconnected it can serve the same tree, and the old URL is worth
+# redirecting here rather than leaving stale.
+name: Docs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+# `contents: read` to check out, `pages: write` + `id-token: write` for the
+# deployment's OIDC token. Nothing here needs write access to the repository.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one half-done: an interrupted
+# deploy leaves the site serving whichever version got there first.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Build
+        run: |
+          python -m pip install --quiet -r docs/mkdocs-pins.txt
+          # --strict, as in the pull-request gate: a broken internal link or an
+          # unrecognised config key fails here rather than reaching the site.
+          mkdocs build --strict --site-dir _site
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

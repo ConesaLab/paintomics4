@@ -2,7 +2,7 @@ site_name: Paintomics Documentation
 site_description: >-
   Documentation for PaintOmics, a web tool for the integrative visualization of
   multiple omic datasets onto KEGG, Reactome and MapMan pathways.
-site_url: https://paintomics.readthedocs.io/en/latest/
+site_url: https://conesalab.github.io/PaintOmics/
 repo_url: https://github.com/ConesaLab/PaintOmics
 repo_name: ConesaLab/PaintOmics
 

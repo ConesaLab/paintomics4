@@ -10,7 +10,7 @@ The following document will guide you through the required steps to perform a ba
 2. Review initial matching results and configure metabolite assignment, if required.
 3. Visualization of final results.
 
-However, before starting to use the application you must choose between starting an anonymous session or continuing with an user account, which provides many benefits, <a target="_blank" href="http://paintomics.readthedocs.io/en/latest/2_2_cloud_drive/">read more about them</a>.
+However, before starting to use the application you must choose between starting an anonymous session or continuing with an user account, which provides many benefits, <a target="_blank" href="../2_2_cloud_drive/">read more about them</a>.
 
 
 # Step 1: upload data
@@ -22,16 +22,16 @@ The second section allows you to select analysis databases (**Figure 1.B**). For
 The third section contains two parts. In the right one (**Figure 1.D**) you can enter the input data for each omic to include in the analysis. For doing so the "Browse" button opens a menu with 3 options:
 
 1. **Upload file from my PC**: conventional approach to select the file from your computer.
-2. **Use a file from 'My data'**: only available for registered users. Read more at <a href="http://paintomics.readthedocs.io/en/latest/2_2_cloud_drive/" target="_blank">Cloud Drive</a> section.
+2. **Use a file from 'My data'**: only available for registered users. Read more at <a href="../2_2_cloud_drive/" target="_blank">Cloud Drive</a> section.
 3. **Clear selection**: reset the selected file, if any.
 
 By default "Gene expression" and "Metabolomics" omics are provided, but in the left side (**Figure 1.C**) you can add more by clicking the <img src="addicon.png" style="vertical-align: middle; height: 24px;margin:0;"/> icon; in a similar way, the <img src="removeicon.png"  style="vertical-align: middle; height: 24px;margin: 0;"/> icon allows to undo the action. You can add more than one omic of the same type, provided they have different names. Some options are simple shortcuts with predefined names (like "Proteomics") and will disappear from the list after adding them, unlike the generic ones (like Region based omic).
 
-An important setting is the type of enrichment to perform: based on genes or features. If no selection box is visible, like "Gene expression" or "Metabolomics" shortcuts, is because one default type is assumed by Paintomics. The selection might affect the contingency table used for Fisher test in the <a href="http://paintomics.readthedocs.io/en/latest/4_1_pathway_enrichment/" target="_blank">pathway enrichment</a>, for instance in proteomics data one protein identifier may match to more than one gene identifier; in feature enrichment type the protein would be counted once, whereas for the gene enrichment type the amount would be the number of genes matched by the protein.
+An important setting is the type of enrichment to perform: based on genes or features. If no selection box is visible, like "Gene expression" or "Metabolomics" shortcuts, is because one default type is assumed by Paintomics. The selection might affect the contingency table used for Fisher test in the <a href="../4_1_pathway_enrichment/" target="_blank">pathway enrichment</a>, for instance in proteomics data one protein identifier may match to more than one gene identifier; in feature enrichment type the protein would be counted once, whereas for the gene enrichment type the amount would be the number of genes matched by the protein.
 
 For more information about the configuration options of regulatory and region based omic, read the associated pages in the "Supporting tools" at the left menu of the main Paintomics webpage.
 
-You can read more about the accepted input data in the <a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/" target="_blank">dedicated page</a>. The example data is available from the server you are using, through the "Download example data" button in step 1 or the Downloads menu: it is built from that server's own catalogue, so it always matches what "Load example" offers, and it includes a `HOW-THIS-DATA-WAS-MADE.md` explaining which datasets are simulated and how.
+You can read more about the accepted input data in the <a href="../2_1_accepted_input/" target="_blank">dedicated page</a>. The example data is available from the server you are using, through the "Download example data" button in step 1 or the Downloads menu: it is built from that server's own catalogue, so it always matches what "Load example" offers, and it includes a `HOW-THIS-DATA-WAS-MADE.md` explaining which datasets are simulated and how.
 
 Once everything is ready, press the button "Run paintomics" in the upper left corner.
 
@@ -42,7 +42,7 @@ Once everything is ready, press the button "Run paintomics" in the upper left co
 
 # Step 2: matching summaries and metabolite assignment
 
-Paintomics processes your files and offers you different plots showing the results of matching the identifiers of your files to the KEGG/Reactome/MapMan ids (read more <a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/#identifier-and-name-conversion" target="_blank">here</a>). You can also view diverse information of your data by hovering the data distribution plot with the mouse cursor (**Figure 2**).
+Paintomics processes your files and offers you different plots showing the results of matching the identifiers of your files to the KEGG/Reactome/MapMan ids (read more <a href="../2_1_accepted_input/#identifier-and-name-conversion" target="_blank">here</a>). You can also view diverse information of your data by hovering the data distribution plot with the mouse cursor (**Figure 2**).
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="step2_up.png"/>
@@ -85,7 +85,7 @@ This panel shows you the summary of the pathway enrichment result from multiple 
 
 ### Pathways classification
 
-Each KEGG pathway is associated to a primary category and subcategory (see more <a href="http://paintomics.readthedocs.io/en/latest/4_2_kegg_categories/" target="_blank">here</a>). In this panel you can access that information by expanding the elements of the tree, with options to show or hide individual nodes or entire branches by clicking on the checkboxes or the links that appear when hovering over the options, then the "Apply" button.
+Each KEGG pathway is associated to a primary category and subcategory (see more <a href="../4_2_kegg_categories/" target="_blank">here</a>). In this panel you can access that information by expanding the elements of the tree, with options to show or hide individual nodes or entire branches by clicking on the checkboxes or the links that appear when hovering over the options, then the "Apply" button.
 
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
@@ -95,7 +95,7 @@ Each KEGG pathway is associated to a primary category and subcategory (see more 
 
 ### Pathways network
 
-The pathway interaction network is built according to the process described in <a href="http://paintomics.readthedocs.io/en/latest/4_3_pathways_network/" target="_blank">this page</a>, in which a more detailed explanation is given.
+The pathway interaction network is built according to the process described in <a href="../4_3_pathways_network/" target="_blank">this page</a>, in which a more detailed explanation is given.
 
 <div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
     <img src="pathway_network.png"/>
@@ -104,7 +104,7 @@ The pathway interaction network is built according to the process described in <
 
 ### Pathway enrichment
 
-In the pathway enrichment table you can see every pathway that had at least one match with your data, as explained <a href="http://paintomics.readthedocs.io/en/latest/4_1_pathway_enrichment/" target="_blank">in this page</a>.
+In the pathway enrichment table you can see every pathway that had at least one match with your data, as explained <a href="../4_1_pathway_enrichment/" target="_blank">in this page</a>.
 
 The header of the table has some filtering options to quickly search through the table. Note that this "live search" is not permanent, will not be saved and will not affect the number of found & significant pathways, unlike filtering by category as explained in the classification panel section.
 

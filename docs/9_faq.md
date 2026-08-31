@@ -4,7 +4,7 @@
 
 # I get an error every time I upload my data, what am I doing wrong?
 
-Be sure to check the message of the error, if any, as it may contain useful information like maximum number of lines exceeded, invalid numerical format... Also do not forget to read the appropiate documentation section (<a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/" target="_blank">accepted input data</a>) and download the example files to check them.
+Be sure to check the message of the error, if any, as it may contain useful information like maximum number of lines exceeded, invalid numerical format... Also do not forget to read the appropiate documentation section (<a href="../2_1_accepted_input/" target="_blank">accepted input data</a>) and download the example files to check them.
 
 # The page has been stuck for a very long time, waiting at the job to complete. Is it working?
 
