@@ -315,6 +315,15 @@ Python is 3.11 and both bounds are load-bearing: Pillow, CairoSVG and requests
 need ≥ 3.10 for their security fixes, and pandas 1.5.3 publishes no cp312 wheel.
 Do not raise or lower it as a side effect of adding a package.
 
+That version is stated once more in `/.python-version`, and
+`test_dependencies_declared.py` fails if any workflow step or `FROM python:`
+stage disagrees with it. The file is not decoration: dependabot reads it and
+nothing else, and while it was missing dependabot resolved the pip group against
+the newest Python it knew and proposed `numpy==2.5.2`, which needs 3.12 — the
+whole group failed at `pip install` before a test ran. Keep it a bare version on
+one line; a comment inside it silently restores the old behaviour
+(dependabot-core#6650).
+
 ## 8. Adding a server configuration setting
 
 `PaintomicsServer/src/conf/serverconf.py` is gitignored, generated once per

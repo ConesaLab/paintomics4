@@ -17,8 +17,25 @@
 # before merging a major bump; a green PR here is not evidence that the
 # scientific stack still behaves the same.
 #
-# Updates are grouped so that a week produces one pull request per ecosystem
-# rather than a dozen.
+# `/.python-version` at the repository root is what tells dependabot the
+# interpreter is 3.11. Without it dependabot resolves against the newest Python
+# it knows: the first pip run under this file proposed numpy 2.5.2, which
+# declares `Requires-Python >= 3.12` and so cannot install in CI at all — the
+# whole group died at `pip install` before one test ran (PR #118, run
+# 33437005065). That file has to stay a bare version on one line;
+# dependabot-core#6650 is that a comment inside it makes the parse fall back to
+# "newest".
+#
+# Updates are grouped so that a week produces a small number of pull requests
+# rather than a dozen — but each ecosystem gets TWO groups, not one. A single
+# group is only as mergeable as its worst member: #118 carried 22 bumps, 21 of
+# them routine, and one impossible major held all of them. Splitting on
+# update-type makes the patch/minor pull request the one that can be merged on a
+# green gate, and the major one a separately reviewed decision — which is what
+# the requirements.txt header asks for anyway, since it calls pandas 2.x a
+# behavioural change that is "not in scope". `update-types` filters *version*
+# updates only; security updates are raised from advisories and still come
+# through.
 
 version: 2
 
@@ -28,11 +45,19 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 4
     groups:
       python:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      python-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
     commit-message:
       prefix: "deps"
 
@@ -48,10 +73,18 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 4
     groups:
       actions:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      actions-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
     commit-message:
       prefix: "ci"
