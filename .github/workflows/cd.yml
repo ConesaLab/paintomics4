@@ -34,7 +34,7 @@ jobs:
     outputs:
       image: ${{ steps.meta.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Image name
         id: meta
         run: echo "image=paintomics-app:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
@@ -54,7 +54,7 @@ jobs:
           cp deploy/app.tar dist-cd/app.tar
           echo "${{ steps.meta.outputs.image }}" > dist-cd/IMAGE
           ls -la dist-cd
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: paintomics-deployable-${{ github.sha }}
           path: dist-cd
@@ -68,8 +68,8 @@ jobs:
     timeout-minutes: 30
     environment: staging
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: paintomics-deployable-${{ github.sha }}
           path: dist-cd

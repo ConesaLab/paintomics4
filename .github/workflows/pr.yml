@@ -32,8 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: ruff
@@ -97,7 +97,7 @@ jobs:
       matrix:
         shard: ["1/2", "2/2"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-paintomics
       - name: Test suites (shard ${{ matrix.shard }})
         # 420 s per suite, under the job's 10-minute cap with the ~110 s of
@@ -126,7 +126,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-paintomics
       - name: Regression against tests/baseline
         env:
@@ -142,7 +142,7 @@ jobs:
           07-region-based
       - name: Keep the differing outputs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: regression-pr-${{ github.run_id }}
           path: ${{ runner.temp }}/regression
@@ -158,7 +158,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1
@@ -176,8 +176,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Build the documentation

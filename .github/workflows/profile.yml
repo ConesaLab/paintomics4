@@ -38,7 +38,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-paintomics
@@ -59,7 +59,7 @@ jobs:
           git worktree add "${{ runner.temp }}/before" "${{ inputs.baseline-ref }}"
           scripts/perf/ab.sh "${{ runner.temp }}/before" "${{ github.workspace }}" \
             "${{ runner.temp }}/profile" "${{ inputs.runs }}" "${{ inputs.rate }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: profile-${{ github.sha }}${{ inputs.baseline-ref != '' && '-ab' || '' }}
           path: ${{ runner.temp }}/profile
