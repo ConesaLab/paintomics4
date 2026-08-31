@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose a change that would let you answer a question PaintOmics cannot answer today.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The analysis or workflow problem
+      description: What you are trying to find out, and where PaintOmics stops short.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: >-
+        The workaround, whether that is another tool, a script, or exporting the results and
+        finishing the work by hand.
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What a good outcome looks like
+      description: >-
+        What you would see on the screen, or get in the output, if this worked. Be concrete;
+        it does not have to be a design.
+    validations:
+      required: true

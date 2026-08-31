@@ -1,0 +1,57 @@
+# Dependabot configuration.
+#
+# The pip manifest is `/requirements.txt`, and it is the only one in the tree.
+# `PaintomicsServer/src/requirements.txt` used to be a second, conflicting copy
+# (CairoSVG 2.4.2 vs 2.7.0, Pillow 8.0.1 vs 10.3.0). It was first reduced to a
+# bare `-r ../../requirements.txt` include and then deleted outright on
+# 2026-08-11: GitHub's dependency graph cannot parse a manifest that only
+# includes another one, so it kept serving the last snapshot it had managed to
+# read — the 2020 pins — and raised 33 Dependabot alerts against versions
+# nothing had installed for months. `PaintomicsServer/src/tests/
+# test_dependencies_declared.py` now enforces that a second manifest does not
+# come back, so pointing pip at "/" is enough and adding another directory here
+# would recreate the problem.
+#
+# The pins in requirements.txt are deliberate — the comment at the top of that
+# file explains which ones hold the interpreter at Python 3.11 and why. Read it
+# before merging a major bump; a green PR here is not evidence that the
+# scientific stack still behaves the same.
+#
+# Updates are grouped so that a week produces one pull request per ecosystem
+# rather than a dozen.
+
+version: 2
+
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    groups:
+      python:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps"
+
+  # Two directories: "/" reaches .github/workflows, and the composite action has
+  # to be named separately -- dependabot does not recurse into
+  # .github/actions/*/action.yml, and that file pins six actions of its own. It
+  # is also the file CODEOWNERS singles out as able to turn the gate green
+  # without running anything, so it is the last one that should go unwatched.
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/.github/actions/setup-paintomics"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"

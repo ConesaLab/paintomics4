@@ -1,0 +1,105 @@
+cff-version: 1.2.0
+message: >-
+  If you use PaintOmics in your work, please cite the PaintOmics 4 article in
+  Nucleic Acids Research listed under preferred-citation.
+title: PaintOmics AI
+type: software
+abstract: >-
+  PaintOmics takes several omic measurements from the same experiment —
+  transcriptomics, proteomics, metabolomics, region-based assays such as
+  ChIP-seq or Methyl-seq, and regulatory layers such as miRNA or transcription
+  factors — and paints them together onto biological pathways, so that the
+  layers can be read against each other rather than one at a time. It supports
+  KEGG, Reactome and MapMan pathways for organisms across all biological
+  kingdoms. PaintOmics AI is the successor to PaintOmics 4 and adds an AI
+  interpretation agent that drafts the biology from the ranked pathways with
+  citations that are checked back against the retrieved literature.
+authors:
+  - given-names: Tianyuan
+    family-names: Liu
+    orcid: https://orcid.org/0000-0002-8561-6239
+  - given-names: Pedro
+    family-names: Salguero
+    orcid: https://orcid.org/0000-0002-1879-3374
+  - given-names: Marko
+    family-names: Petek
+    orcid: https://orcid.org/0000-0003-3644-7827
+  - given-names: Carlos
+    family-names: Martinez-Mira
+  - given-names: Leandro
+    family-names: Balzano-Nogueira
+    orcid: https://orcid.org/0000-0003-4620-3607
+  - given-names: Živa
+    family-names: Ramšak
+    orcid: https://orcid.org/0000-0003-0913-2715
+  - given-names: Lauren
+    family-names: McIntyre
+  - given-names: Kristina
+    family-names: Gruden
+  - given-names: Sonia
+    family-names: Tarazona
+  - given-names: Ana
+    family-names: Conesa
+    orcid: https://orcid.org/0000-0001-9597-311X
+repository-code: https://github.com/ConesaLab/PaintOmics
+url: https://paintomics.uv.es/
+license: GPL-3.0-or-later
+contact:
+  - email: paintomicsai@gmail.com
+    name: PaintOmics team
+keywords:
+  - multi-omics
+  - pathway analysis
+  - data integration
+  - visualization
+  - KEGG
+  - Reactome
+  - MapMan
+  - bioinformatics
+  - systems biology
+  - metabolomics
+  - transcriptomics
+preferred-citation:
+  type: article
+  title: >-
+    PaintOmics 4: new tools for the integrative analysis of multi-omics datasets
+    supported by multiple pathway databases
+  authors:
+    - given-names: Tianyuan
+      family-names: Liu
+      orcid: https://orcid.org/0000-0002-8561-6239
+    - given-names: Pedro
+      family-names: Salguero
+      orcid: https://orcid.org/0000-0002-1879-3374
+    - given-names: Marko
+      family-names: Petek
+      orcid: https://orcid.org/0000-0003-3644-7827
+    - given-names: Carlos
+      family-names: Martinez-Mira
+    - given-names: Leandro
+      family-names: Balzano-Nogueira
+      orcid: https://orcid.org/0000-0003-4620-3607
+    - given-names: Živa
+      family-names: Ramšak
+      orcid: https://orcid.org/0000-0003-0913-2715
+    - given-names: Lauren
+      family-names: McIntyre
+    - given-names: Kristina
+      family-names: Gruden
+    - given-names: Sonia
+      family-names: Tarazona
+    - given-names: Ana
+      family-names: Conesa
+      orcid: https://orcid.org/0000-0001-9597-311X
+  journal: Nucleic Acids Research
+  year: 2022
+  month: 7
+  volume: 50
+  issue: W1
+  start: W551
+  end: W559
+  doi: 10.1093/nar/gkac352
+  issn: 1362-4962
+  publisher:
+    name: Oxford University Press
+  url: https://doi.org/10.1093/nar/gkac352

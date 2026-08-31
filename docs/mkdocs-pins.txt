@@ -1,0 +1,12 @@
+# Documentation toolchain only, installed by Read the Docs and by the Docs
+# build job in .github/workflows/pr.yml.
+#
+# Deliberately NOT named requirements.txt. The root requirements.txt is the one
+# pip manifest in this tree and
+# PaintomicsServer/src/tests/test_dependencies_declared.py fails the suite if a
+# second `requirements*.txt` appears anywhere -- a second manifest is what fed
+# GitHub's dependency graph a stale snapshot and produced 33 phantom alerts.
+# Keeping this file outside that glob keeps both the guard and the docs build
+# honest. It also means nothing updates these pins automatically; bump them by
+# hand when the docs build needs it.
+mkdocs==1.6.1

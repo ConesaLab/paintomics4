@@ -1,0 +1,76 @@
+name: Organism request
+description: Ask for an organism to be installed on the public instance, or for help installing one yourself.
+title: "[Organism]: "
+labels: ["organism request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Any organism present in KEGG, Reactome or MapMan can be installed. Installing one means
+        building its pathway, identifier and annotation tables, so the answers below decide
+        what has to be built and whether your own identifiers will map onto it.
+
+  - type: input
+    id: species
+    attributes:
+      label: Species scientific name
+      description: Genus and species, plus the strain or cultivar if it matters.
+      placeholder: e.g. Danio rerio
+    validations:
+      required: true
+
+  - type: input
+    id: taxid
+    attributes:
+      label: NCBI taxonomy ID
+      description: >-
+        From https://www.ncbi.nlm.nih.gov/taxonomy. Give the strain-level ID if you need a
+        specific strain rather than the species.
+      placeholder: e.g. 7955
+    validations:
+      required: true
+
+  - type: dropdown
+    id: databases
+    attributes:
+      label: Databases needed
+      description: >-
+        Tick every database you need pathways from. KEGG is always installed; Reactome and
+        MapMan cover different sets of organisms, so name the ones your analysis depends on.
+      multiple: true
+      options:
+        - KEGG
+        - Reactome
+        - MapMan
+    validations:
+      required: true
+
+  - type: input
+    id: identifiers
+    attributes:
+      label: Identifier type your data uses
+      description: >-
+        The identifiers in the first column of your own files - for genes and, if you have
+        them, for metabolites. This is what has to map onto the installed species.
+      placeholder: e.g. Ensembl gene IDs (ENSDARG...) for genes, KEGG compound IDs for metabolites
+    validations:
+      required: true
+
+  - type: dropdown
+    id: instance
+    attributes:
+      label: Where you will run the analysis
+      options:
+        - https://paintomics.uv.es/
+        - A self-hosted instance
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: >-
+        Optional. The experiment, the omic layers you have, or an annotation source you would
+        like used.

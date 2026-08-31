@@ -1,0 +1,21 @@
+# Read the Docs build configuration, so the docs build is defined by this
+# repository instead of by settings in the Read the Docs web interface.
+# Reference: https://docs.readthedocs.io/en/stable/config-file/v2.html
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "3.12"
+
+mkdocs:
+  configuration: mkdocs.yml
+  # Warnings are errors: a page missing from the nav or a link that resolves to
+  # nothing fails the build instead of shipping.
+  fail_on_warning: true
+
+python:
+  install:
+    # The docs toolchain only. The root requirements.txt is the application
+    # manifest and is not installed here.
+    - requirements: docs/mkdocs-pins.txt

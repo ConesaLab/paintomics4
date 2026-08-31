@@ -1,0 +1,46 @@
+# Code owners for ConesaLab/PaintOmics.
+#
+# The last matching pattern wins, so the default sits first and the paths that
+# are expensive to break follow. Everything is owned by the maintainer today;
+# the explicit entries exist so that a change to one of these paths is always
+# routed for review, whoever opens it and however small the diff looks.
+
+*                                           @TianYuan-Liu
+
+# CI and the composite setup action. A change here can turn the PR gate green
+# without running anything, and cd.yml builds the image and runs the staging
+# smoke test on every push to master.
+/.github/                                   @TianYuan-Liu
+
+# The container stack, nginx/TLS config, entrypoint, smoke test and the species
+# loader. Two constraints in here must not be relaxed (single uWSGI process,
+# MongoDB never published) — see deploy/README.md.
+/deploy/                                    @TianYuan-Liu
+
+# The only pip manifest in the tree. The pins are deliberate, and the Python
+# 3.11 bound is part of them; PaintomicsServer/src/tests/test_dependencies_declared.py
+# enforces that no second manifest reappears.
+/requirements.txt                           @TianYuan-Liu
+
+# Recorded pipeline output. A diff here is either a real behavioural change or a
+# baseline that was regenerated to hide one.
+/tests/baseline/                            @TianYuan-Liu
+
+# R: metagenes, PCA and the MORE regulatory model. Not covered by ruff or the
+# Python tests, and the R side has produced silent wrong-output bugs before.
+*.R                                         @TianYuan-Liu
+/PaintomicsServer/src/common/bioscripts/    @TianYuan-Liu
+
+# Species download/install tooling. A defect here corrupts installed pathway
+# data, and reinstalling a species is measured in hours and gigabytes.
+/PaintomicsServer/src/AdminTools/           @TianYuan-Liu
+
+# The configuration contract: every secret is read from the environment with an
+# empty default, and the example files are what a self-hoster reads.
+/PaintomicsServer/src/resources/example_serverconf.py  @TianYuan-Liu
+/PaintomicsServer/.env.example              @TianYuan-Liu
+
+# Security policy and the lint/secret-scanning configuration.
+/SECURITY.md                                @TianYuan-Liu
+/ruff.toml                                  @TianYuan-Liu
+/.gitleaks.toml                             @TianYuan-Liu

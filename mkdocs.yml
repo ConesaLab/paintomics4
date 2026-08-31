@@ -1,5 +1,12 @@
 site_name: Paintomics Documentation
-pages:
+site_description: >-
+  Documentation for PaintOmics, a web tool for the integrative visualization of
+  multiple omic datasets onto KEGG, Reactome and MapMan pathways.
+site_url: https://paintomics.readthedocs.io/en/latest/
+repo_url: https://github.com/ConesaLab/PaintOmics
+repo_name: ConesaLab/PaintOmics
+
+nav:
    - Home: 'index.md'
    - 'Getting started':
       - 'Step-by-step guide': '8_step_by_step.md'
@@ -13,6 +20,10 @@ pages:
       - 'Regulatory omics analysis': '4_6_Regulatory_omics.md'
       - 'Metagenes': '4_7_Metagenes.md'
       - 'Multi-omic pathway-based visualisation': '5_1_browsing_pathways.md'
+      - 'A worked example: RNA-seq and DNase-seq': '6_1_use_case.md'
+   - 'PaintOmics AI':
+      - 'Converting your input files': 'ai-input-converter.md'
+      - 'The full-agent interpretation mode': 'ai-full-agent.md'
    - FAQ:
       - 'Frequently asked questions': '9_faq.md'
    - 'Additional information':
@@ -25,4 +36,30 @@ pages:
       - 'Installing PaintOmics 4': '0_install.md'
    - About:
       - 'License': '7_license.md'
+
 theme: readthedocs
+
+# Pages that must NOT reach the published site. `exclude_docs` is the mechanism
+# that actually keeps them off it: `not_in_nav` only drops a page from the
+# navigation, and mkdocs still builds and publishes it at its URL, unlinked.
+#   - mkdocs-pins.txt is build input, not documentation;
+#   - dev/ is maintainer documentation -- deployment procedure and internal
+#     traps -- and says on its own first line that it is not for users;
+#   - the two engineering directories hold dated implementation plans and design
+#     specs;
+#   - ai-agent-benchmark.md and ai-agent-tooling-notes.md are running
+#     measurement records for an internal comparison of the two AI arms.
+exclude_docs: |
+   mkdocs-pins.txt
+   dev/
+   superpowers/
+   frontend-modernization/
+   ai-agent-benchmark.md
+   ai-agent-tooling-notes.md
+
+# Published, but deliberately absent from the nav: both are unwritten stubs
+# holding the shared logo header and the contact line and nothing else. Listing
+# them here records the decision and keeps `mkdocs build --strict` quiet.
+not_in_nav: |
+   5_2_detailed_views.md
+   5_3_heatmaps.md

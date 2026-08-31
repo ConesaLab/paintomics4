@@ -57,7 +57,7 @@ MORE regulatory model, multi-condition designs, and a rebuilt interface — see
 | **Security** | Path traversal through job and file names closed; forgeable identity (`userID=0` and ID reuse) fixed; session and password-reset tokens drawn from `secrets`; per-request authorisation guards on job, image and admin routes; password hashes no longer sent to the admin panel; AI consent enforced server-side. |
 | **Statistics and correctness** | Enrichment counting, an independent denominator for the hub scorer, BH applied across the whole p-value vector, non-finite p-values dropped before FDR, reproducible metagene clustering, and the R drop-to-vector bug that silently killed metagenes for whole omic/database pairs. |
 | **Installers** | KEGG and Reactome download paths repaired (KEGG retired `/list/organism`; Reactome cached error bodies as data), every step made idempotent so reruns skip finished work, and an install that can no longer lose files it does not replace. |
-| **Tests** | 135 test scripts, including an end-to-end run against a real installed species, the real R backend rather than a double, an import smoke test over every tracked module, and a check that edited assets get their cache marker bumped. |
+| **Tests** | 282 test scripts, including an end-to-end run against a real installed species, the real R backend rather than a double, an import smoke test over every tracked module, and a check that edited assets get their cache marker bumped. |
 
 ## The AI interpretation agent
 
@@ -110,8 +110,8 @@ Genes** (RGmatch, for region-based assays) and **miRNA to Genes**.
 ### With Docker (recommended)
 
 ```bash
-git clone https://github.com/ConesaLab/paintomics4.git
-cd paintomics4
+git clone https://github.com/ConesaLab/PaintOmics.git
+cd PaintOmics
 
 cp deploy/env.example deploy/.env
 $EDITOR deploy/.env                        # PAINTOMICS_BASE_URL is mandatory
@@ -135,8 +135,8 @@ feature refuses jobs, or set `AI_INTERPRETATION_ENABLED=false` to hide it.
 Requires **Python 3.11**, **MongoDB**, **R**, and the `libcairo2` shared library.
 
 ```bash
-git clone https://github.com/ConesaLab/paintomics4.git
-cd paintomics4
+git clone https://github.com/ConesaLab/PaintOmics.git
+cd PaintOmics
 
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -249,9 +249,15 @@ application.
 
 ## Contact and contributing
 
-Questions, bug reports and organism requests: [paintomicsai@gmail.com](mailto:paintomicsai@gmail.com)
-or an [issue](https://github.com/ConesaLab/paintomics4/issues) on this
-repository. Pull requests are welcome.
+Questions, bug reports and organism requests: open an
+[issue](https://github.com/ConesaLab/PaintOmics/issues/new/choose) — the bug and
+organism-request forms ask for the details that make a report reproducible — or
+write to [paintomicsai@gmail.com](mailto:paintomicsai@gmail.com).
+
+Pull requests are welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) covers getting a
+development instance running, the test suites, and what the pull-request gate
+checks. Security problems go through [`SECURITY.md`](SECURITY.md) instead of the
+issue tracker; please do not report them publicly.
 
 ## License
 
