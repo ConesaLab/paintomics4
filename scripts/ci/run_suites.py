@@ -11,9 +11,14 @@ a slow one can be seen rather than guessed.
 
     python scripts/ci/run_suites.py --jobs 4 [--timeout 180] [--only SUBSTR]
 
-Exit status 1 when any suite fails that run_all's BASELINE does not already
-list -- exactly run_all's rule. Suites that skipped every test are listed
-(a skip is not a pass) but, as in run_all, do not fail the run.
+Exit status 1 when a suite fails that run_all's BASELINE does not already
+account for -- exactly run_all's rule, and literally its code: the comparison
+lives in run_all.split_by_baseline so the two runners cannot disagree.
+A suite is answerable to this branch when it is not baselined at all, when it
+names MORE failing tests than BASELINE records, or when it is baselined but did
+not reproduce that baseline intact -- a class fixture died, no test ran, or it
+timed out. Suites that skipped every
+test are listed (a skip is not a pass) but, as in run_all, do not fail the run.
 """
 import argparse
 import glob
@@ -51,28 +56,10 @@ def run_suite(name, timeout):
         state, skipped = "TIMEOUT", False
     return {"suite": name, "state": state, "skipped": skipped,
             "secs": round(time.time() - started, 1),
-            "failing": re.findall(r"^FAIL[: ]+(\S+)", out, re.M),
+            "ran": run_all.tests_run(out),
+            "fixtures": run_all.BROKEN_FIXTURE.findall(out),
+            "failing": run_all.FAILING_TEST.findall(out),
             "tail": "\n".join(out.strip().splitlines()[-TAIL_LINES:])}
-
-
-def baseline_failures(suite):
-    """How many failures this suite is known to have on master.
-
-    `None` means the suite is not baselined at all, so any failure is this
-    branch's. Otherwise it is the count stated by run_all.BASELINE's own text
-    ("3 failures: the stub gateway ..."), and a run that fails MORE times than
-    that has introduced something even though the suite name is on the list.
-
-    Matching on the suite name alone was the hole: a suite baselined for one
-    known failure absorbed a brand-new second one and the gate stayed green.
-    An entry with no parseable count still shields the whole suite -- keep the
-    counts in BASELINE so it does not.
-    """
-    note = run_all.BASELINE.get(suite)
-    if note is None:
-        return None
-    match = re.match(r"\s*(\d+)\s+failures?\b", note)
-    return int(match.group(1)) if match else sys.maxsize
 
 
 SUITE_TIMES = os.path.join(HERE, "suite_times.txt")
@@ -157,6 +144,8 @@ def main(argv=None):
                              "slow suites by accident")
     args = parser.parse_args(argv)
 
+    run_all.check_baseline()
+
     names = sorted(os.path.basename(path)[:-3]
                    for path in glob.glob(os.path.join(SERVER, "src/tests/test_*.py")))
     if args.only:
@@ -172,18 +161,10 @@ def main(argv=None):
         results = list(pool.map(lambda name: run_suite(name, args.timeout), names))
 
     bad = [r for r in results if r["state"] != "PASS"]
-    inherited, introduced = [], []
-    for result in bad:
-        expected = baseline_failures(result["suite"])
-        seen = len(result["failing"])
-        if expected is None or seen > expected:
-            # Not baselined at all, or baselined and now failing MORE than it
-            # was: either way this branch is answerable for it.
-            if expected is not None:
-                result["grew"] = (expected, seen)
-            introduced.append(result)
-        else:
-            inherited.append(result)
+    # One rule, defined next to BASELINE itself, so this wrapper and the runner
+    # CONTRIBUTING points contributors at cannot drift apart -- they did, and
+    # the documented one was the weaker of the two.
+    inherited, introduced = run_all.split_by_baseline(bad)
     skipped = [r for r in results if r["skipped"]]
     total = sum(r["secs"] for r in results)
 
@@ -197,7 +178,9 @@ def main(argv=None):
     if inherited:
         print("\ninherited from master (run_all.BASELINE):")
         for r in inherited:
-            print("   %-50s %s" % (r["suite"], run_all.BASELINE[r["suite"]][:70]))
+            print("   %-50s %2d/%-2d  %s"
+                  % (r["suite"], r["seen"], run_all.baseline_failures(r["suite"]),
+                     run_all.BASELINE[r["suite"]][:60]))
     if skipped:
         print("\nskipped everything -- a skip is not a pass:")
         for r in skipped:
@@ -205,9 +188,24 @@ def main(argv=None):
     if introduced:
         print("\nFAILED (new, or worse than BASELINE records):")
         for r in introduced:
-            grew = ("  [was %d failure(s) on master, now %d]" % r["grew"]) if "grew" in r else ""
+            if "fixture" in r:
+                note = ("  [%s failed, so a class never ran: this run did not "
+                        "reproduce the baseline]"
+                        % ", ".join(sorted(set(r["fixture"]))))
+            elif "timedout" in r:
+                note = ("  [baselined for %d failing test(s) but did not finish: "
+                        "nothing can be credited to master]" % r["timedout"])
+            elif "collapsed" in r:
+                note = ("  [baselined for %d failing test(s) but this run %s: it "
+                        "did not get that far]"
+                        % (r["collapsed"], "ran 0 tests" if r.get("ran") == 0
+                           else "named no failing test"))
+            elif "grew" in r:
+                note = "  [was %d failing test(s) on master, now %d]" % r["grew"]
+            else:
+                note = ""
             print("   %-50s %s %s%s"
-                  % (r["suite"], r["state"], ", ".join(r["failing"])[:80], grew))
+                  % (r["suite"], r["state"], ", ".join(r["failing"])[:80], note))
         for r in introduced:
             print("\n----- %s (%s): last %d lines -----" % (r["suite"], r["state"], TAIL_LINES))
             print(r["tail"])

@@ -119,6 +119,19 @@ python -m src.tests.run_all --only ai        # substring filter on the suite nam
 answers "did this branch introduce a failure", not "is everything green". Do not
 add to that list to make a branch look clean.
 
+Each entry states a **count**, and the count is `FAIL` plus `ERROR` — an
+exception is a test that broke before it reached an assertion, and unittest
+reports those on a separate line. A baselined suite is inherited only while it
+actually runs its tests *and* names no more failing ones than its entry
+records. Naming **more** is this branch's. So is running **none** of them,
+whether the suite died on import or lost a `setUpClass` — unittest reports that
+as one `ERROR: setUpClass` line and `Ran 0 tests`, which compared favourably
+against a baseline of four while the whole suite had stopped executing. So is
+timing out. `run_all --baseline` prints the counts for you; an entry without one
+is refused at startup, because a baseline entry with no number shields its suite
+from every failure it ever acquires. `test_gate_baseline_rules` holds these
+rules in place.
+
 CI runs the same suites in parallel and offline through
 `scripts/ci/run-unit-tests.sh`, which is also the fastest way to run them locally:
 

@@ -45,15 +45,135 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 # running them in a master worktree with this checkout's serverconf.py copied in.
 # A failure here is inherited, not caused. Trim this list when master goes green;
 # never add to it to make a branch look clean.
+# The count is FAIL plus ERROR, not the "failures=N" that unittest prints in its
+# last line: an exception is a test that broke before it reached an assertion,
+# and unittest reports those separately. test_more_servlet_step1 is why this is
+# spelled out -- it ran for months recorded as "17 failures" while producing 17
+# failures and one error (ERROR: test_queues_step2_with_the_job), so the
+# eighteenth broken test was outside the count by construction.
 BASELINE = {
-    "test_ai_agent_endtoend": "3 failures: the stub gateway cannot satisfy the "
+    "test_ai_agent_endtoend": "4 failures: the stub gateway cannot satisfy the "
                               "quote extractor, so reference [1] renders with no "
                               "Cited Text and every citation is then redacted",
-    "test_more_servlet_step1": "17 failures",
+    "test_more_servlet_step1": "18 failures: 17 assertions and one error, "
+                               "ERROR: test_queues_step2_with_the_job",
     "test_pathway_universe_database_filter": "1 failure",
     "test_relevance_file_shape_and_conditions": "2 failures",
     "test_dependencies_declared": "1 failure: an external import does not resolve",
 }
+
+# Both conventions the suites use to name a broken test: unittest's
+# "FAIL: test_x (mod.Class)" / "ERROR: test_x (mod.Class)", and the hand-rolled
+# runners' "FAIL  name". The separator must be a colon FOLLOWED by whitespace,
+# or two spaces -- not a bare colon. `logging.error()` writes "ERROR:root:..."
+# at the start of a line once basicConfig has run, and the server logs on every
+# report, mail and hub failure path, so the looser `[: ]+` counted log records
+# as failing tests: it inflated the number written into BASELINE, and a suite
+# whose logging then went quiet could acquire that many real failures unnoticed.
+FAILING_TEST = re.compile(r"^(?:FAIL|ERROR)(?::[ \t]+|[ \t]{2,})(\S+)", re.M)
+
+# How many tests a suite actually executed, in whichever convention it used --
+# unittest's "Ran 29 tests in 5.076s", the hand-rolled runners' "Passed: 3 / 4".
+# None means neither line appeared, which is what a suite that died on import
+# looks like.
+_RAN_UNITTEST = re.compile(r"^Ran (\d+) tests?\b", re.M)
+_RAN_HANDROLLED = re.compile(r"Passed:\s*\d+\s*/\s*(\d+)")
+
+
+def tests_run(out):
+    """The number of tests the run reported executing, or None if it never said."""
+    match = _RAN_UNITTEST.search(out) or _RAN_HANDROLLED.search(out)
+    return int(match.group(1)) if match else None
+
+
+# A class or module fixture that raises: unittest prints one `ERROR: setUpClass`
+# line and then silently does not run that class's tests, while the OTHER
+# classes in the file run normally -- so the suite still reports a healthy
+# "Ran 8 tests". The count rule is blind to it, because the dead fixture is
+# exactly one name: a suite baselined for one failure can trade its known
+# failure for an entire class that stopped executing and still compare equal.
+# Whatever else is true, a run in that state has not reproduced the baseline,
+# so it is never credited with it.
+BROKEN_FIXTURE = re.compile(r"^ERROR:[ \t]+((?:setUp|tearDown)(?:Class|Module))\b", re.M)
+
+
+def baseline_failures(suite):
+    """How many failing tests this suite is known to have on master.
+
+    `None` means the suite is not baselined at all, so any failure belongs to
+    this branch. Otherwise it is the count BASELINE's own text states, and a run
+    that fails MORE times than that has introduced something even though the
+    suite name is on the list.
+
+    A note with no parseable count raises rather than shielding the suite. The
+    silent version of that used to be printable: `--baseline` emitted an entry
+    per failing suite with an empty note, and pasting it back would have made
+    every listed suite absorb an unlimited number of new failures forever.
+    """
+    note = BASELINE.get(suite)
+    if note is None:
+        return None
+    match = re.match(r"\s*(\d+)\s+failures?\b", note)
+    if not match:
+        raise ValueError(
+            "BASELINE[%r] does not begin with a count: %r. Write it as "
+            "'<n> failures: why', because a baseline entry without a number "
+            "shields the suite from every new failure it acquires." % (suite, note))
+    return int(match.group(1))
+
+
+def check_baseline():
+    """Every BASELINE note states a count -- checked before anything runs."""
+    for suite in BASELINE:
+        baseline_failures(suite)
+
+
+def split_by_baseline(bad):
+    """Partition failing suites into (inherited, introduced).
+
+    Matching on the suite NAME alone was the original hole: a suite baselined
+    for one known failure absorbed a brand-new second one and the gate stayed
+    green. Counting closed that. This closes the ways a count can still be
+    fooled: a failure reported as ERROR was never counted at all, and a suite
+    that never reaches its tests still compares favourably against its baseline.
+
+    That last one is not only the import crash, which names nothing. unittest
+    reports a broken class fixture as a single `ERROR: setUpClass (...)` line
+    and then runs none of that class's tests -- one name against a baseline of
+    four, which read as "no worse than master" while a whole class had stopped
+    executing. If the file holds a second class the count does not even drop:
+    planting a `raise` in one setUpClass of test_pathway_universe_database_filter
+    still reported `Ran 8 tests`, one failing name, baseline 1, inherited, exit
+    0. So the COUNT is consulted only once the run is known to have executed its
+    tests with its fixtures intact; a broken fixture, a run of zero tests and a
+    suite that never finished are all this branch's, whatever the number says.
+
+    Annotates each result in place with `seen`, and with `fixture`, `collapsed`,
+    `timedout` or `grew` where they apply, so the caller can say which it is.
+    """
+    inherited, introduced = [], []
+    for result in bad:
+        expected = baseline_failures(result["suite"])
+        seen = len(result["failing"])
+        ran = result.get("ran")
+        result["seen"] = seen
+        if expected is None:
+            introduced.append(result)
+        elif result.get("state") == "TIMEOUT":
+            result["timedout"] = expected
+            introduced.append(result)
+        elif result.get("fixtures"):
+            result["fixture"] = result["fixtures"]
+            introduced.append(result)
+        elif ran == 0 or (ran is None and seen == 0):
+            result["collapsed"] = expected
+            introduced.append(result)
+        elif seen > expected:
+            result["grew"] = (expected, seen)
+            introduced.append(result)
+        else:
+            inherited.append(result)
+    return inherited, introduced
 
 
 def classify(returncode, out):
@@ -90,7 +210,9 @@ def run_one(name, timeout):
         out, state, skipped = "", "TIMEOUT", False
     return {"suite": name, "state": state, "skipped": skipped,
             "secs": round(time.time() - started, 1),
-            "failing": re.findall(r"^FAIL[: ]+(\S+)", out, re.M)}
+            "ran": tests_run(out),
+            "fixtures": BROKEN_FIXTURE.findall(out),
+            "failing": FAILING_TEST.findall(out)}
 
 
 def main(argv=None):
@@ -116,10 +238,10 @@ def main(argv=None):
                   % args.only, file=sys.stderr)
             return 2
 
+    check_baseline()
     results = [run_one(n, args.timeout) for n in names]
     bad = [r for r in results if r["state"] != "PASS"]
-    inherited = [r for r in bad if r["suite"] in BASELINE]
-    introduced = [r for r in bad if r["suite"] not in BASELINE]
+    inherited, introduced = split_by_baseline(bad)
     skipped = [r for r in results if r["skipped"]]
 
     print("%d suites | %d pass | %d inherited | %d INTRODUCED"
@@ -131,16 +253,38 @@ def main(argv=None):
     if inherited:
         print("\ninherited from master (not this branch):")
         for r in inherited:
-            print("   %-46s %s" % (r["suite"], BASELINE[r["suite"]][:60]))
+            print("   %-46s %2d/%-2d %s"
+                  % (r["suite"], r["seen"], baseline_failures(r["suite"]),
+                     BASELINE[r["suite"]][:60]))
     if introduced:
         print("\nINTRODUCED BY THIS BRANCH:")
         for r in introduced:
-            print("   %-46s %s" % (r["suite"], ", ".join(r["failing"])[:60]))
+            if "fixture" in r:
+                note = ("  [%s failed, so a class never ran: this run did not "
+                        "reproduce the baseline]"
+                        % ", ".join(sorted(set(r["fixture"]))))
+            elif "timedout" in r:
+                note = ("  [baselined for %d failing test(s) but did not "
+                        "finish: nothing can be credited to master]"
+                        % r["timedout"])
+            elif "collapsed" in r:
+                note = ("  [baselined for %d failing test(s) but this run %s: "
+                        "it did not get that far]"
+                        % (r["collapsed"], "ran 0 tests" if r.get("ran") == 0
+                           else "named no failing test"))
+            elif "grew" in r:
+                note = "  [was %d on master, now %d]" % r["grew"]
+            else:
+                note = ""
+            print("   %-46s %s%s" % (r["suite"], ", ".join(r["failing"])[:60], note))
 
     if args.baseline:
+        # The count is the point. Printing an empty note used to produce a
+        # BASELINE that let every listed suite absorb any number of new
+        # failures, and baseline_failures() now refuses to load one.
         print("\nBASELINE = {")
         for r in bad:
-            print('    "%s": "",' % r["suite"])
+            print('    "%s": "%d failures: WHY",' % (r["suite"], len(r["failing"])))
         print("}")
 
     return 1 if introduced else 0
