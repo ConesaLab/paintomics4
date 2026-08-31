@@ -90,7 +90,7 @@ def _result(suite, out, state="FAIL"):
             "failing": run_all.FAILING_TEST.findall(out)}
 
 
-class NamingFailingTests(unittest.TestCase):
+class FailingTestNamesTest(unittest.TestCase):
 
     def test_unittest_failures_and_errors_both_count(self):
         self.assertEqual(len(run_all.FAILING_TEST.findall(FOUR_REAL_FAILURES)), 4)
@@ -113,7 +113,7 @@ class NamingFailingTests(unittest.TestCase):
         self.assertEqual(run_all.FAILING_TEST.findall("  FAIL: not at line start\n"), [])
 
 
-class CountingTestsRun(unittest.TestCase):
+class TestsRunCountTest(unittest.TestCase):
 
     def test_unittest(self):
         self.assertEqual(run_all.tests_run(FOUR_REAL_FAILURES), 31)
@@ -126,7 +126,7 @@ class CountingTestsRun(unittest.TestCase):
         self.assertIsNone(run_all.tests_run("Traceback (most recent call last):\n"))
 
 
-class SplittingByBaseline(unittest.TestCase):
+class SplitByBaselineTest(unittest.TestCase):
     """The whole point: which side of the line does a failing suite fall on."""
 
     def setUp(self):
@@ -200,7 +200,7 @@ class SplittingByBaseline(unittest.TestCase):
                          "introduced")
 
 
-class BaselineNotes(unittest.TestCase):
+class BaselineNotesTest(unittest.TestCase):
 
     def test_a_note_without_a_count_is_refused_before_anything_runs(self):
         real = run_all.BASELINE
