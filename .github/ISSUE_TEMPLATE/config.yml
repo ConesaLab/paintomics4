@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://paintomics.readthedocs.io/en/latest/
+    url: https://conesalab.github.io/PaintOmics/
     about: How the analyses work, what the input formats are, and how to install your own instance.
   - name: Email the team
     url: mailto:paintomicsai@gmail.com

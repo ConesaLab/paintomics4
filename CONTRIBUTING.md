@@ -380,7 +380,8 @@ deployment from the template, and then never overwritten. That shapes every step
 - Bugs, feature requests and organism requests: an
   [issue](https://github.com/ConesaLab/PaintOmics/issues) on this repository.
 - Email: [paintomicsai@gmail.com](mailto:paintomicsai@gmail.com).
-- User documentation: [paintomics.readthedocs.io](https://paintomics.readthedocs.io/en/latest/).
+- User documentation: [conesalab.github.io/PaintOmics](https://conesalab.github.io/PaintOmics/), published by
+  `.github/workflows/docs.yml` on every push to `master` that touches `docs/`.
 - Operating an instance: [`deploy/README.md`](deploy/README.md).
 
 PaintOmics is distributed under the GNU General Public License v3; contributions

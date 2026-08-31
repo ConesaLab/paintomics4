@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://paintomics.uv.es/"><img alt="Live instance" src="https://img.shields.io/badge/try%20it-paintomics.uv.es-2E7D9A"></a>
-  <a href="https://paintomics.readthedocs.io/en/latest/"><img alt="Documentation" src="https://img.shields.io/badge/docs-readthedocs-8CA1AF"></a>
+  <a href="https://conesalab.github.io/PaintOmics/"><img alt="Documentation" src="https://img.shields.io/badge/docs-user%20guide-8CA1AF"></a>
   <a href="https://doi.org/10.1093/nar/gkac352"><img alt="DOI" src="https://img.shields.io/badge/DOI-10.1093%2Fnar%2Fgkac352-B31B1B"></a>
   <img alt="Python" src="https://img.shields.io/badge/python-3.11-3776AB">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue"></a>
@@ -92,14 +92,14 @@ feature off entirely with `AI_INTERPRETATION_ENABLED=false`.
 
 | Analysis | What it answers |
 |---|---|
-| [Pathway enrichment](https://paintomics.readthedocs.io/en/latest/4_1_pathway_enrichment/) | Which pathways are significantly affected, per omic and combined |
-| [Pathway classification](https://paintomics.readthedocs.io/en/latest/4_2_kegg_categories/) | Where the affected pathways sit in the database hierarchy |
-| [Pathway interaction network](https://paintomics.readthedocs.io/en/latest/4_3_pathways_network/) | How the enriched pathways connect through shared features |
-| [Metabolite hub analysis](https://paintomics.readthedocs.io/en/latest/4_4_metabolite_hub_analysis/) | Which metabolites act as hubs for the observed changes |
-| [Metabolite class activity](https://paintomics.readthedocs.io/en/latest/4_5_metabolite_class_activity_analysis/) | Which chemical classes of metabolites move as a group |
-| [Regulatory omics](https://paintomics.readthedocs.io/en/latest/4_6_Regulatory_omics/) (incl. MORE) | Which trans-acting regulators (miRNA, TF, SF, RBP…) drive the changes |
-| [Metagenes](https://paintomics.readthedocs.io/en/latest/4_7_Metagenes/) | The dominant expression trends inside a pathway |
-| [Pathway visualisation](https://paintomics.readthedocs.io/en/latest/5_1_browsing_pathways/) | All omics painted on one diagram, with per-feature heatmaps |
+| [Pathway enrichment](https://conesalab.github.io/PaintOmics/4_1_pathway_enrichment/) | Which pathways are significantly affected, per omic and combined |
+| [Pathway classification](https://conesalab.github.io/PaintOmics/4_2_kegg_categories/) | Where the affected pathways sit in the database hierarchy |
+| [Pathway interaction network](https://conesalab.github.io/PaintOmics/4_3_pathways_network/) | How the enriched pathways connect through shared features |
+| [Metabolite hub analysis](https://conesalab.github.io/PaintOmics/4_4_metabolite_hub_analysis/) | Which metabolites act as hubs for the observed changes |
+| [Metabolite class activity](https://conesalab.github.io/PaintOmics/4_5_metabolite_class_activity_analysis/) | Which chemical classes of metabolites move as a group |
+| [Regulatory omics](https://conesalab.github.io/PaintOmics/4_6_Regulatory_omics/) (incl. MORE) | Which trans-acting regulators (miRNA, TF, SF, RBP…) drive the changes |
+| [Metagenes](https://conesalab.github.io/PaintOmics/4_7_Metagenes/) | The dominant expression trends inside a pathway |
+| [Pathway visualisation](https://conesalab.github.io/PaintOmics/5_1_browsing_pathways/) | All omics painted on one diagram, with per-feature heatmaps |
 | **AI interpretation** | What the ranked pathways mean biologically, with literature to back it |
 
 Two supporting tools convert data into a usable input format: **Regions to
@@ -186,10 +186,10 @@ python -m src.tests.test_bug_fixes           # multi-condition statistics
 
 ## Documentation
 
-Full user guide: **[paintomics.readthedocs.io](https://paintomics.readthedocs.io/en/latest/)**
-— including [accepted input formats](https://paintomics.readthedocs.io/en/latest/2_1_accepted_input/),
-a [step-by-step guide](https://paintomics.readthedocs.io/en/latest/8_step_by_step/)
-and the [FAQ](https://paintomics.readthedocs.io/en/latest/9_faq/).
+Full user guide: **[conesalab.github.io/PaintOmics](https://conesalab.github.io/PaintOmics/)**
+— including [accepted input formats](https://conesalab.github.io/PaintOmics/2_1_accepted_input/),
+a [step-by-step guide](https://conesalab.github.io/PaintOmics/8_step_by_step/)
+and the [FAQ](https://conesalab.github.io/PaintOmics/9_faq/).
 The sources live in [`docs/`](docs) and build with `mkdocs`.
 
 ## Video tutorials
