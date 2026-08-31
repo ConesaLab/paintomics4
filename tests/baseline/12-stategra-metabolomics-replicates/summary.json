@@ -1,0 +1,76 @@
+{
+  "dataset": "12-stategra-metabolomics-replicates",
+  "parts": {
+    "step1": {
+      "bytes": 1516560,
+      "headline": {
+        "compoundBasedInputOmics": 1,
+        "databases": 3,
+        "geneBasedInputOmics": 0,
+        "mappingFiles": 2,
+        "matchedMetabolites": 52,
+        "organism": 3
+      },
+      "sha256": "6376b2d12dc488fa2f320951a58f87a6de91261cdcda924338ded2a6d9094e15"
+    },
+    "step2": {
+      "bytes": 2656339,
+      "headline": {
+        "adjustPvalue": 1,
+        "classInfo": 0,
+        "classificationDict": 8,
+        "compoundRegulateFeatures": 57,
+        "conditionNames": 36,
+        "exprssionMetabolites": 100,
+        "featureSummary": 2,
+        "globalExpressionData": 2,
+        "hubAnalysisResult": false,
+        "mappingComp": 100,
+        "omicsValuesID": 100,
+        "pValueInDict": 1,
+        "pathwaysInfo": 217,
+        "regulationPerConditionData": null,
+        "selectedCompounds": 100,
+        "summary": [
+          1008,
+          217,
+          0,
+          100,
+          {
+            "KEGG": {
+              "Metabolomics": 50
+            },
+            "Reactome": {
+              "Metabolomics": 19
+            }
+          },
+          {
+            "KEGG": {
+              "Metabolomics": [
+                30
+              ]
+            },
+            "Reactome": {
+              "Metabolomics": [
+                8
+              ]
+            }
+          }
+        ],
+        "totalRelevantFeaturesInCategory": 1
+      },
+      "sha256": "8df398326be8dc727d48ae3398179dfaa6e7b2899ccb1023c22abce1a7134c09"
+    },
+    "step3": {
+      "bytes": 5172685,
+      "headline": {
+        "graphicalOptionsInstances": 217,
+        "omicsValues": 71,
+        "selectedPathways": 217
+      },
+      "sha256": "4221c3e939f8785c77fb79344933a090f1f52ee7becbf65cd2038e3e404e68c6"
+    }
+  },
+  "pipeline": "pathway-acquisition",
+  "scenario": "stategra-metabolomics-replicates"
+}
