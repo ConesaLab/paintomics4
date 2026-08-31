@@ -96,6 +96,12 @@ jobs:
           --shard "${{ matrix.shard }}"
 
   fixtures:
+    # One dataset per pipeline class, plus one with more than one omic.
+    # A field that only a multi-omic job produces is invisible to the
+    # single-omic four: 5ca2b7c9 put omicName on every globalExpressionData
+    # entry, passed this gate, and left the nightly failing on 02, 03, 04
+    # and 08 for two days. 04-multiomics-integration is the cheapest dataset
+    # that carries genes and compounds together (~100 s).
     name: Example datasets, one per pipeline class
     runs-on: macos-26
     timeout-minutes: 10
@@ -110,6 +116,7 @@ jobs:
         run: >-
           scripts/regression.sh
           01-gene-single-condition
+          04-multiomics-integration
           05-regulatory-mirna
           06-regulatory-more
           07-region-based
