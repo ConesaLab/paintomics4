@@ -3,7 +3,12 @@ from math import log, isfinite
 import numpy as np
 from scipy import special as _special
 from scipy.stats import hypergeom
-from statsmodels.sandbox.stats.multicomp import multipletests
+# statsmodels.stats.multitest, not statsmodels.sandbox.stats.multicomp: the
+# sandbox module is a re-export that 0.15.0 removed, and the dependabot
+# pull request carrying that bump failed 36 suites on this one import
+# (#118). On the pinned 0.14.6 the two names are the SAME object, so this
+# is a no-op today and the bump becomes possible tomorrow.
+from statsmodels.stats.multitest import multipletests
 
 # Distinct out-of-domain argument tuples already reported by calculateFisher.
 # Bounded, because the alternative is one WARNING per pathway per omic: the

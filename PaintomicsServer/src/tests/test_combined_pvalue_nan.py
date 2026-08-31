@@ -221,7 +221,7 @@ class FDRCorrectionNaNTest(unittest.TestCase):
 
     def test_the_usable_subset_matches_statsmodels(self):
         """Checked against the library, not against this implementation."""
-        from statsmodels.sandbox.stats.multicomp import multipletests
+        from statsmodels.stats.multitest import multipletests
 
         expected = multipletests([0.01, 0.5], method="fdr_bh")[1].tolist()
         actual = self._adjust({"a": 0.01, "b": 0.5, "c": NAN})["FDR BH"]
