@@ -760,21 +760,11 @@ Ext.define('Ext.upload.ItemGridPanel', {
             return;
         }
 
+        // focusRow already scrolls the row into view. The hand-rolled
+        // "measure the row against the grid and scroll if it falls below the
+        // bottom" block that used to follow was left in place behind this
+        // `return` when focusRow replaced it, so it has never run.
         this.getView().focusRow(index);
-        return;
-        var rowEl = Ext.get(this.getView().getRow(index));
-        // var rowEl = this.getView().getRow(index);
-        if (!rowEl) {
-            return;
-        }
-
-        var gridEl = this.getEl();
-        // debug.log(rowEl.dom);
-        // debug.log(gridEl.getBottom());
-
-        if (rowEl.getBottom() > gridEl.getBottom()) {
-            rowEl.dom.scrollIntoView(gridEl);
-        }
     }
 });
 Ext.define('Ext.upload.Store', {

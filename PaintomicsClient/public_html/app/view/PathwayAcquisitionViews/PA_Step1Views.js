@@ -1844,7 +1844,7 @@ function PA_Step1JobView() {
 								width: 450,
 								flex: 0
 							}]
-					}*/,
+					}*/
 					{   // AI Interpretation section
 						xtype: "box", flex: 1,
 						/* No "(optional)" any more: the interpretation is part of what this
@@ -4064,7 +4064,7 @@ function MiRNAOmicSubmittingPanel(nElem, options) {
 					namePrefix: this.namePrefix + '_associations',
 					itemId: "mainAssociationFileSelector",
 					helpTip: "Upload the 2 column association file associating genes with features or choose it from your data folder."
-				}*/,
+				}*/
 				/*{
 					xtype: "box",
 					itemId: "toogleCorrOptions",

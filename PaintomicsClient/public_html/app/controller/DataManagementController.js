@@ -235,7 +235,6 @@ this.recoverJobsHandler = function (myDataJobsListView, jobID, jobType, jobDate)
 		application.getController("JobController").recoverPAJobHandler(jobID);
 	} else {
 		var prefix = ((jobType === "MiRNA2GeneJob")?"mirna2genes_":"bed2genes_");
-		jobDate = jobDate;
 		jobType = jobType.replace("Job", " Job");
 
 		showInfoMessage(jobType + " successfully recovered", {

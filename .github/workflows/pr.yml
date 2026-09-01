@@ -49,17 +49,26 @@ jobs:
           for script in scripts/*.sh scripts/ci/*.sh deploy/*.sh; do
             bash -n "$script" || exit 1
           done
-      # The client is the largest unguarded surface in the repository: ruff.toml
-      # excludes PaintomicsClient, and no workflow mentions node or eslint, so
-      # a .js file that no longer parses reached the browser. `node --check` on
-      # the first-party files only -- the bundled ExtJS and vendor trees are not
-      # ours to police. Measured: 80 files, 3.2 s, 0 failures today, against a
-      # Lint job whose worst run is 40 s of a 300 s cap.
-      - name: Client JavaScript parses
-        run: |
-          find PaintomicsClient -name '*.js' \
-            | grep -vEi '/(lib|libs|vendor|ext-[0-9]|extjs|jquery|node_modules)/' \
-            | xargs -n1 node --check
+      # The client is the largest surface in the repository: ruff.toml excludes
+      # PaintomicsClient, so for a long time a .js file that no longer parsed
+      # reached the browser. `node --check` closed that hole and nothing wider:
+      # it answers "does this parse" and has no opinion about what the code then
+      # does. ESLint answers both -- an unparseable file is a fatal error, and
+      # eslint.config.mjs adds structural-bug rules chosen to be the JavaScript
+      # analogue of ruff's `E9, F` (never style). It found four real defects on
+      # the tree it was added to, all fixed in that commit: a self-assignment, a
+      # block stranded behind a `return`, and two `items:` arrays left with a
+      # hole in them by a commented-out entry whose comma stayed.
+      #
+      # The old grep filter lives in eslint.config.mjs's `ignores` now, with the
+      # addition of resources/pyodide -- vendored, and matching none of
+      # lib/libs/vendor/extjs/jquery, so `node --check` had been parsing the
+      # pyodide runtime on every pull request.
+      #
+      # Measured: 85 files, 3.4 s, against a Lint job whose worst run is 40 s of
+      # a 300 s cap. The version is pinned for the same reason ruff's is.
+      - name: Client JavaScript
+        run: npx --yes eslint@10.9.1 .
       # "Byte-compile the server" stood here. ruff selects E9 and parses every
       # file compileall did except one -- scripts/ci/vulture_whitelist.py, which
       # ruff.toml excludes because its bare names read as F821 -- so the step
