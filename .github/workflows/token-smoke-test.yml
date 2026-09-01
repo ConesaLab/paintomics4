@@ -1,0 +1,58 @@
+# TEMPORARY -- delete once it has answered its one question.
+#
+# code-review.yml cannot exercise CLAUDE_CODE_OAUTH_TOKEN on the pull request
+# that introduces it: the action refuses to run until the file is identical to
+# the copy on the default branch, and a refusal EXITS 0. So "Claude review:
+# pass" on this branch is not evidence the secret is good -- it is evidence
+# nothing was tried.
+#
+# This asks the question directly: one inference turn, same token, same CLI the
+# action drives internally. A bad secret is then found here, on the branch that
+# set it, instead of on the first pull request after the merge.
+
+name: Token smoke test
+
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  token:
+    name: The subscription token authenticates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Distinguishes "wrong value" from "not exposed to this run at all" --
+      # a secret missing from the repository reads as an empty string, and the
+      # step below would then fail for a reason that looks like a bad token.
+      - name: The secret reaches the runner
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN is unset, empty, or not exposed here"
+            exit 1
+          fi
+          # Length only. Actions masks the value, but never print it regardless.
+          echo "secret present: ${#TOKEN} characters"
+
+      - name: One inference turn
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          npm install -g @anthropic-ai/claude-code >/dev/null 2>&1
+          claude --version
+          if ! out=$(claude -p 'Reply with exactly PAINTOMICS_TOKEN_OK and nothing else.' 2>&1); then
+            echo "::error::the CLI exited non-zero -- the token did not authenticate"
+            printf '%s\n' "${out}"
+            exit 1
+          fi
+          printf 'model replied: %s\n' "${out}"
+          case "${out}" in
+            *PAINTOMICS_TOKEN_OK*)
+              echo "the token authenticates and can run inference" ;;
+            *)
+              echo "::error::authenticated, but the reply was not the expected one"
+              exit 1 ;;
+          esac
