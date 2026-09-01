@@ -24,6 +24,24 @@
 # the same edits `pr.yml` still lints and tests, but which carry no code to
 # review.
 
+# A GREEN "Claude review" DOES NOT MEAN A REVIEW HAPPENED. The action refuses
+# to run unless this file is byte-identical to the copy on the default branch
+# -- that is what stops a pull request from rewriting the workflow to read the
+# token -- and a refusal is logged as a warning and exits 0, so the check is
+# reported as passing. Measured on run 33539372977, the pull request that
+# added this file:
+#
+#   Skipping action due to workflow validation: Workflow validation failed.
+#   The workflow file must exist and have identical content to the version on
+#   the repository's default branch.
+#   ...
+#   Exiting due to workflow validation skip
+#
+# It never reached Anthropic, so that run proved nothing about the token. Two
+# consequences to remember: this workflow cannot review the pull request that
+# introduces or edits it, and a green tick beside zero comments is the signal
+# to read the log rather than to conclude the diff was clean.
+
 name: Code Review
 
 on:
