@@ -41,6 +41,19 @@
 # consequences to remember: this workflow cannot review the pull request that
 # introduces or edits it, and a green tick beside zero comments is the signal
 # to read the log rather than to conclude the diff was clean.
+#
+# The token WAS tested, separately, because this workflow could not do it. Run
+# 33540488683 installed the CLI on a runner and spent one inference turn on
+# CLAUDE_CODE_OAUTH_TOKEN:
+#
+#   secret present: 108 characters
+#   2.1.257 (Claude Code)
+#   model replied: PAINTOMICS_TOKEN_OK
+#   the token authenticates and can run inference
+#
+# So if this workflow misbehaves after the merge, start with the action and
+# the plugin, not the secret. (The token is good for 365 days from 2026-09-01;
+# when it lapses, that is what a sudden failure here will be.)
 
 name: Code Review
 
