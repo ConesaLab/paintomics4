@@ -162,7 +162,7 @@ PAINTOMICS_BASE_URL     = os.getenv("PAINTOMICS_BASE_URL", "http://localhost:800
 PAINTOMICS_LOGO_PATH    = os.getenv("PAINTOMICS_LOGO_PATH", "/resources/images/paintomics_white_300x66.png")
 PAINTOMICS_LOGO_URL     = f"{PAINTOMICS_BASE_URL}{PAINTOMICS_LOGO_PATH}"
 PAINTOMICS_LOGIN_URL    = os.getenv("PAINTOMICS_LOGIN_URL", f"{PAINTOMICS_BASE_URL}/")
-PAINTOMICS_DOCS_URL     = os.getenv("PAINTOMICS_DOCS_URL", "https://paintomics.readthedocs.io/en/latest/")
+PAINTOMICS_DOCS_URL     = os.getenv("PAINTOMICS_DOCS_URL", "https://conesalab.github.io/PaintOmics/")
 PAINTOMICS_EMAIL_DOMAIN = os.getenv(
     "PAINTOMICS_EMAIL_DOMAIN",
     urlparse(PAINTOMICS_BASE_URL).netloc or "example.org"

@@ -1,138 +1,315 @@
-<div class="imageContainer" style="" >
-    <img src="paintomics_150x690.png" title="Paintomics LOGO." style=" height: 70px !important; margin-bottom: 20px; ">
-</div>
+# Your first analysis
 
-# Introduction
+This page walks through a complete PaintOmics job, screen by screen. Every
+figure is from the **STATegra — real mouse Ikaros time course** example: five
+omics, six time points, mouse, run against KEGG, Reactome and OmniPath. You can
+follow along exactly by choosing **Load example** at the top right of the
+upload form.
 
-The following document will guide you through the required steps to perform a basic analysis in Paintomics. In a nutshell, each process has 3 major steps:
+A job has four screens:
 
-1. Upload your data.
-2. Review initial matching results and configure metabolite assignment, if required.
-3. Visualization of final results.
+1. **Upload** — choose the organism, describe your experiment for the AI
+   interpretation, and add one panel per omic layer.
+2. **Mapping** — check how many of your features PaintOmics could match, and
+   settle any ambiguous compound names.
+3. **Results** — the pathway summary, classification, network, metabolite
+   analyses and the enrichment table.
+4. **The pathway** — one diagram, painted with your values.
 
-However, before starting to use the application you must choose between starting an anonymous session or continuing with an user account, which provides many benefits, <a target="_blank" href="../2_2_cloud_drive/">read more about them</a>.
+You do not need an account. A job is reachable from its own URL as soon as it
+starts. Signing in adds saved jobs, file storage, control over who else can
+open the job, and a longer retention window — 14 days rather than 7 on this
+server's configuration. See
+[Accounts, storage and sharing](2_2_cloud_drive.md).
 
+---
 
-# Step 1: upload data
+## 1 · Upload
 
-The main page shows a data uploading form with 2 sections. In the first one a combobox (**Figure 1.A**) is provided to allow you to select the organism from an alphabetically ordered list, supporting partial filtering by writing in it. If the species is not present you can use the link to request it and we will install it as soon as possible.
+### Choose the organism
 
-The second section allows you to select analysis databases (**Figure 1.B**). For some species, more than one database might be available.
+Type any part of a species name; the picker ranks matches as you type and shows
+each one's KEGG organism code.
 
-The third section contains two parts. In the right one (**Figure 1.D**) you can enter the input data for each omic to include in the analysis. For doing so the "Browse" button opens a menu with 3 options:
+![Searching for an organism](img/ui/step1-organism-search.png)
 
-1. **Upload file from my PC**: conventional approach to select the file from your computer.
-2. **Use a file from 'My data'**: only available for registered users. Read more at <a href="../2_2_cloud_drive/" target="_blank">Cloud Drive</a> section.
-3. **Clear selection**: reset the selected file, if any.
+*The organism picker, mid-search. The KEGG organism code is shown on the right
+of each match.*
 
-By default "Gene expression" and "Metabolomics" omics are provided, but in the left side (**Figure 1.C**) you can add more by clicking the <img src="addicon.png" style="vertical-align: middle; height: 24px;margin:0;"/> icon; in a similar way, the <img src="removeicon.png"  style="vertical-align: middle; height: 24px;margin: 0;"/> icon allows to undo the action. You can add more than one omic of the same type, provided they have different names. Some options are simple shortcuts with predefined names (like "Proteomics") and will disappear from the list after adding them, unlike the generic ones (like Region based omic).
+Choosing the organism decides which pathway databases are available, because
+each database is installed per species. The row ticks the ones this server has
+for your organism and greys out the rest.
 
-An important setting is the type of enrichment to perform: based on genes or features. If no selection box is visible, like "Gene expression" or "Metabolomics" shortcuts, is because one default type is assumed by Paintomics. The selection might affect the contingency table used for Fisher test in the <a href="../4_1_pathway_enrichment/" target="_blank">pathway enrichment</a>, for instance in proteomics data one protein identifier may match to more than one gene identifier; in feature enrichment type the protein would be counted once, whereas for the gene enrichment type the amount would be the number of genes matched by the protein.
+![Organism and database selection](img/ui/step1-organism.png)
 
-For more information about the configuration options of regulatory and region based omic, read the associated pages in the "Supporting tools" at the left menu of the main Paintomics webpage.
+*KEGG is always present and cannot be unticked. Reactome and OmniPath are
+installed for mouse on this server; MapMan is not, so it is shown as **not
+installed**.*
 
-You can read more about the accepted input data in the <a href="../2_1_accepted_input/" target="_blank">dedicated page</a>. The example data is available from the server you are using, through the "Download example data" button in step 1 or the Downloads menu: it is built from that server's own catalogue, so it always matches what "Load example" offers, and it includes a `HOW-THIS-DATA-WAS-MADE.md` explaining which datasets are simulated and how.
+Every installed database is ticked by default, so untick the ones you do not
+want rather than hunting for the ones you do. If your species is missing
+altogether, **Request an organism** sends the maintainers a request; any
+organism KEGG carries can be installed.
 
-Once everything is ready, press the button "Run paintomics" in the upper left corner.
+### Decide about the AI interpretation
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="paintomics_input_figure1.png"/>
-    <p class="imageLegend"><b>Figure 1. Input data form.</b> Organism selection (A). Database selection (B). Available omics panel (C). Input data for chosen omics (D).</p>
-</div>
+The second section sets up the AI interpretation. It is the one place your data
+can leave the server, so it says plainly where it goes.
 
-# Step 2: matching summaries and metabolite assignment
+![The AI interpretation section](img/ui/step1-ai-section.png)
 
-Paintomics processes your files and offers you different plots showing the results of matching the identifiers of your files to the KEGG/Reactome/MapMan ids (read more <a href="../2_1_accepted_input/#identifier-and-name-conversion" target="_blank">here</a>). You can also view diverse information of your data by hovering the data distribution plot with the mouse cursor (**Figure 2**).
+*Describing your experiment here is optional, but it is what tells the
+interpretation which direction of change means what. **Draft this for me**
+writes a description from the files you have chosen.*
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="step2_up.png"/>
-    <p class="imageLegend"><b>Figure 2. Mapping results and data distribution plots for each omic.</b></p>
-</div><br />
+Filling the **Experiment design** box does two things: it names the job in your
+job list, and it gives the [AI interpretation](ai-interpretation.md) the
+context it needs to read a fold change the right way round. Leaving it empty
+does not disable anything.
 
-If a compound based omic like metabolomics was provided, an additional section will be available below the previous plots (**Figure 3**) to review the assignment and correct it if you consider it. Each compound found in your data will show many checkboxes with the candidates.
+!!! warning "Where your data goes"
+    If you use the AI features, the values and pathway results for the job are
+    sent to whichever gateway this server is configured to use. As shipped that
+    is `llm.iiia.es`, operated by IIIA-CSIC (the Artificial Intelligence
+    Research Institute of the Spanish National Research Council) and running in
+    the EU; the form names the current one under **Where your data goes**, and
+    the (!) beside it opens the full notice. Nothing goes out until you ask for
+    something: **Draft this for me** sends the column names of the files you
+    have picked, and the interpretation sends the job's results and values.
 
-<br />
+### Add your files
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="step2_down.png"/>
-    <p class="imageLegend"><b>Figure 3. Compound disambiguation.</b></p>
-</div><br /><br />
+PaintOmics starts with two omic panels, **Gene expression** and
+**Metabolomics**. Add more from the **Available omics** column on the left, and
+remove any you do not need with the bin icon.
 
-When you are satisfied with the settings, click "Next step" button.
+![The upload form](img/ui/step1-omics-panels.png)
 
-# Step 3: visualizing the results
+*The empty upload form. Drag an omic from **Available omics** into **Selected
+omics**, or click its **+**. **Proteomics** is a shortcut with a fixed name and
+disappears once used; the generic entries can be added more than once, as long
+as each panel gets a different name.*
 
-In the final step Paintomics displays the obtained results offering many configuration options for tweaking the visualization of them.
+Each panel takes a **Data file** — one row per feature, one column per
+condition — and, optionally, a **Relevant features file** listing the features
+you consider significant. What those files must contain for each kind of omic
+is set out in [Preparing your data](2_1_accepted_input.md).
 
-### Pathways summary
+![An omic panel](img/ui/step1-omic-card.png)
 
-This panel shows you the job ID as well as the link you must use to access it. You can also view the number of found pathways and the ones that are significant (p-value lower than 0.05). These counters will be automatically updated based on your filtering options and p-value selection, using by default the Fisher combined method in cases with more than one omic.
+*One omic panel. A red asterisk marks the file the job actually needs; the
+rest are optional.*
 
+**Browse…** lives inside the file field and offers three things:
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="pathway_summary.png"/>
-    <p class="imageLegend"><b>Figure 4. Summary panel showing the job ID as well as the found pathways.</b></p>
-</div>
+![The Browse menu](img/ui/step1-browse-menu.png)
 
-### Databases summary
+*Uploading from your computer always works. **Use a file from My Data** needs
+an account; **Clear selection** empties the field.*
 
-This panel shows you the summary of the pathway enrichment result from multiple databases, and the panel only occurs when multiple  databases are used.
+You do not have to convert your files first, on a server that has the converter
+turned on — it is off by default and the operator opts in. Where it is on,
+PaintOmics checks each file as you pick it and offers anything that is not
+already in its format to the [AI input converter](ai-input-converter.md), which
+converts it in your browser and shows you what it did before you accept it.
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="database_summary.PNG"/>
-    <p class="imageLegend"><b>Figure 5. Summary panel showing the job ID as well as the found pathways.</b></p>
-</div>
+![Accepted software and file types](img/ui/step1-file-formats.png)
 
-### Pathways classification
+*The software the converter reads, and the file types the form accepts.
+**Download example data** gives you the whole example catalogue to inspect.*
 
-Each KEGG pathway is associated to a primary category and subcategory (see more <a href="../4_2_kegg_categories/" target="_blank">here</a>). In this panel you can access that information by expanding the elements of the tree, with options to show or hide individual nodes or entire branches by clicking on the checkboxes or the links that appear when hovering over the options, then the "Apply" button.
+When the form is complete, click **Run PaintOmics** in the top-right corner.
+The job gets an ID and a URL immediately — you can close the tab and come back
+to it.
 
+---
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="pathway_classification.png"/>
-    <p class="imageLegend"><b>Figure 6. Classification of each KEGG pathway with filtering options.</b></p>
-</div>
+## 2 · Mapping
 
-### Pathways network
+PaintOmics converts the identifiers in your files into the ones each pathway
+database is keyed on, and this screen is where you check that it went well. The
+left-hand **Analyses** rail lists the sections; there is nothing to do here
+except read them and, if you have metabolomics, settle any ambiguous names.
 
-The pathway interaction network is built according to the process described in <a href="../4_3_pathways_network/" target="_blank">this page</a>, in which a more detailed explanation is given.
+![The mapping summaries](img/ui/step2-summary-cards.png)
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="pathway_network.png"/>
-    <p class="imageLegend"><b>Figure 7. Pathway interaction network.</b></p>
-</div>
+*The two summary cards at the top of the mapping screen.*
 
-### Pathway enrichment
+### How much of your data matched
 
-In the pathway enrichment table you can see every pathway that had at least one match with your data, as explained <a href="../4_1_pathway_enrichment/" target="_blank">in this page</a>.
+![Per-omic mapping](img/ui/step2-mapping-cards.png)
 
-The header of the table has some filtering options to quickly search through the table. Note that this "live search" is not permanent, will not be saved and will not affect the number of found & significant pathways, unlike filtering by category as explained in the classification panel section.
+*One card per omic: how many features were matched, and the distribution of
+the values that will be used for colouring. The blue lines mark the 10th and
+90th percentiles, which become the default ends of the colour scale.*
 
-The visible columns can be individually adjusted by hovering the column block (i.e. "Significance tests"), then clicking at the arrow that will appear on the right side. Depending on the job there can also be some additional select boxes to change the method for adjusted p-values or the method for combined p-values; in the last case, selecting 'Stouffer' has method will enable the configure button allowing to use of custom weights for the calculation.
+A low match rate is worth investigating before you go on: it usually means the
+identifiers in that file are from a namespace PaintOmics could not resolve for
+your species. See [Supported identifiers](1_4_id.md).
 
-Clicking on the paint column icon (<img src="paintpathways.png"  style="vertical-align: middle; height: 24px;margin: 0;"/>) will load the detailed pathway view.
+### One omic against several databases
 
+![The database matrix](img/ui/step2-databases-matrix.png)
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="pathway_enrichment.png"/>
-    <p class="imageLegend"><b>Figure 8. Pathway enrichment table.</b></p>
-</div>
+*Read across a row to compare one omic between databases. The bar is the share
+of that omic's input features carrying an identifier the database is keyed on.*
 
-## Detailed pathway view
+This table is **not a ranking**. The databases use different identifier types
+and differ in scope by design — Reactome covers fewer mouse genes than KEGG
+because it is a different kind of resource, not a worse one. What matters for
+your result is pathway coverage, which Step 3 reports.
 
-The main component of the detailed pathway view is the KEGG diagram showing all the nodes and relationships between them.
+### The clustering setting
 
-Matches are represented by boxes painted over those nodes, containing a heatmap with the record values. One box can have more than one gene or feature associated with it, symbolized by a plus icon. If at least one of these features is significant, a star symbol will also be visible.
+![Cluster configuration](img/ui/step2-clusters.png)
 
-Placing the cursor over these boxes will open up a tooltip window expanding the info. If multiple features are associated with it, a "Prev/Next" link will appear in the lower part of that window allowing it to iterate over them.
+*One setting per gene-based omic. Left alone, PaintOmics picks the number of
+k-means clusters itself; you can also fix it here, or change it later from the
+pathway network.*
 
+### Metabolite class activity
 
+If you uploaded a compound-based omic, PaintOmics will also test whether whole
+[KEGG BRITE classes](4_5_metabolite_class_activity_analysis.md) responded. This
+panel tells you which of the two tests your data supports and why.
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="pathway_detailed.png"/>
-    <p class="imageLegend"><b>Figure 9. Detailed pathway view.</b></p>
-</div>
+![The class activity test panel](img/ui/step2-class-test.png)
 
+*What will run on this job, and the one thing you set: the threshold your
+relevant-features list was built at.*
 
-<br/>
-For any question on PaintOmics, users can send a mail to [paintomicsai@gmail.com](mailto:paintomicsai@gmail.com).
+![How the two tests work](img/ui/step2-class-test-explainer.png)
+
+*The binomial test needs a relevant list built at a known α. The permutation
+test needs one column per sample and an experimental design — upload those in
+Step 1 and PaintOmics uses it instead.*
+
+### Compound disambiguation
+
+A metabolite name often matches more than one KEGG compound. PaintOmics ticks
+its best guess and shows you every candidate.
+
+![Compound disambiguation](img/ui/step2-disambiguation.png)
+
+*Each card is one name from your file. Tick the compound you actually
+measured; **Choose for me** asks the AI to pick for all of them at once, using
+your organism and experiment description.*
+
+Getting this wrong changes which pathways a metabolite lands in, so it is worth
+a minute — particularly for names like *Alanine*, where the generic entry and
+the L- and D- forms are separate KEGG compounds. The exact-name match is not
+automatically the right one.
+
+Click **Next step** when you are satisfied.
+
+---
+
+## 3 · Results
+
+### The summary
+
+![The pathways summary](img/ui/step3-pathways-summary.png)
+
+*How many pathways were found in total and how many are significant, broken
+down by database.*
+
+"Found" means the pathway contains at least one of your matched features.
+"Significant" means its p-value is 0.05 or less — the combined p-value under
+whichever method is chosen in **Show combined p-values** below, or the single
+omic's own p-value on a one-omic job. The threshold is fixed and the FDR
+setting does not enter it. Both counters follow the classification filter, so
+hiding a category moves them.
+
+### Classification
+
+![The pathway explorer](img/ui/step3-pathway-explorer.png)
+
+*One tab per database. The pie shows how the found pathways are distributed
+across the top-level classification; the tree beside it filters the whole
+results screen.*
+
+The hierarchy is the database's own: KEGG BRITE for KEGG, and the equivalent
+for Reactome, MapMan and OmniPath. See
+[Pathway classification](4_2_kegg_categories.md).
+
+### The pathway network
+
+![The pathway network](img/ui/step3-pathway-network.png)
+
+*Pathways as nodes, joined where they share biological processes or features.
+Everything on the right changes what is drawn.*
+
+This is the fastest way to see that a result is one story rather than forty
+separate ones. [The pathway network](4_3_pathways_network.md) explains the
+colouring, the two kinds of edge and the filters.
+
+### The metabolite analyses
+
+![Metabolite hub analysis](img/ui/step3-metabolite-hub.png)
+
+*Which metabolites have differentially expressed genes concentrated around them
+in the KEGG reaction network. See [Metabolite hub
+analysis](4_4_metabolite_hub_analysis.md).*
+
+![Metabolite class activity](img/ui/step3-class-activity.png)
+
+*Whether whole compound classes moved, at three levels of the KEGG BRITE
+hierarchy. See [Metabolite class
+activity](4_5_metabolite_class_activity_analysis.md).*
+
+### The enrichment table
+
+![The pathway enrichment table](img/ui/step3-enrichment-table.png)
+
+*Every pathway from every database, with one p-value column per omic and a
+combined p-value. Sort by any column; the paint icon opens the pathway.*
+
+The controls above the table decide what it shows and how significance is
+computed — which databases to list, whether to show FDR-adjusted values, and
+which method combines the per-omic p-values. [Pathway
+enrichment](4_1_pathway_enrichment.md) explains each of them, and
+**Download as XLS** exports exactly what you are looking at.
+
+---
+
+## 4 · The pathway
+
+Clicking the paint icon on any row opens that pathway with your data on it.
+
+![A painted pathway](img/ui/step4-painted-pathway.png)
+
+*Purine metabolism, painted with five omics over six time points.*
+
+![Painted boxes, close up](img/ui/step4-boxes-closeup.png)
+
+*Each matched feature is one box, split into one cell per condition, left to
+right in the order of your columns. On the default Blue-Grey-Red scale, blue is
+below the reference and red above.*
+
+![The pathway information panel](img/ui/step4-pathway-information.png)
+
+*How many features of each omic this pathway matched, how many of those were
+in your relevant list (in brackets), and the p-value for each.*
+
+Clicking any painted box opens the feature itself — every omic that measured
+it, as a heatmap or a line chart.
+
+![Feature detail](img/ui/step4-feature-set-overview.png)
+
+*One feature across all five omics. A box on a KEGG map can stand for several
+genes, so the panel lists everything in the set.*
+
+[The pathway view](5_1_browsing_pathways.md) covers the toolbar, the visual
+settings and the export options; [Feature details](5_2_detailed_views.md) and
+[Heatmaps](5_3_heatmaps.md) cover the two panels that open beside the map.
+
+---
+
+## What next
+
+* Ask the AI agent to read the whole result and draft an interpretation:
+  [The pathway interpretation](ai-interpretation.md).
+* Model regulation explicitly, rather than layer by layer:
+  [Regulatory omics with MORE](4_6_Regulatory_omics.md).
+* Share the job, or keep it: [Accounts, storage and
+  sharing](2_2_cloud_drive.md).

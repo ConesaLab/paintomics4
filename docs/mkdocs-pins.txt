@@ -10,3 +10,8 @@
 # honest. It also means nothing updates these pins automatically; bump them by
 # hand when the docs build needs it.
 mkdocs==1.6.1
+# The theme. Material carries the navigation, the search index and the
+# light/dark toggle the rebuilt guide is written against; the built-in
+# `readthedocs` theme has none of them. `mkdocs build --strict` fails on an
+# unknown theme name, so this pin is load-bearing, not cosmetic.
+mkdocs-material==9.5.49

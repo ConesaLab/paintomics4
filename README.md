@@ -100,10 +100,13 @@ feature off entirely with `AI_INTERPRETATION_ENABLED=false`.
 | [Regulatory omics](https://conesalab.github.io/PaintOmics/4_6_Regulatory_omics/) (incl. MORE) | Which trans-acting regulators (miRNA, TF, SF, RBP…) drive the changes |
 | [Metagenes](https://conesalab.github.io/PaintOmics/4_7_Metagenes/) | The dominant expression trends inside a pathway |
 | [Pathway visualisation](https://conesalab.github.io/PaintOmics/5_1_browsing_pathways/) | All omics painted on one diagram, with per-feature heatmaps |
-| **AI interpretation** | What the ranked pathways mean biologically, with literature to back it |
+| [AI interpretation](https://conesalab.github.io/PaintOmics/ai-interpretation/) | What the ranked pathways mean biologically, with literature to back it |
 
 Two supporting tools convert data into a usable input format: **Regions to
-Genes** (RGmatch, for region-based assays) and **miRNA to Genes**.
+Genes** (RGmatch, for region-based assays) and **miRNA to Genes**. A file that
+is not in PaintOmics' format at all can be handed to the
+[AI input converter](https://conesalab.github.io/PaintOmics/ai-input-converter/),
+which rewrites it in your browser and shows you the script it used.
 
 ## Deploy your own instance
 

@@ -1,14 +1,10 @@
-<div class="imageContainer" style="" >
-    <img src="paintomics_150x690.png" title="Paintomics LOGO." style=" height: 70px !important; margin-bottom: 20px; ">
-</div>
+# License
 
-# Paintomics, integrative visualization of multiple *omic* data      
+**PaintOmics** is distributed under the **GNU General Public License, Version 3**.
 
-**Paintomics** application is distributed under **GNU General Public License, Version 3**.
+![GNU General Public License, Version 3](img/gplv3-127x51.png)
 
-<div class="imageContainer" style="text-align:center; font-size:10px; color:#898989" >
-    <img src="img/gplv3-127x51.png" title="GNU GENERAL PUBLIC LICENSE Version 3 logo."/>
-</div>                              
+*The GPL v3 badge. The full licence text ships as `LICENSE` in the repository.*
 
 This program is **free software**; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 
@@ -16,14 +12,19 @@ This program is distributed in the hope that it will be useful, but **WITHOUT AN
 
 You should have received a copy of the GNU General Public License along with this program. If not, see [http://www.gnu.org/licenses](http://www.gnu.org/licenses).
 
-**Paintomics** v4.0 is part of the [STATegra Project](http://stategra.eu) and was developed by the [Genomics of Gene Expression Lab](http://bioinfo.cipf.es/aconesawp/) at [Príncipe Felipe Research Centre](http://www.cipf.es/).
+PaintOmics began in the [STATegra Project](http://stategra.eu), developed by
+the Genomics of Gene Expression Lab, and is now maintained by the
+[Conesa Lab](https://github.com/ConesaLab) — the repository is
+[ConesaLab/PaintOmics](https://github.com/ConesaLab/PaintOmics).
 
-## Contact
+## Authors
 
-** Tianyuan Liu **, Main Developer.
+The full author list, with ORCIDs, is in
+[CITATION.cff](https://github.com/ConesaLab/PaintOmics/blob/master/CITATION.cff)
+at the root of the repository, which is also what GitHub's **Cite this
+repository** button reads. Keeping one list rather than two is deliberate: a
+second copy here would drift.
 
-** Rafael Hernández de Diego **, Main Developer.
-
-** Ana Conesa, PhD. **, Head Genomics of Gene Expression Lab.
-
-For any question on Paintomics, users can send a mail to [paintomicsai@gmail.com](mailto:paintomicsai@gmail.com).
+To cite PaintOmics in published work, use the BibTeX under **More ▸ Cite
+PaintOmics** in the application, or the `preferred-citation` entry in that
+file.

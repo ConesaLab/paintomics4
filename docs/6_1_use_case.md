@@ -1,159 +1,356 @@
-<div class="imageContainer" style="" >
-    <img src="paintomics_150x690.png" title="Paintomics LOGO." style=" height: 70px !important; margin-bottom: 20px; ">
-</div>
+# A worked example: RNA-seq and DNase-seq
 
+This page follows one real analysis from the files to a conclusion. The
+reference pages are organised by feature; this one is organised by the
+question, and it uses the numbers a single run actually produced rather than
+invented ones. It is a companion to [Your first analysis](8_step_by_step.md),
+which is the screen-by-screen mechanical guide — that page tells you where to
+click, this one tells you what to make of what appears. Read that one first, or
+keep it open beside this.
 
-## Starting with PaintOmics
-**Paintomics** is a web tool for the integrative visualization of multiple omic datasets onto KEGG pathways. To start working with PaintOmics, open your browser (Google Chrome or Firefox preferably) and access the following URL: [**https://paintomics.uv.es**](https://paintomics.uv.es) First you need to create a new account, choose the option **"Sign up now"** and fill the form with your data; or choose **"Start Guest Session",** to start a new guest session (please note that all data submitted by Guest users will keep on the system a maximum of 7 days). **Do not forget your password!!**  Explore the different options at main menu (left side of the window).
+Every figure and every number below comes from one job: the bundled
+**STATegra — real mouse Ikaros time course (5 omics)** example, run against
+KEGG, Reactome and OmniPath for *Mus musculus*.
 
-## Preparing the data for PaintOmics
-Paintomics supports lot of different omic data types, however there are few considerations before start working:
-- -- **Files must contain** [**tab-separated values**](https://en.wikipedia.org/wiki/Tab-separated_values).
-- -- **Values must indicate differential changes between conditions**, e.g. differential expression or any method that you prefer for your omics data, but always:
-  - positive values indicate enrichment (e.g. overexpression in transcriptomics)
-  - negative values indicate reduction  (e.g. underexpression in transcriptomics
-   As an illustrative example let's adopt the following files which contain RNA-seq data and DNase-seq.
-### Preparing RNA-SEQ Data
-Download the **Gene expression file (RNAseq\_CQN.txt).**This file contains gene expression quantification values for a subset of mouse genes, conveniently normalized in logarithmic scale.The file has 37 columns, separated by spaces, where:
-- --First column indicates the gene name (ENSEMBL gene ID)
-- --One column for each combination **"Condition", "Time-point"** and **"Number of replicate"**
-i.e. 2 conditions (Control, Ikaros) \* 6 time-points (0h, 2h, 6h, 12h, 18h , 24h) \* 3 replicates per time-point = **36 columns.**
+## The experiment
 
-|   | Batch\_1\_Ctr\_0H | Batch\_2\_Ctr\_0H | Batch\_4\_Ctr\_0H | ... | Batch\_4\_Ik\_24H |
-| --- | --- | --- | --- | --- | --- |
-| ENSMUSG00000000001 | 14.7979331510518 | 14.8111777579489 | 15.1276204852104 | ... | 15.32687675891 |
-| --- | --- | --- | --- | --- | --- |
-| ENSMUSG00000000085 | 14.2178933569466 | 14.1732521770369 | 13.803459283     | ... | 14.25783296098 |
-| --- | --- | --- | --- | --- | --- |
-| ENSMUSG00000000093 | 8.26609976827721 | 7.97380357952496 | 8.26059375800452 | ... | 11.27248432423 |
-| --- | --- | --- | --- | --- | --- |
+Ikaros is a transcription factor required for B-cell lineage commitment. In the
+published STATegra experiment, a mouse B3 pre-B cell line carries an inducible
+Ikaros construct; tamoxifen switches it on, and five omic layers are measured
+at six time points afterwards. Each value in the uploaded files is an
+Ikaros-over-control log2 ratio at one time point, averaged over three
+biological replicates per arm. The six conditions are `IKvsCtr_0h`, `_2h`,
+`_6h`, `_12h`, `_18h` and `_24h`.
 
- Launch RStudio and create a new R script.
+The data are from Gomez-Cabrero et al., *STATegra, a comprehensive multi-omics
+dataset of B-cell differentiation in mouse*, Sci Data 6:256 (2019),
+[doi:10.1038/s41597-019-0202-7](https://doi.org/10.1038/s41597-019-0202-7).
 
-| **Question 1:** Write a new R script which process the previous file and calculate the differential expression between each pair Ikaros/Control, as follows:
-1. 1Load the file content into a matrix
-2. 2Calculate the **ratio** between each pair of values "Condition, Time-point and Replicate",
-e.g. Batch\_1\_Ctr\_0H with Batch\_1\_Ik\_0H, Batch\_3\_Ctr\_2H with Batch\_3\_Ik\_2H, etc.
+| Layer | What it measures | Identifiers in the file | Source accession |
+|---|---|---|---|
+| Gene expression | Transcript abundance, 12,762 genes | Ensembl gene IDs | GSE75417 |
+| Proteomics | 2,384 protein groups | Gene symbols | PXD003263 |
+| miRNA-seq | 42,421 gene–miRNA pairs, paired against the miRBase target table | `gene:::miRNA` associations | GSE75394 |
+| DNase-seq | Chromatin accessibility, 52,788 consensus regions collapsed onto genes | Ensembl gene IDs after region assignment | GSE75390 |
+| Metabolomics | 58 analytes | Compound names | MetaboLights MTBLS283 |
 
- ![](data:image/*;base64,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)
+![The Load example dataset chooser](img/ui/load-example-dialog.png)
 
-1. 3Calculate the mean ratio between replicates of the same time-point.
-2. 4Save the results in a **tab-separated** values file
+*The dataset used throughout this page. **Load example** in the top bar loads
+it, files and all, so you can reproduce every figure below.*
 
-| GENE ID | 0H | 2H | 6h | 12h | 18h | 24h |
-| --- | --- | --- | --- | --- | --- | --- |
-| ENSMUSG00000000001 | 0.005179 | -0.00933 | 0.073007 | 0.0134159 | 0.077053 | 0.06322 |
-| --- | --- | --- | --- | --- | --- | --- |
+The question the analysis is being asked is a single one: **does inducing one
+transcription factor produce a change that is coherent across chromatin,
+transcript, protein and metabolite, and if so, where?**
 
-  |
-| --- |
-| setwd( **"THE/LOCATION/FOR/YOUR/FILES>"** )dir()  _# RNA-seq -----------------------------------------------------------------_ _# First read the file into a matrix object,_rnaseq <- read.delim(" **RNAseq\_CQN.txt"** ,header= **TRUE** ,row.names= **1** ,as.is= **TRUE** ,sep=" ")_# Shows the first 5 rows of the matrix_head(rnaseq)_#                     Batch\_1\_Ctr\_0H Batch\_2\_Ctr\_0H Batch\_4\_Ctr\_0H ... Batch\_3\_Ik\_24H Batch\_4\_Ik\_24H __# ENSMUSG00000000001    14.797933      14.811178      15.127620    ...  15.045891      15.326877__ # ENSMUSG00000000085    14.753266      14.288620      14.387110    ...  14.640788      14.257833__# ..._  _# For each row in the matrix, calculate the ratio for each pair_calculateRowRatios <- **function** (x){  log2(x[**19:36**]/x[**1:18**])} rnaseq <- t(apply(rnaseq, 1,calculateRowRatios))_# Shows the first 5 rows of the matrix_head(rnaseq)_#                     Batch\_1\_Ik\_0H   Batch\_2\_Ik\_0H ... Batch\_3\_Ik\_24H Batch\_4\_Ik\_24H__# ENSMUSG00000000001    0.028794952    0.02400306   ...  0.008396181     0.06754930 __# ENSMUSG00000000085   -0.005401374   -0.02385420   ...  0.058944368     0.03168674__ # ..._   _# Now, calculate the mean of the ratio between replicates at the same time-point_calculateReplicateRatiosMean <- **function** (x){  mean\_ratio\_0h  = mean(x[**1:3**]);  mean\_ratio\_2h  = mean(x[**4:6**]);  mean\_ratio\_6h  = mean(x[**7:9**]);  mean\_ratio\_12h = mean(x[**10:12**]);  mean\_ratio\_18h = mean(x[**13:15**]);  mean\_ratio\_24h = mean(x[**16:18**]);    c(mean\_ratio\_0h,mean\_ratio\_2h,mean\_ratio\_6h,mean\_ratio\_12h,mean\_ratio\_18h,mean\_ratio\_24h)} rnaseq <- t(apply(rnaseq, **1** , calculateReplicateRatiosMean))_#Shows the first 5 rows of the matrix_head(rnaseq)_#                         [,1]        [,2]        [,3]        [,4]        [,5]        [,6] __# ENSMUSG00000000001  0.015238853  0.01042930  0.04686596  0.01663972  0.04748804  0.04169198__ # ENSMUSG00000000085 -0.004242276  0.01897778  0.01382703  0.04848283  0.01746305  0.04254352__# ..._  _#Creates a valid header for the file_head <- c( **"# geneID"** ,paste( **"Ikaros/Control"** ,c( **"0h","2h","6h","12h","18h","24h"** ),sep= **"\_"** ))write(head,file= **"RNAseq\_CQN\_ratio.txt"** ,ncolumns=7, append= **FALSE** , sep="\t")  _# Finally, we save the matrix into a new file, but first we write the header for the file._write.table(rnaseq,file= **"RNAseq\_CQN\_ratio.txt"** ,append= **TRUE** ,row.names= **TRUE** ,col.names= **FALSE** ,quote= **FALSE** ,sep= **"\t"** ) |
-| --- |
+## First, the layers that are not gene-level
 
+Three of the five layers measure something a pathway database has never heard
+of. Pathways are drawn on genes and compounds, so a layer measured on anything
+else has to be converted into one of those two before it can be enriched or
+painted — and that conversion is an interpretation you are responsible for, not
+a formatting step.
 
-### Preparing DNASE-SEQ Data
-Download the **DNAse-seq file (DNaseSeq.txt).**This file contains quantification values for a subset of DNAse-seq regions, conveniently normalized in logarithmic scale.The file has 37 columns, separated by tabs, where:
-- -- **First column identifies the region** as follows: _Chromome\_start\_end_, where:
-  - oo **Chromosome** indicates the Chromosome number
-  - oo **Start** indicates the position of the first bp of the region in the genome
-  - oo **End** indicates the position of the last bp of the region in the genome
-  e.g_. 1\_172490322\_172490824_
-- --One column for each combination **"Condition", "Time-point"** and **"Number of replicate"**
-i.e. 2 Conditions (Control, Ikaros) \* 6 time-points (0h, 2h, 6h, 12h, 18h , 24h) \* 3 replicates per time-point = **36 columns.**
+DNase-seq is the clearest case, and it is the reason this page exists.
 
-|   | CT0h\_rep4 | CT0h\_rep5 | CT0h\_rep6 | ... | Ik24h\_rep6 |
-| --- | --- | --- | --- | --- | --- |
-| 1\_63176480\_63177113 | 5.12962526386568 | 5.1088729146623 | 4.600384750876 | ... | 5.09940603077 |
-| --- | --- | --- | --- | --- | --- |
-| 1\_172490322\_172490824 | 4.39879115152337 | 4.9089141017188 | 4.590721323302   | ... | 4.64766043572 |
-| --- | --- | --- | --- | --- | --- |
-| 1\_9748193\_9748790 | 6.22199423297263 | 5.7809293797892 | 5.215845275159 | ... | 5.97518719427 |
-| --- | --- | --- | --- | --- | --- |
+### Turning an open region into a claim about a gene
 
- Launch RStudio and create a new R script.
+A DNase-seq peak is an interval: chromosome, start, end. On its own it says
+that a stretch of chromatin was more accessible after induction than before.
+That is not yet a statement about any gene, and pathways contain no intervals.
 
-| **Question 2:** Write a R script which process the previous file and calculate the differential expression between each pair Ikaros/Control, as follows:
-1. 1Load the file content into a matrix
-2. 2Calculate the **ratio** between each pair of values "Condition, Time-point and Replicate",
-e.g. CT0h\_rep4 with Ik0h\_rep4, CT2h\_rep5 with Ik2h\_rep5, etc.
+PaintOmics closes the gap with **RGmatch**, which associates each region with
+every gene within a search distance — one row per region–gene pair — and
+records *which area* of the gene the region falls in: upstream, promoter, TSS,
+first exon, first intron, gene body, downstream. You then choose the areas that
+carry your hypothesis. For an accessibility change you expect to act on
+transcription initiation, promoter and TSS are the areas that matter, and a
+region sitting in the gene body of a neighbouring gene is noise. Where several
+kept regions land on the same gene, their values are summarised into one — by
+default the mean. The settings and the defaults are on
+[Preparing your data](2_1_accepted_input.md#matching-regions-to-genes-rgmatch).
 
- ![](data:image/*;base64,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)
+In this dataset that step turns 52,788 consensus DHS regions into 23,273 gene
+rows, and those rows are what the pathway analysis sees.
 
-1. 3Calculate the mean ratio between replicates of the same time-point.
-2. 4Save the results in a tab-separated values files
-**Note:** Separate region identifiers in 3 columns, _Chromosome_, _Start_ and _End_
+The reasoning is worth stating plainly, because the rest of the analysis
+inherits it:
 
-| Chr | Start | End | 2H | 6h | 12h | 18h | 24h |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 63176480 | 63177113 | -3.04933 | -1.173007 | 0.0134159 | 3.077053 | 3.06322 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
+* **What you gain.** "A region opened" becomes "this gene's promoter opened",
+  which is a claim a pathway can hold, can be tested for enrichment, and can be
+  painted next to that gene's transcript and protein values.
+* **What you assume.** That proximity implies regulation. It often does at a
+  promoter and often does not at distance: an enhancer can act across hundreds
+  of kilobases and skip the gene next to it, and a region within the search
+  distance of two genes is credited to both. Neither error is visible
+  downstream — by Step 2 the layer looks exactly like an ordinary gene-level
+  omic.
+* **What follows.** Treat a DNase-seq p-value as evidence about *accessibility
+  near* the pathway's genes, not about the genes themselves. It is at its
+  strongest when it agrees with the transcript layer on the same genes, which
+  is exactly what the pathway view lets you check.
 
-  |
-| --- |
-| setwd("THE/LOCATION/FOR/YOUR/FILES>")dir() # DNase-seq ----------------------------------------------------------------- _# First read the file into a matrix object,_dnase <- read.delim(" **DNaseSeq.txt"** ,header= **TRUE** ,row.names= **1** ,as.is= **TRUE** ,sep=" ")_# Shows the first 5 rows of the matrix_head(dnase)_#                        CT0h\_rep4 CT0h\_rep5 CT0h\_rep6 ... Ik24h\_rep5 Ik24h\_rep6 __# 1\_63176480\_63177113     5.129625  5.108873  4.600385 ...   5.048141   5.099406__ # 1\_172490322\_172490824   4.398791  4.908914  4.590721 ...   4.220556   4.647660_ _# ..._  _# For each row in the matrix, calculate the ratio for each pair_dnase\_aux <- t(apply(dnase, **1** , calculateRowRatios))_# RETURNS A WARNING MESSAGE!!__# There were 50 or more warnings (use warnings() to see the first 50)__warnings() __#Warning messages:__ # 1: In FUN(newX[, i], ...) : NaNs produced__# ..._ _# Find out the problem... negative values? log(x) is undefined for x ≤ 0_min(dnase) _#[1] -0.8432541_ _# Add 1 to all values in the matrix, i.e. shift to positive values_dnase <- dnase+ **1** min(dnase) _#[1] 0.1567459_  _# For each row in the matrix, calculate the ratio for each pair_dnase\_aux <- t(apply(dnase, **1** , calculateRowRatios))_# Now, calculate the mean of the ratio between replicates at the same time-point_dnase <- t(apply(dnase , **1** , calculateReplicateRatiosMean))head(dnase)_#                               [,1]         [,2]        [,3]          [,4]         [,5]         [,6]__#1\_63176480\_63177113    0.0248946623 -0.046378716 -0.02914379 -0.0569667348 -0.061835562 -0.047533696 __#1\_172490322\_172490824 -0.1491362382 -0.032585223 -0.07455459 -0.0248728515 -0.020019872 -0.039175981_  _# Replace "\_" by tabs "\t" at the row names__ # i.e. separate into 3 columns (Chromosome, Start, End)__# e.g. 1\_63176480\_63177113 -> 1\t63176480\t63177113_rownames(dnase) <- gsub( **"\_"** , **"\t"** , rownames(dnase))  _#Creates a valid header for the file_head <- c( **"# Chr", "Start", "End"** ,paste( **"Ikaros/Control"** ,c( **"0h","2h","6h","12h","18h","24h"** ),sep= **"\_"** ))write(head, file= **"DNAseSeq\_ratio.txt"** , ncolumns=10, append= **FALSE** , sep="\t")  _# Finally, we save the matrix into a new file, but first we write the header for the file._write.table(dnase,file= **"DNAseSeq\_ratio.txt"** ,append= **TRUE** ,row.names= **TRUE** ,col.names= **FALSE** ,quote= **FALSE** ,sep= **"\t"** ) |
-| --- |
+The miRNA layer has the same shape: miRNA quantification is paired with a
+target-prediction table, and each `gene:::miRNA` pair carries the assumption
+that the predicted target is a real one. Metabolomics has a smaller version of
+the same problem — a compound *name* is not an identifier, and this run had 47
+names that matched more than one KEGG compound.
 
-## Loading the data in PaintOmics
-For a real experiment, it would be necessary to prepare the files for the remaining omic data types; however, as this is just an illustrative example, we already did it for you ;)Return to the PaintOmics site and choose the option _"_ **Load example"** at the buttons toolbar (upper-right corner). This option automatically fills the submission form with the prepared files. We are now ready to **"Run Paintomics"**.
-## Feature ID/Name conversion
-A typical problem when working in bioinformatics is the conversion between different domains of names or ids of genomic features (genes, proteins, etc.).In order to minimize the efforts when adapting the input for Paintomics, version 3.0 includes a powerful Name/ID converter that translates automatically, when possible, our data into the appropriate name domain, i.e. the accepted set of feature ids for the current organism in KEGG.
-### Mapping Regions to Genes
-As the example files include some DNAse-seq regions, the first step in the process includes matching the genomic regions to the corresponding genes (closest gene) by using the tool _RGMatch_, included in Paintomics 4.0. By default, _RGMatch_ will report any region that overlaps to any gene area (Upstream, Promoter, TSS, etc.), however, Paintomics 4.0 extends this idea so we can easily discriminate those regions that overlap areas of interest of the gene._E.g. Given the following DNAse-seq regions that overlap different areas of a gene, if we are interested only in those regions that match at the Promoter and TSS areas of the gene, Paintomics will calculate a value of quantification for that gene as the mean of the quantification of all regions that overlap the desired areas, i.e. the mean of the quantification for Region 1, Region 2 and Region 3_. Feature Name/Ids translationAfter regions translation, PaintOmics will start with ID conversion.For the example files, we are working with Ensembl gene IDs for Mus Musculus (Gene Expression, DNase-seq and miRNA-seq), Gene Symbols (Proteomics) and default metabolite names (Metabolomics), while, by default, KEGG information for Mouse uses Entrez Gene ID, therefore, it's necessary a translation.
+## Step 2 — how much of each layer survived
 
-| Input name/id | Translated id |
-| --- | --- |
-| Mob4 | 19070 |
-| --- | --- |
-| Nedd8 | 18002 |
-| --- | --- |
-| ENSMUSG00000034875 | 110959 |
-| --- | --- |
-| ENSMUSG00000079553 | 100502766 |
-| --- | --- |
-| Alanine | Multiple candidatesAlanine, D-Alanine, L-Alanine, beta-Alanine |
-| --- | --- |
-| Citric acid | Citric acid |
-| --- | --- |
-| Glucose | Multiple candidatesD-Glucose, Glucose, alpha-D-Glucose, beta-D-Glucose |
-| --- | --- |
+| Omic | Mapped | Unmapped |
+|---|---|---|
+| Gene expression | 11,296 (89%) | 1,466 |
+| Proteomics | 2,363 (99%) | 21 |
+| miRNA-seq | 8,585 (100%) | 33 |
+| DNase-seq | 16,491 (71%) | 6,782 |
+| Metabolomics | 52 (90%) | 6 |
 
- Adapting features ids to the corresponding domain it's a pretty heavy task which requires some seconds for processing (increases with the number of provided features).Be patient! Evaluate translationFor each omic data type, Paintomics will generate a plot summarizing the results for ID conversion as well as an overview for data distribution.Note that translation results can be downloaded as text files.
+![The per-omic mapping cards](img/ui/step2-mapping-cards.png)
 
-| **Question 3:** Download the results for ID/name translation and evaluate the results.Observe that some features were not translated, Why is that?Observe the data distribution boxplot, What is meaning for this chart? |
-| --- |
-| _Sometimes there is not a direct translation between two different name/id domains. __Taking as example Ensembl and RefSeq, some genes and transcripts  in ENSEMBL for Mus Musculus are do not exist or are not accepted yet by RefSeq. The main reason is that RefSeq is a collection of non-redundant, curated mRNA models, whereas Ensembl is a database containing gene models from multiple sources, in some cases resulting from automatic annotation.__ In other cases the lack of translation can be caused by a misspelled name/id or because Paintomics's databases are not up-to-date [in that case, a feedback mail will be appreciated_ ;) _]._ _About boxplots, moving the mouse cursor over the plot, we will see the following box containing a summary for data distribution._ _This information helps us to understand the distribution of our data and allows us to identify possible outliers and other problems._ _This is also important for in next steps, as some features are based on this distribution, e.g. By default, Paintomics uses the range [Percentile 10, Percentile 90] to calculate the min and max colors for the heatmaps, avoiding thus incorrect coloring due to the presence of outliers._ |
-| --- |
+*Two of the five mapping cards. The doughnut is the mapped/unmapped split; the
+box plot beside it is the distribution of the values that will be coloured,
+with the 10th and 90th percentiles marked.*
 
+Three things in that table are worth reading rather than glancing at.
 
-## Pathways enrichment analysis
-Following to the Gene/ID translation, Paintomics finds out the list of pathways for the selected specie that contains at least one or more features (genes or metabolites) from the input. Additionally, Paintomics weights the importance of each pathway by applying an enrichment analysis based on the number of input features involved in the biological process. As result of the previous process, Paintomics will generate a table containing all found Pathways, ranked by Combined p-value, i.e. the first positions in the table corresponds to those pathways with a higher significance value (lower p-value), while less significant pathways were located at the last positions of the table. In addition to the previous table, Paintomics generates an interactive network which shows the relationships between found pathways.Some keys to interpret this network are the following:
-- **** Nodes are colored by KEGG Pathway classification (more info. [http://www.genome.jp/kegg/pathway.html](http://www.genome.jp/kegg/pathway.html))
-- **** Node size is directly related with the pathway significance, i.e. the higher significance, the bigger will be the node.
-- **** An edges between 2 nodes, indicates that the pathways have some features in common (genes and compounds). By default, Paintomics only draws edges when both pathways share at least a 10% of the features.
-- **** Node position is dynamically calculated, taken in account the shared features between pathways, i.e. pathways that share lot of features, tend to situate closer, creating "cluster" of related pathways.
+**The spread is a property of namespaces, not of data quality.** Proteomics
+maps at 99% because it arrives as gene symbols, which is close to the domain
+KEGG is keyed on for mouse. Gene expression maps at 89% because Ensembl carries
+gene models — predicted, non-coding, retired — that a curated identifier set
+never adopted. Nothing was done wrong to the 1,466. See
+[Supported identifiers](1_4_id.md).
 
+**DNase-seq at 71% is the lowest, and it is the derived layer.** Its 23,273
+rows are only as good as the genes RGmatch assigned regions to; a region whose
+nearest gene has no entry in the pathway databases contributes nothing, however
+clean the peak was. A low rate on a derived layer is a question about the
+annotation and the assignment settings, not about the assay.
 
-| **Question 4:** Observe the results (pathways table and the network) and use Network configurator to filter out all _Human Diseases_ pathways. Manipulate the network using the available tools and observe the changes.Use the _Search_ tool at the pathways table to find the **Cell Cycle** pathway and paint the pathway using the tool **Paint****.** |
-| --- |
+**Metabolomics is 52 features.** Not 52%, fifty-two features. Hold that number:
+it governs everything the compound-based analyses can and cannot say later on
+this page.
 
+The 47 ambiguous compound names are settled on this screen, one card per name,
+and it is worth the minute. *Alanine* is the standard trap: the bare name,
+L-alanine, D-alanine and β-alanine are four separate KEGG compounds in
+different pathways, and the exact-name match is not automatically the one you
+measured.
 
-## Browsing the pathway
-As final step in the process, we can explore each pathway separately and visualize our input data integrated at the KEGG diagram.The first time we open a Pathway for exploring, Paintomics shows 2 panels:
-- **** The **interactive KEGG diagram**. At each matched feature (significant or not), a box is drawn with as many sections as columns present in the input files, each section colored according to its corresponding expression or concentration value at each particular sample. You can move, zoom and inspect the information contained in the pathway.
-- **** An **auxiliary panel** showing some interesting information and a Search bar which allows us to locate quickly features involved on the current pathway.
+## Step 3 — 1,007 pathways found, 114 significant
 
+![The pathways summary](img/ui/step3-pathways-summary.png)
 
-| **Question 5:** Using the _Search tool_, find the gene **Cdkn1b** and observe the information.During the IGV exercises we observe the DNAse-seq and Gene Expression data for this gene. Is the information shown by Paintomics consistent with what we observed during the previous exercise? Do we get new information using Paintomics?? |
-| --- |
-| _Using IGV we observed that the gene expression for Cdkn1b increased a lot between time-point 0h and time-point 24h, while DNAse-seq data decreased. However we did not have any information about intermediate time-points, and we cannot elucidate the reason for the decreasing values of DNAse-seq._ _Using PaintOmics we observer the same behavior for data, but we get also information for the remaining time-points (2h, 6h, 12h and 18h)._ _Observing the trend for Gene Expression and DNAse-seq we could suspect that this gene was significantly regulated between 2 and 6 h after Ikaros induction, according to the observations of Ferreirós-Vidal et al __1__. That would explain the behavior for DNAse-seq and the high values of gene expression during later time-points._ |
-| --- |
+*The summary at the top of the results screen, with the per-database
+breakdown.*
 
- Additionally, 2 interesting options are available at the upper toolbar.
-- ****** Show heatmap**. This option opens a secondary panel where we can generate a heatmap for each omic data type present in the pathway.
-- ****** Settings.** This option opens an auxiliary panel containing some configurations for data visualization.
+| Database | Found | Significant |
+|---|---|---|
+| KEGG | 364 | 71 |
+| OmniPath | 120 | 10 |
+| Reactome | 523 | 33 |
+| **Total** | **1,007** | **114** |
 
-| **Question 6:** Generate the heatmaps for this pathway changing the available options.Using the options at Settings panel, change the visualization and observe the differences. |
-| --- |
+"Found" means the pathway contains at least one feature you uploaded and
+PaintOmics matched. "Significant" applies the threshold and the p-value
+combination method currently set on the enrichment table, so both counters move
+when you change those — see [Pathway enrichment](4_1_pathway_enrichment.md).
 
- 1 Ferreirós-Vidal I, Carroll T, Taylor B, et al **. Genome-wide identification of Ikaros targets elucidates its contribution to mouse B-cell lineage specification and pre-B-cell differentiation.** _Blood_ 2013;121(10):1769-1782 |
-| --- |
+Do not read the three rows as a league table. Reactome finds the most pathways
+and returns the fewest significant ones because it decomposes biology into many
+small reaction sets, and each is tested against its own Reactome background;
+KEGG's maps are larger and fewer. The databases differ in granularity, scope
+and identifier type by design ([Reactome](1_2_reactome.md),
+[OmniPath](1_6_omnipath.md)). A pathway significant in one and absent from
+another is usually a difference in how biology was carved up, not a
+contradiction.
+
+114 significant pathways is also more than anyone can read. The network is the
+tool that makes it tractable.
+
+![The pathway network](img/ui/step3-pathway-network.png)
+
+*66 of the 364 KEGG pathways, joined by 162 edges, filtered to p ≤ 0.05.*
+
+The filter that draws this view keeps pathways at p ≤ 0.05 and edges where two
+pathways share enough features. What it shows is that the 71 significant KEGG
+pathways are not 71 independent findings: they are a much smaller number of
+connected neighbourhoods, and a cluster of adjacent nodes is one story counted
+several times. [The pathway network](4_3_pathways_network.md) covers the
+colourings, the two kinds of edge, and how to read shared-feature edges without
+over-claiming.
+
+## The compound analyses, and their honest size
+
+Two analyses on the results screen work on the metabolite layer. Both were run,
+and both have to be read against those 52 mapped compounds.
+
+![Metabolite hub analysis](img/ui/step3-metabolite-hub.png)
+
+*39 metabolites scored; D-Fructose is the one that survives correction.*
+
+The hub analysis asks whether differentially expressed genes are concentrated
+in the reaction neighbourhood around a metabolite. It scored 39 metabolites,
+and **one** passed FDR < 0.05: **D-Fructose** (`C00095`), FDR 6.8e-4, with 198
+differentially expressed genes in its neighbourhood, strongest at two steps
+away.
+
+One hit out of 39 is not a disappointing result; it is the resolution the
+input supports. The FDR is Benjamini–Hochberg over every scored metabolite at
+every radius at once, the null DE rate is taken from the same data being
+tested, and the four radii of one metabolite are nested views of the same
+evidence rather than four independent tests. The full set of assumptions is on
+[Metabolite hub analysis](4_4_metabolite_hub_analysis.md), and they all argue
+for reading a single well-separated hit rather than a ranking.
+
+The class activity test also ran — the binomial, because this dataset uploads
+six ratio columns and a relevant-features list rather than per-sample columns
+and a design. At BRITE level 2, **5 of 8 classes passed BH < 0.05** and **2
+classes had fewer than three members**, which is too few to test. Amino acids
+scored 23 of 30 measured compounds relevant, FDR 1.4e-23.
+
+That exponent needs a caveat in the same breath. The binomial's null is *no
+member of this class truly changed*, so a member reaches the relevant list only
+by type-I error at the α the list was built at — 0.05 here. Twenty-three of
+thirty against a 0.05 null is astronomically unlikely by construction, which
+means the number is a statement about **the relevant list you supplied**, and
+it inherits every property of the test that produced it. It is not independent
+corroboration. On a targeted 58-analyte panel where much of what was measured
+moved, that is the expected shape of the answer, not a discovery. The
+alternative competitive null and its own limitation are described on
+[Metabolite class activity](4_5_metabolite_class_activity_analysis.md).
+
+## One pathway, read properly
+
+Purine metabolism is one of the significant KEGG maps. Opening it puts all five
+layers on the same diagram.
+
+![Purine metabolism, painted](img/ui/step4-painted-pathway.png)
+
+*Purine metabolism with five omics over six time points. Each matched feature
+is one box, split into one cell per condition, blue below the reference and red
+above.*
+
+![The pathway information panel](img/ui/step4-pathway-information.png)
+
+*The per-omic table beside the map: matched features, how many were in the
+relevant list, and the p-value for each layer.*
+
+| Omic | Matched | Relevant | p |
+|---|---|---|---|
+| Gene expression | 82 | 36 | 5.9806e-4 |
+| DNase-seq | 115 | 32 | 0.009547 |
+| miRNA-seq | 64 | 48 | 0.311240 |
+| Proteomics | 30 | 1 | 0.834521 |
+| Metabolomics | 4 | 2 | 0.924924 |
+
+This is the table the whole page has been building towards, because four of its
+five rows teach something different.
+
+**Gene expression and DNase-seq carry the pathway.** They are the two smallest
+p-values, they are computed on overlapping gene sets, and they agree: the
+transcript response and the accessibility signal near the same genes both
+concentrate in this map. That agreement is the strongest single thing this run
+says about Purine metabolism, and it is exactly the claim the region-to-gene
+step was set up to allow. It remains conditional on the assignment: these are
+regions *near* those genes.
+
+**miRNA-seq matched 64 with 48 relevant, and still returned p = 0.311.** A high
+relevant count is not evidence. The test is hypergeometric — it asks whether 48
+of 64 is more than you would expect when a large share of the whole matched
+miRNA background is already flagged relevant, and here it is not. Never read a
+relevant count without its p-value, and never read a p-value without its
+matched count.
+
+**Proteomics matched 30 features and flagged 1.** With k = 1 the test has
+essentially nothing to work with, and p = 0.83 records that. Protein-level
+change is slower and shallower than transcript change; the honest reading is
+that this run does not resolve a protein response in this pathway, not that
+there is none.
+
+**Metabolomics returned p = 0.92 on 4 matched compounds.** This is the number to
+be blunt about. Purine metabolism contains dozens of compounds; four of them
+were measured at all, because the panel has 58 analytes. Two of those four were
+relevant. A p-value computed on n = 4 has almost no resolution, and the test is
+right-tailed, so a pathway whose compounds are conspicuously *unchanged* can
+never produce a small p-value either. **p = 0.92 records the absence of a
+measurement, not the absence of an effect.** Reporting "metabolomics does not
+support purine involvement" from this cell would be wrong.
+
+The combined p-value in the enrichment table pools all five of these columns.
+It is useful for ranking 1,007 pathways down to something readable; it is not a
+substitute for this table. Read the per-omic columns of any pathway you intend
+to make a claim about — the combination cannot tell you that two of its five
+inputs were carried by four compounds and one flagged protein.
+
+Clicking any painted box opens the feature across every omic that measured it,
+which is where a per-gene version of the same cross-layer check lives; see
+[Feature details](5_2_detailed_views.md) and
+[The pathway view](5_1_browsing_pathways.md).
+
+## What the AI made of the whole result
+
+Asked to interpret the job, the agent produced **"Synthesis Report:
+Ikaros-Driven B-Lineage Differentiation"**. It grouped the 114 significant
+pathways into 23 clusters, 18 of which have nodes in the KEGG network, and
+supported its statements with citations whose quoted text was checked verbatim
+against the sources.
+
+![The interpretation report](img/ui/ai-report-full.png)
+
+*The report opens with Key Findings, each tying a named observation to the
+values behind it, then Cross-Pathway Themes referring to the clusters by the
+identifiers it gave them.*
+
+![The network coloured by AI pathway clusters](img/ui/step3-network-ai-clusters.png)
+
+*Once an interpretation exists, **AI pathway clusters** appears as a node
+colouring on the pathway network. Node-colouring changes take effect when
+**Apply** is pressed.*
+
+That recolouring is the most useful part of the interpretation for this
+analysis, because it answers the question the raw network raised: it puts a
+name on each connected neighbourhood and shows which of the 23 themes actually
+have pathways in the network. Grey nodes belong to no cluster.
+
+The report is a draft written by a language model, and it should be read the
+way you would read a capable colleague's first pass: the evidence table it
+builds is checkable against the enrichment table, its citations are checkable
+against the papers, and both are worth checking.
+[The pathway interpretation](ai-interpretation.md) sets out what it does, what
+it is given, and what it cannot do.
+
+## What this run shows, and what it does not
+
+**It shows** that the chromatin and transcript layers respond coherently and
+land on the same pathways, that the response is a small number of connected
+neighbourhoods rather than 114 findings, and that one metabolite — D-Fructose —
+has a transcriptional response concentrated around it that survives correction
+across the whole table.
+
+**It does not show** anything about purine metabolites, about most of the
+proteome, or about which of the two lowest p-values in Purine metabolism is
+causally upstream of the other. It does not show that a miRNA layer with 48
+relevant features in a pathway is contributing to that pathway's significance.
+And a p-value of 0.92 in this run is, in three of the five layers, a statement
+about coverage.
+
+!!! warning "One example is one example"
+    These totals came from one job on one server. Pathway counts depend on the
+    KEGG snapshot a host carries, so the same dataset yields different totals
+    on a different installation, and the significant counts also move with the
+    threshold and combination method set on the enrichment table. Use the
+    shapes and the reasoning here; re-measure the numbers on your own run.
+
+## Where to go next
+
+* Run it yourself: the dataset and everything else in the catalogue are on
+  [The example datasets](examples.md).
+* The mechanics, screen by screen: [Your first analysis](8_step_by_step.md).
+* Why the DNase layer looks the way it does:
+  [Preparing your data](2_1_accepted_input.md#matching-regions-to-genes-rgmatch).
+* What each p-value on this page is:
+  [Pathway enrichment](4_1_pathway_enrichment.md).
+* Grouping 114 pathways into something readable:
+  [The pathway network](4_3_pathways_network.md) and
+  [Pathway classification](4_2_kegg_categories.md).

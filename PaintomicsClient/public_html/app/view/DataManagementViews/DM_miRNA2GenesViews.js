@@ -104,7 +104,7 @@ function DM_miRNA2GenesJobView() {
 						'       <h4>Match miRNAs to their target protein-coding genes</h4> ' +
 						'       <p>This tool processes your input miRNA quantification data and assigns the expression values to the known list of target genes for each miRNA. The tool includes many options to customize the resulting gene list. See below for more information.</p>' +
 						'       <p><b>More info:</b></p>'+
-						'       <ul><li><a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/#matching-mirnas-to-genes-rgmatch" target="_blank">Matching miRNAs to Genes (PaintOmics 3 Documentation)</a></li>' +
+						'       <ul><li><a href="https://conesalab.github.io/PaintOmics/2_1_accepted_input/#matching-mirnas-to-genes-rgmatch" target="_blank">Matching miRNAs to genes</a></li>' +
 						'   </div>' +
 						'</div>' +
 						'<div class="contentbox">' +

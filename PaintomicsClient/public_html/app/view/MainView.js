@@ -274,11 +274,14 @@ function MainView() {
 				" <ul class='submenu navPanel'><li class='navPanel-inner'>" +
 				"  <div class='navPanel-col'><h2 class='navPanel-title'>Resources</h2><ul class='navPanel-list'>" +
 				"     <li class='menuOption externalOption'><a href='https://www.youtube.com/channel/UCSoQ3LSli9ZxOQTX56_WJeA' target='_blank' rel='noopener'><i class=\"fa fa-youtube-play\"></i>Tutorial video</a></li>" +
-				/* https and .io, the same spelling the rest of the app uses. The
-				   old readthedocs.org address still redirects, but it was the
-				   only one of the app's five documentation links written that
-				   way, and it sent a plain-http request first. */
-				"     <li class='menuOption externalOption'><a href='https://paintomics.readthedocs.io/en/latest/' target='_blank' rel='noopener'><i class='fa fa-book'></i>Documentation</a></li>" +
+				/* The published site, not paintomics.readthedocs.io. That Read the
+				   Docs project last built in July 2022 -- it has no webhook and
+				   still points at the pre-rename repository -- so every one of the
+				   app's five documentation links was sending users to a four-year-old
+				   copy of the guide, on which the pages for both AI features 404.
+				   The guide is now published from this repository by
+				   .github/workflows/docs.yml on every push to master. */
+				"     <li class='menuOption externalOption'><a href='https://conesalab.github.io/PaintOmics/' target='_blank' rel='noopener'><i class='fa fa-book'></i>Documentation</a></li>" +
 				// The "PaintOmics 3" entry pointed at http://188.166.42.44/, a bare IP
 				// that no longer answers at all (connection failure, not an error
 				// page). Removed rather than repointed: there is no live PaintOmics 3

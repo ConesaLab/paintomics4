@@ -1,184 +1,183 @@
-# AI input converter — how it handles real files
+# Converting your input files
 
-The converter turns any file that *contains* omics measurements into the exact
-format PaintOmics accepts, keeping every measurement and dropping only what
-PaintOmics cannot use. It is the drawer that opens from the **Convert it for
-me** button on a file that fails the format check.
+PaintOmics wants a plain matrix: one row per feature, one column per condition,
+identifiers in the first column. Almost nothing you have on disk is already
+that. The AI input converter turns what you have — a DESeq2 results table, a
+MaxQuant output, a MetaboLights MAF, a workbook with one sheet per tissue —
+into what PaintOmics needs, in your browser, and shows you exactly what it did
+before you accept it.
 
-This note answers the three questions raised in review, each with the design
-that ships and where it is exercised.
+!!! warning "This feature ships switched off"
+    `AI_INPUT_CONVERTER` defaults to **off**, because the converter spends the
+    same gateway quota as the [pathway
+    interpretation](ai-interpretation.md). The buttons appear regardless: the
+    conversion sheet will open, start its sandbox and profile your file, and
+    only then say *"AI file conversion is not enabled on this server."* If you
+    see that, the server needs the setting turned on — nothing is wrong with
+    your file.
 
-## 1. A workbook with several sheets, each an expression table
+## Before the converter: the format check
 
-**Every measurement sheet becomes its own values file; nothing is merged and
-nothing is dropped.**
+Every omic card checks each file the moment you pick it, without any AI and
+without sending anything anywhere. It reads the file in the browser and reports
+one of three things:
 
-The profiler describes every sheet — name, columns, row counts, a few example
-rows — and the agent converts each measurement table separately, names it after
-its sheet, and lists the sheets it did *not* convert (methodology, legends,
-free text) under `skipped` with a reason. If one sheet is only the union of the
-others (a "global"/"all" sheet carrying a Region column), the per-group sheets
-are the information and the union is skipped.
+* **A green tick** with a one-line summary — the row count, the number of value
+  columns, a few example identifiers, and a note if identifiers repeat.
+* **An amber line** naming a mechanical fault it can repair itself, for example
+  *"Numbers use commas as the decimal mark; PaintOmics needs dots."* The
+  **Fix automatically** button beside it is a direct find-and-replace, not an
+  AI conversion, and the interface says so. It carries no AI mark on purpose.
+* **A red line** naming a fault it cannot repair — and, there, the offer to
+  convert.
 
-The review panel then shows one card per table, each with a preview, the columns
-it kept, and the columns it left out. The user picks which table fills this omic
-box, and can tick **"also add the other N as separate omics"** to load the rest
-into sibling omic boxes named after their source — so a four-region workbook
-becomes four omics in one step. Any table can also be downloaded.
+Each slot is judged against its own contract, so a relevant-features list, an
+associations file, an experimental design and a values matrix are each checked
+for what they are meant to be.
 
-*Measured:* the four-region SCI workbook (`Caudal SCI_bPAC_FINAL.xlsx`) →
-Dorsal / Medial / Ventral GM / MN spots, four values files, each with its own
-significant-gene list; the Plasmodium TPM workbook → nine tables across IT4 and
-3D7 var/rif genes, TPM and reads kept as separate families.
+## Where the offer appears
 
-## 2. p-values and other non-expression columns
+There are four ways into the converter, because there are four ways to find out
+a file is wrong:
 
-**Statistics never go into the values matrix; a significance column becomes the
-relevant-features list instead.**
+1. **On a file the checker rejected** — **Convert it for me** on the red strip.
+2. **On any spreadsheet.** `.xlsx`, `.xlsm`, `.xls` and `.ods` always go to the
+   converter rather than being parsed in place.
+3. **When you press Run PaintOmics** with a file that has already been
+   rejected. The job is not submitted; a banner explains that submitting would
+   only produce the same error more slowly, and offers **Fix them and run** if
+   every fault is mechanical, or **Convert with the PaintOmics AI agent** if
+   not. **Submit anyway** is always there if you disagree.
+4. **On a server error dialog.** Some bad files never reach the browser check —
+   a file taken from server storage, or a MORE failure that names an omic
+   rather than a file. Those dialogs grow an **Ask the PaintOmics AI agent**
+   button, which carries the server's own message into the conversion.
 
-PaintOmics paints measurements — expression, abundance, fold change — on pathway
-maps. It cannot use `pvalue`, `padj`, `FDR`, `t`, `baseMean`, peptide counts,
-coverage, priority scores, or annotation (symbol, description, biotype,
-coordinates). The prompt carries an explicit taxonomy of MEASUREMENTS vs
-STATISTICS vs ANNOTATION, and the agent keeps only the measurements. The
-dropped columns are shown to the user as struck-through **Left out** chips, so
-the decision is visible, not hidden.
+Pressing one of those buttons *is* the consent. Nothing about the file leaves
+your browser before you do.
 
-The statistics are not thrown away, though: a DESeq2/edgeR/limma table's
-`padj`/`FDR` column becomes a **relevant-features list** (identifiers below the
-significance threshold), linked to the values file and attached automatically to
-the omic's "relevant features" slot. A file that carries *only* statistics and
-no measurement at all (a list of significant genes per cell type) produces
-relevant lists and says in its summary that it holds no expression values —
-building a matrix out of q-values is treated as an error.
+## What actually leaves your computer
 
-*Measured:* `GSE297370_edgeR_DEGs_all_Samples.csv` → counts / TPM / log2TPM
-matrices **plus** an `FDR < 0.05` relevant list, with `logFC`, `logCPM`,
-`PValue` dropped from the matrices.
+Not your data. The converter sends a **profile** of the file — its shape — and
+the model writes a script against that profile; the script runs in your
+browser, on your file.
 
-## The conversion sheet — what the user watches
+The sheet shows you the profile it is about to send: the container (a workbook
+with *N* sheets, or delimited text with its separator and encoding), every
+sheet with its row and column counts, every column tagged as an identifier
+candidate, a number or text, the column families it detected, the handful of
+example rows it will include, the size of the payload in characters, and the
+name of the gateway it goes to. It is one card at the top of the sheet, so
+"only the structure leaves your computer" is something you can check rather
+than something you have to believe.
 
-The sheet that opens from **Convert it for me** is laid out as a notebook of
-the run rather than a spinner, so that every claim the feature makes is
-checkable on screen:
+## The sandbox
 
-- **Stage rail** — Read → Plan → Run → Check → Apply → Review, lit as the
-  agent's own state machine reaches each stage. A retry visibly drops back to
-  Plan; a failure marks the stage it failed in. The attempt count and the clock
-  sit beside it.
-- **What the agent sees** — the profile exactly as the model receives it: the
-  container (workbook / delimited text), every sheet with rows × columns, each
-  column as a chip kind-coded *identifier candidate / numeric / text*, repeated
-  identifiers flagged on the chip, column families, the example rows behind a
-  disclosure, the payload size in characters and the gateway it is sent to
-  (from `/ai_provider`). This is what makes "only the structure leaves your
-  computer" a statement the user can verify rather than trust.
-- **Timeline** — every step with the seconds it cost (the model turns are the
-  visible cost), attempt badges, the generated script and its printed output
-  one click away at the step that ran them (with Copy), the validator's verdict
-  quoted one failure per line, and the agent's questions as answer cards.
-- **Result tickets** — one per table: preview, kept / left-out columns, the
-  attached relevant list, a download; the chosen one wears the destination
-  omic's hue bar.
-- **Dock** — the composer (two lines tall, grows as you type; Enter sends) to
-  steer or answer in your own words, then the decision row.
+The Python the model writes never runs on the server. It runs in a Pyodide
+interpreter inside a sandboxed frame with no same-origin access: no cookies, no
+storage, no access to the PaintOmics page, and **no network**. It is loaded from
+the server's own files rather than from a CDN, carries pandas, numpy and
+openpyxl, and a fresh interpreter is created for each conversion and destroyed
+with the sheet.
 
-On **Use this table** the omic card's strip records the provenance —
-*Converted by PaintOmics AI from `<file>` (table "…", relevant-features list
-attached)* — with a **Convert again** link that reopens the sheet on the
-original upload.
+## Following what it does
 
-Section 3 of the upload form states the offer before any file is picked, as a
-plain row on the same two columns as the Section 2 panel: a bold lead ("Bring
-your files as they are.") and one sentence on the left, a "Works with" column
-of format pills on the right. There is deliberately no checkbox: pressing
-**Convert it for me** on a file is the consent, nothing leaves the browser
-before that, and a second box under the interpretation's consent box read as
-the same decision asked twice. The page keeps one right column — the
-experiment-design field, the "Works with" pills and the Help panel all start
-on the same x. A standing one-line note in every omic card and a sentence in
-the Help panel complete it. The actor is named the same way on every surface:
-*the PaintOmics AI agent*. The job's name is taken from the experiment
-design's first line; there is no separate description field.
+The sheet has six stages across the top — **Read, Plan, Run, Check, Apply,
+Review** — lit from the agent's own state, so a retry visibly drops back to
+*Plan* and a failure marks the stage that failed. Beneath them, a timeline
+records every step with the seconds it cost.
 
-## 3. Letting the user steer with a prompt, and review the result
+Two things in that timeline matter more than the rest:
 
-**Yes — the drawer is a conversation, not a one-shot.**
+**The script.** At the step that ran it, the generated Python is one click away,
+with a Copy button and the output it printed. If you are going to put a
+converted file in a paper, this is the record of how it was made.
 
-Every conversion ends in a review the user reads before anything is loaded: the
-summary, one card per table with a data preview and kept/left-out columns, the
-attached relevant lists, and the sheets that were skipped. Below it is a
-composer. The user types an instruction in their own words —
+**The validator's verdict.** The converted files are checked by the same
+validator your own upload would face, and when it refuses them its report is
+quoted one failure per line rather than summarised. The model does not grade
+its own work.
 
-> "keep the flagged genes", "use the reads sheet, not TPM", "column A is a KEGG
-> ID", "these duplicates are separate isoforms, keep them"
+## When it asks you something
 
-— and the agent **revises the accepted script** rather than starting over,
-re-runs it, and re-checks it. The same composer answers a question in the user's
-own words when none of the offered options fit. The instruction is shown in the
-transcript as a step, so the history of what was asked and changed is visible.
+Some decisions cannot be made from the file. Duplicate identifiers with nothing
+in the file to explain them, transcript-level values that might or might not
+want summing to genes, rows the original authors flagged as false positives —
+in those cases the agent stops and asks, as a card with up to five one-click
+answers (its own recommendation first) and the option to answer in your own
+words. Your answer is written into the timeline as *"You chose: …"*.
 
-Some decisions the agent raises itself, because only the user can make them:
-whether rows the authors flagged as false positives belong in the analysis;
-whether a transcript table stays transcript-level or is summed to genes; and —
-deterministically, before any code runs — how to handle duplicate identifiers
-that nothing in the file explains (average, keep first, or keep as-is), since
-leaving them double-counts features and collapsing them discards a measurement.
+Duplicate identifiers in particular are enforced, not negotiated: the validator
+refuses a values matrix with silent duplicates and tells the agent to ask.
 
-*Measured:* converting the SCI workbook, then typing "keep the flagged rows
-too" in the composer, re-ran the conversion and lifted Dorsal GM from 139 to
-147 rows with the note "All genes included, including those flagged as false
-positives, per user request."
+## Steering it
 
-## Everything the file held, nothing it did not — how that is verified
+The box at the foot of the sheet takes plain instructions — *"use the reads
+sheet, not TPM"*, *"keep the flagged genes"*, *"column A is a KEGG ID"*. The
+agent revises the script it already has, re-runs it and re-checks it, rather
+than starting over, and your instruction is recorded in the timeline. The same
+box answers an open question in free text.
 
-Two test corpora pin both halves of "correct":
+## The review
 
-- **Synthetic** (`run_conversion_corpus.js`, 16 cases): each broken file is a
-  *corrupted copy of a shipped example*, so the untouched original is ground
-  truth for the information, not just the format. This is the deterministic CI
-  gate.
-- **Real-world** (`run_realworld_corpus.js`, 38 files): GEO supplements, PRIDE
-  proteomics exports, MetaboLights MAFs, a collaborator's workbook, graded
-  against an expert answer key that records which sheets, columns and rows a
-  correct conversion must contain. See `README-realworld-corpus.md`.
+A successful conversion does not hand back "a file". It shows one card per
+table it produced, each with a preview, the columns it kept, the columns it
+left out struck through, the relevant-features list that goes with it, and a
+download button. The table the agent recommends is badged **Recommended**.
+Lists, designs and association files appear under **Also produced**, and the
+sheets it did *not* convert — methodology, legends, a "global" sheet that was
+only the union of the others — are listed with a reason for each.
 
-The acceptance gate is always PaintOmics' own validator — the agent never grades
-its own work — extended to reject a values matrix that silently repeats an
-identifier or leaves an identifier cell empty.
+Then you choose. The button is labelled for what it will do: **Use this file**,
+**Use this table**, or **Use this table + add N more**. Ticking *"Also add the
+other N tables as separate omics, named after their source"* turns a
+four-region workbook into four omic panels in one step. If the agent produced a
+matching relevant-features list, it goes into that card's relevant-features
+slot automatically.
 
-## When the AI service does not answer
+## After you accept
 
-The gateway behind the converter is shared and can stall: on 2026-08-21 it
-accepted connections for about an hour without returning a byte. What the user
-sees then is decided here, not by the gateway:
+The omic card's strip turns green and records where the file came from:
 
-- **Every turn is bounded.** `agent_turn.next_action` streams the completion
-  (the only call shape this gateway finishes for long answers) under a wall
-  clock of `AI_CONVERT_TURN_SECONDS` (150 s, retries included) with a per-read
-  timeout of `AI_CONVERT_READ_TIMEOUT` (60 s). The browser polls a ticket for
-  about four minutes, so the server always gives up first, with a reason.
-- **A gateway failure is not a model failure.** The turn raises
-  `GatewayUnavailable`, the ticket fails with that message, and the sheet shows
-  it ("The AI service did not answer within 150 seconds. It may be busy or
-  down; please try again in a few minutes."). A `null` action — the model
-  answered but not with an action — is still retried, because that one can
-  succeed on the next try.
-- **A short cooldown.** For 90 s after such a failure, new turns are refused at
-  once with the recorded reason instead of each spending the budget to learn
-  the same thing. The first turn that succeeds clears it.
-- **Slots are returned.** The two concurrency slots are released by the worker
-  that ran the turn, and an error before a slot was taken never releases one
-  that another conversion holds.
+> Converted by the PaintOmics AI agent from *&lt;your file&gt;* (table "…",
+> relevant-features list attached)
 
-`src/tests/test_input_convert_gateway_timeout.py` pins all four.
+with a **Convert again** link that reopens the sheet on your *original* upload.
+A converted file otherwise looks exactly like one you made yourself, so this
+line is what a reader of your methods has to go on. It is worth keeping.
 
-## Privacy and isolation (unchanged)
+## When your omics disagree with each other
 
-The generated Python runs in an opaque-origin Pyodide sandbox
-(`sandbox="allow-scripts"`, no `allow-same-origin`): no cookies, no
-localStorage, no parent DOM, no network. Only the file's **structure** — column
-names, dtypes, counts, a few example rows — is sent to the LLM gateway; the
-measurements never leave the machine, and the server refuses any request that
-carries raw data. The feature is gated behind `AI_INPUT_CONVERTER` and is inert
-where the flag is unset.
+PaintOmics paints every omic on one set of conditions, so a one-column fold
+change beside a fourteen-column sample table is refused by the server even
+though each file is individually fine. The browser now notices this before you
+submit: each affected card gains a note — *"6 conditions here, 14 conditions in
+Proteomics"* — and one job-level action appears, **Make them agree with the
+PaintOmics AI agent**.
+
+That hands every values file to the agent together. It derives the narrower
+quantities from the wider omics' own columns and never widens the narrow one,
+and the review says, per omic, whether it was *Rewritten* or left *Unchanged*.
+
+## Limits you may meet
+
+Beyond the feature being switched off, these are the refusals you may meet.
+The first four are the server's own wording; the last is the browser giving up
+on a conversion the server no longer holds.
+
+| Message | What it means |
+|---|---|
+| "Daily conversion limit reached for this account." | 120 conversation turns per user per day. |
+| "The server is converting other files right now. Please try again in a moment." | Only two conversions run site-wide at a time. |
+| A cooldown quoting the last gateway failure | The gateway failed recently; conversions pause for 90 seconds. |
+| "The AI service did not answer within 150 seconds…" | A single request timed out. Try again. |
+| "The server lost track of this conversion (it may have restarted)." | Start it again. |
+
+## What it will not do
+
+It will not invent measurements, and it will not quietly drop rows: anything it
+leaves out is listed in the review as left out, with a reason. It cannot rescue
+a file that does not contain the numbers PaintOmics needs — if there is no
+per-condition quantification in it, no conversion will produce one. And the
+result is still yours to check: read the preview, read the columns it dropped,
+and read the script if the answer matters.
