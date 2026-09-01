@@ -426,7 +426,7 @@ the gene-level output is filed in your personal storage for reuse in a later job
 
 * **From Regions to Genes** runs RGmatch, matching genomic regions
   (ChIP-seq, DNase-seq, ATAC-seq, methylation) to the closest gene and reporting
-  the area of the gene the region overlaps. It needs a sorted GTF annotation with
+  the area of the gene the region overlaps. It needs a GTF annotation, in any order, with
   exon-level rows, a BED-style region file with quantification values, and
   optionally a list of relevant regions. The **Annotations file (GTF)** row has a **Use a GTF from
   Paintomics** button that lists the annotations the installation already ships,

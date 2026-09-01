@@ -58,26 +58,41 @@ your browser before you do.
 
 ## What actually leaves your computer
 
-Not your data. The converter sends a **profile** of the file — its shape — and
-the model writes a script against that profile; the script runs in your
-browser, on your file.
+Not the whole file — a **profile** of it. The model writes a script against
+that profile, and the script runs in your browser, on your file. But be clear
+about what the profile contains, because it is not only structure:
 
-The sheet shows you the profile it is about to send: the container (a workbook
-with *N* sheets, or delimited text with its separator and encoding), every
-sheet with its row and column counts, every column tagged as an identifier
-candidate, a number or text, the column families it detected, the handful of
-example rows it will include, the size of the payload in characters, and the
-name of the gateway it goes to. It is one card at the top of the sheet, so
-"only the structure leaves your computer" is something you can check rather
-than something you have to believe.
+* the container — a workbook with *N* sheets, or delimited text with its
+  separator and encoding;
+* every sheet's row and column counts;
+* every column's name and its type as detected (identifier candidate, number,
+  text), with repeated-identifier counts;
+* for a **numeric** column, its **minimum, maximum and mean**;
+* for a **text** column, **up to five of its distinct values**;
+* the column families it grouped, with a few example members;
+* **the first eight rows of the table, verbatim** — cells truncated to 30
+  characters, but real values;
+* for a plain-text file, the **first ten lines** as read, truncated to 220
+  characters each;
+* the payload size in characters, and the name of the gateway it goes to.
+
+So real measurements do leave your computer: several rows of them, a handful of
+example values per column, and summary statistics over every numeric column.
+What does not leave is the bulk of the file — the remaining rows, which is what
+the script is written to transform locally.
+
+The sheet shows you that profile before it is sent, as one card at the top,
+with the example rows behind a disclosure. That is the point of the card: what
+goes to the model is something you can read first rather than take on trust.
 
 ## The sandbox
 
 The Python the model writes never runs on the server. It runs in a Pyodide
-interpreter inside a sandboxed frame with no same-origin access: no cookies, no
-storage, no access to the PaintOmics page, and **no network**. It is loaded from
-the server's own files rather than from a CDN, carries pandas, numpy and
-openpyxl, and a fresh interpreter is created for each conversion and destroyed
+interpreter inside a frame carrying `sandbox="allow-scripts"` — an opaque
+origin, so no cookies, no storage, and no access to the PaintOmics page or to
+anything you are signed in to. It is loaded from the server's own files rather
+than from a CDN, carries pandas, numpy and openpyxl, and a fresh interpreter is
+created for each conversion and destroyed
 with the sheet.
 
 ## Following what it does

@@ -62,7 +62,7 @@ That is not yet a statement about any gene, and pathways contain no intervals.
 PaintOmics closes the gap with **RGmatch**, which associates each region with
 every gene within a search distance — one row per region–gene pair — and
 records *which area* of the gene the region falls in: upstream, promoter, TSS,
-first exon, first intron, gene body, downstream. You then choose the areas that
+first exon, intron, gene body, downstream. You then choose the areas that
 carry your hypothesis. For an accessibility change you expect to act on
 transcription initiation, promoter and TSS are the areas that matter, and a
 region sitting in the gene body of a neighbouring gene is noise. Where several
@@ -152,9 +152,11 @@ breakdown.*
 | **Total** | **1,007** | **114** |
 
 "Found" means the pathway contains at least one feature you uploaded and
-PaintOmics matched. "Significant" applies the threshold and the p-value
-combination method currently set on the enrichment table, so both counters move
-when you change those — see [Pathway enrichment](4_1_pathway_enrichment.md).
+PaintOmics matched. "Significant" means a p-value of 0.05 or less — a fixed
+threshold, not one you set. On a job like this one, spanning three databases,
+that is the combined p-value under the method chosen in **Show combined
+p-values**, so the significant count moves when you change the method — see
+[Pathway enrichment](4_1_pathway_enrichment.md).
 
 Do not read the three rows as a league table. Reactome finds the most pathways
 and returns the fewest significant ones because it decomposes biology into many
@@ -339,7 +341,7 @@ about coverage.
     These totals came from one job on one server. Pathway counts depend on the
     KEGG snapshot a host carries, so the same dataset yields different totals
     on a different installation, and the significant counts also move with the
-    threshold and combination method set on the enrichment table. Use the
+    p-value combination method chosen on the enrichment table. Use the
     shapes and the reasoning here; re-measure the numbers on your own run.
 
 ## Where to go next

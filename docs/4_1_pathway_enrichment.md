@@ -247,7 +247,7 @@ database at once.
 | One column per omic | That omic's p-value (its **Global** value where the job has per-condition relevance). Expandable to per-condition sub-columns. |
 | *omic* **(FDR BH)** / **(FDR BY)** | The adjusted value for that omic, shown when **Show FDR** is set. |
 | **Combined pValue (Fisher)** or **(Stouffer)** | The selected combination across your omics. Present on one-omic jobs as well, where it repeats that omic's p-value. |
-| **Combined pValue (…) [FDR …]** | The adjusted combined value. The method is in round brackets, the correction in square brackets. |
+| **Combined pValue (…) [FDR …]** | The adjusted combined value. The method is in round brackets, the correction in square brackets. On a **multi-condition** job this is not the correction of the raw column beside it: the raw column shows the combination of each omic's *Global* p-value, while the adjusted column corrects the per-condition combined values. Compare it with the per-condition sub-columns, not with the raw combined figure. |
 | **Reactome Class pValue (…)** | Only on jobs including Reactome — see below. |
 | **External links** | Two actions: open this pathway in its own source database, and search PubMed for its name. OmniPath is the exception — its pathway ids are minted by the PaintOmics installer, so the link opens that pathway's source resource instead. |
 

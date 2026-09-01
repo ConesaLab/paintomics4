@@ -62,9 +62,11 @@ theme:
     # The site follows the reader's system theme, with an explicit toggle each
     # way. Both palettes take their accent from the application's own teal.
     - media: "(prefers-color-scheme)"
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-auto
-        name: Follow my system theme
+        name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: custom
@@ -78,7 +80,7 @@ theme:
       accent: custom
       toggle:
         icon: material/brightness-4
-        name: Switch to light mode
+        name: Switch to system preference
   icon:
     repo: fontawesome/brands/github
 
@@ -87,6 +89,11 @@ extra_css:
 
 markdown_extensions:
   - admonition
+  # Without betterem, python-markdown parses `**bold**` nested inside
+  # `*italic*` as a second <em> rather than a <strong>, so every figure
+  # caption that names a UI control in bold silently lost it. The
+  # captions are written that way throughout, so this is load-bearing.
+  - pymdownx.betterem
   - attr_list
   - md_in_html
   - tables
@@ -110,11 +117,16 @@ markdown_extensions:
 #     first line that it is not for users;
 #   - the two engineering directories hold dated implementation plans and
 #     design specs;
+#   - diagrams/ is 5.9 MB of editable .drawio sources and PDFs of the AI agent's
+#     architecture, referenced by no published page. mkdocs copies every
+#     non-markdown file under docs/ verbatim, so without this line all of it
+#     shipped to the public site;
 #   - ai-agent-benchmark.md and ai-agent-tooling-notes.md are running
 #     measurement records for an internal comparison of the two AI arms.
 exclude_docs: |
    mkdocs-pins.txt
    dev/
+   diagrams/
    superpowers/
    frontend-modernization/
    ai-agent-benchmark.md

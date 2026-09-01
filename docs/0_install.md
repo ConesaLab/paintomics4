@@ -374,7 +374,7 @@ panel's headings also still read "PaintOmics 3".
 
 ## After the install
 
-* **Fetch the example GTF.** `Supporting tools ▸ From Regions to Genes ▸ Load
+* **Fetch the example GTF.** `Tools ▸ From Regions to Genes ▸ Load
   example` reads `examplefiles/GTF/sorted_mmu.gtf`, which the repository does
   not ship — only a placeholder. Without it the tool fails immediately with
   "Reference file not found." Run `deploy/fetch-example-gtf.sh`; it downloads

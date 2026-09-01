@@ -105,8 +105,12 @@ feature off entirely with `AI_INTERPRETATION_ENABLED=false`.
 Two supporting tools convert data into a usable input format: **Regions to
 Genes** (RGmatch, for region-based assays) and **miRNA to Genes**. A file that
 is not in PaintOmics' format at all can be handed to the
-[AI input converter](https://conesalab.github.io/PaintOmics/ai-input-converter/),
-which rewrites it in your browser and shows you the script it used.
+[AI input converter](https://conesalab.github.io/PaintOmics/ai-input-converter/):
+it sends a profile of the file — column names and types, row counts, and the
+first eight rows verbatim — to the model, runs the script the model writes in a
+sandbox in your browser, and shows you both the script and the validator's
+verdict before you accept the result. It ships switched off; enable it with
+`AI_INPUT_CONVERTER=true`.
 
 ## Deploy your own instance
 

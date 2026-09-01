@@ -34,6 +34,8 @@ tool work.*
   relevant-features file look like, for each kind of omic.
 * **[The example datasets](examples.md)** — twelve ready-made jobs, from a
   single gene-expression contrast to the full five-omic STATegra time course.
+* **[A worked example](6_1_use_case.md)** — one real five-omic run followed from
+  the files to a conclusion, and what that conclusion does not support.
 
 ## The three databases, and the fourth
 

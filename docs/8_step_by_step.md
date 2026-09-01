@@ -159,6 +159,27 @@ and differ in scope by design — Reactome covers fewer mouse genes than KEGG
 because it is a different kind of resource, not a worse one. What matters for
 your result is pathway coverage, which Step 3 reports.
 
+### If your columns look like replicates
+
+If the column headers of a values file look like replicates of the same
+sample — the same name with a trailing suffix — Step 2 adds a **Replicate
+detection** card for that omic and asks what you want done with them. The
+detector is deliberately conservative: it only offers the card when the
+pattern is unambiguous, so not seeing it is not a claim that your file has no
+replicates.
+
+| Choice | What happens |
+|---|---|
+| **Show all replicates** | Nothing is aggregated. Every column stays its own condition, which is what PaintOmics did before this existed. |
+| **Average replicates** | Use the grouping the server detected: each sample's replicates are averaged into one value per feature. |
+| **Upload design file** | Supply the grouping yourself, as a two-column tab-separated file mapping each column to a sample label. Use this whenever the detector's guess is not exactly your design. |
+
+Confirming rewrites the per-sample values for that omic, and the pathway view
+can then show samples rather than raw columns. It also gives the
+[metabolite class activity test](4_5_metabolite_class_activity_analysis.md) the
+replicates it needs to run its permutation test instead of the binomial one —
+which is the main reason to bother.
+
 ### The clustering setting
 
 ![Cluster configuration](img/ui/step2-clusters.png)
@@ -214,11 +235,13 @@ Click **Next step** when you are satisfied.
 down by database.*
 
 "Found" means the pathway contains at least one of your matched features.
-"Significant" means its p-value is 0.05 or less — the combined p-value under
-whichever method is chosen in **Show combined p-values** below, or the single
-omic's own p-value on a one-omic job. The threshold is fixed and the FDR
-setting does not enter it. Both counters follow the classification filter, so
-hiding a category moves them.
+"Significant" means its p-value is 0.05 or less. The threshold is fixed and the
+FDR setting does not enter it. Which p-value is read depends on how many
+*databases* the job used, not how many omics: with more than one it is the
+combined value under the method chosen in **Show combined p-values**; with one
+it is the first omic's own p-value, and the combination method does not move
+the count. Both counters follow the classification filter, so hiding a category
+moves them. See [Pathway enrichment](4_1_pathway_enrichment.md).
 
 ### Classification
 
@@ -307,6 +330,8 @@ settings and the export options; [Feature details](5_2_detailed_views.md) and
 
 ## What next
 
+* See the same analysis read end to end, with its real numbers and what they do
+  and do not support: [A worked example](6_1_use_case.md).
 * Ask the AI agent to read the whole result and draft an interpretation:
   [The pathway interpretation](ai-interpretation.md).
 * Model regulation explicitly, rather than layer by layer:

@@ -84,16 +84,3 @@
  * left-aligned and compact reads better than Material's default centring. */
 .md-typeset table:not([class]) th { text-align: left; }
 .md-typeset table:not([class]) td { vertical-align: top; }
-
-/* Keyboard-style marks for UI labels quoted in the prose. */
-.md-typeset kbd {
-  font-family: var(--md-text-font-family);
-  font-size: 0.72rem;
-  padding: 0.08em 0.42em;
-  border-radius: 5px;
-  background: var(--md-code-bg-color);
-  border: 1px solid rgba(24, 24, 27, 0.12);
-  box-shadow: none;
-  color: inherit;
-  white-space: nowrap;
-}

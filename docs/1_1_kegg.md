@@ -97,8 +97,8 @@ Step 2.
 
 Each KEGG pathway carries two classification levels taken from `br08901`: a top
 level — Metabolism, Genetic Information Processing, Environmental Information
-Processing, Cellular Processes, Organismal Systems, Human Diseases — and a
-second level beneath it. Step 3 draws that as the Category Distribution pie and
+Processing, Cellular Processes, Organismal Systems, Human Diseases, Drug
+Development — and a second level beneath it. Step 3 draws that as the Category Distribution pie and
 the **Filter by category** tree; only classes that have pathways for your
 organism appear. See [Pathway classification](4_2_kegg_categories.md).
 

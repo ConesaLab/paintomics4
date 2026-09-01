@@ -7,7 +7,7 @@ one can be switched off independently by whoever runs the server.
 | Feature | Where | What it does |
 |---|---|---|
 | **[Input conversion](ai-input-converter.md)** | Step 1, on a file you pick | Turns a file that is not in PaintOmics' format — a DESeq2 table, a MaxQuant output, a multi-sheet workbook — into one that is, in your browser, and shows you the script it used. |
-| **Compound disambiguation** | Step 2, **Choose for me** | Picks the most likely KEGG compound for each ambiguous metabolite name, using your organism and your experiment description. |
+| **[Compound disambiguation](8_step_by_step.md#compound-disambiguation)** | Step 2, **Choose for me** | Picks the most likely KEGG compound for each ambiguous metabolite name, using your organism and your experiment description. |
 | **[Pathway interpretation](ai-interpretation.md)** | Step 3, **AI Interpret** | Reads your results and the literature and writes a cited draft of what they mean. |
 
 ## The rules they all follow
@@ -16,13 +16,23 @@ one can be switched off independently by whoever runs the server.
 names the gateway the model runs on — by default `llm.iiia.es`, operated by
 IIIA-CSIC, the Artificial Intelligence Research Institute of the Spanish
 National Research Council, on hardware in Spain — and the **Where your data
-goes** link opens a full statement of what leaves the server. That statement is
-worth reading once. In short: pathway names, p-values, matched feature names,
-**the measured values with their condition labels** and your experiment
-description are sent to the model; pathway and feature names also reach NCBI
-PubMed and Europe PMC when the agent searches. Your uploaded files, as files,
-are not sent, and neither are unmatched features or anything about your
-account.
+goes** link opens a full statement of what leaves the server. Read it once, and
+read this alongside it, because on one point the interface is narrower than the
+code: pathway names, p-values, feature names and **the measured values with
+their condition labels** are sent to the model, together with your experiment
+description.
+
+That is not limited to the pathways being interpreted. The agent can ask for the
+values of any gene it can name **anywhere in your upload**, including genes in
+pathways that never reached significance — the tool exists precisely so it
+cannot write about a gene whose value it has not seen. What is never sent is
+your uploaded files as files, features that failed to map to any identifier, and
+anything about your account.
+
+Searches also reach NCBI PubMed and Europe PMC. The query is composed by the
+model, not assembled from a fixed template, and the prompt it composes from
+contains your experiment description — so treat that description as text that
+may reach a third-party search API, not only the gateway.
 
 **The model never grades its own work.** Every AI output is checked by
 something deterministic before you see it. A converted file must pass the same

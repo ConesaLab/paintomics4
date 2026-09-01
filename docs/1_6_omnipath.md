@@ -51,7 +51,7 @@ can move, zoom and interrogate, rather than a picture.
 
 * **The nodes are your data.** Each is the same painted glyph a KEGG map would
   place on its diagram — one box per matched gene, split into one coloured cell
-  per condition, on the same blue–white–red scale. A gene looks identical here
+  per condition, on the same Blue-Grey-Red scale. A gene looks identical here
   and on a KEGG map.
 * **The edges carry the sign**, which is the thing OmniPath knows and a diagram
   does not. A green arrow is stimulation, a red bar-headed edge is inhibition,

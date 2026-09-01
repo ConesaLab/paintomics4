@@ -1595,7 +1595,7 @@ function PA_Step1JobView() {
 					/* The closing "Check the User guide ... email ... GitHub page"
 					   line is gone. Its three links were the hero's three buttons
 					   again, to the same three URLs: the user guide is the
-					   Documentation button's readthedocs address, the address in
+					   Documentation button's address, the address in
 					   the mailto is the Contact button's, and the GitHub page is
 					   the GitHub button's repository. It restated the top of the
 					   page at the bottom of it and added nothing in between.
