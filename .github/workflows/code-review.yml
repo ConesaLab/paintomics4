@@ -72,7 +72,7 @@ jobs:
   review:
     name: Claude review
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
       pull-requests: write
@@ -106,9 +106,23 @@ jobs:
           # "Create a todo list before starting" (TodoWrite). Without Task the
           # command cannot execute step 1 and stops in 25 seconds.
           #
-          # Read/Grep/Glob are ours, for the code around a hunk. git rev-parse
-          # is for the full SHA the plugin requires in permalinks. Nothing here
-          # writes: the job holds `contents: read`.
+          # Read/Grep/Glob are ours, for the code around a hunk. The git
+          # reads are for the full SHA the plugin requires in permalinks and
+          # for the history a subagent reaches for. Nothing here writes: the
+          # job holds `contents: read`.
+          #
+          # NO --max-turns. 15 came from the upstream single-pass example and
+          # was carried over unexamined; 30 was a guess. Run 33545049328 with
+          # 30: error_max_turns at turn 31, $0.87, still zero comments -- the
+          # third silent failure in a row. The number was never derived from
+          # what the command does, and the command is a fan-out: a todo list,
+          # seven steps of subagent launches, one validation agent per candidate
+          # issue, then ONE TURN PER INLINE COMMENT POSTED. Its turn count
+          # therefore scales with how many problems it finds, so any fixed cap
+          # truncates exactly the reviews worth reading, and truncation is
+          # indistinguishable from a clean pass.
+          #
+          # timeout-minutes below is the real bound: wall clock, which is what
+          # the budget is actually about.
           claude_args: >-
-            --max-turns 30
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Task,TodoWrite,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(git rev-parse:*),Read,Grep,Glob"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Task,TodoWrite,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Read,Grep,Glob"
