@@ -88,4 +88,23 @@ jobs:
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
-          claude_args: '--max-turns 15 --allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          # --allowedTools is an EXCLUSIVE allowlist, not an addition to a
+          # default set. Naming only the comment tool left the reviewer able to
+          # WRITE a comment and unable to READ anything to comment about: run
+          # 33542418503 was a success, 11 turns, $1.16, permission_denials_count
+          # 24, zero comments. Every upstream code-review recipe in
+          # anthropics/claude-code-action docs/solutions.md pairs the MCP tool
+          # with the `gh pr` reads, which is why they are here.
+          #
+          # `gh pr diff` rather than `git diff`: checkout above is fetch-depth 1,
+          # so there is no merge base in the clone to diff against, and the API
+          # does not need one. Read/Grep/Glob are for the surrounding code the
+          # diff does not show -- a hunk is rarely enough to tell a real defect
+          # from a plausible-looking one.
+          #
+          # Nothing here can write to the repository: the job holds
+          # `contents: read`, so the whole allowlist is reads plus two comment
+          # verbs.
+          claude_args: >-
+            --max-turns 15
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Read,Grep,Glob"
