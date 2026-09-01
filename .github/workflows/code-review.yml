@@ -83,6 +83,21 @@ jobs:
         with:
           fetch-depth: 1
       - uses: anthropics/claude-code-action@v1
+        # The orchestrator MUST run its subagents in the foreground. Run
+        # 33546158945 -- tools right, no turn cap -- still ended "success" in
+        # 19 s, 5 turns, zero comments, and its model usage listed haiku and
+        # sonnet but no opus: the two opus bug agents never ran. Reproduced on
+        # a laptop with the same allowlist: the orchestrator launches the four
+        # review agents with run_in_background: true and ends its turn with
+        # "I'll wait for their completion notifications". Interactively that
+        # notification is a new turn; in a non-interactive `-p` session a
+        # turn that ends in text is the end of the session, so the runner
+        # reports success and the reviewers die with it. Locally the same
+        # session just hangs. This variable removes run_in_background from the
+        # Agent tool altogether, which is the only setting that makes the
+        # choice unavailable rather than merely discouraged.
+        env:
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
