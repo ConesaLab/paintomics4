@@ -465,16 +465,40 @@ def engineRefusal(method, engine):
     without this the request spawns Rscript on a host with no MORE and fails
     deep in the job with whatever that produces. Same move, and the same
     reasoning, as refusing an AI job up front when the server has no LLM token.
+
+    Naming no engine is not the same as naming one that cannot run
+    --------------------------------------------------------------
+    Only the second is a refusal. `auto` -- which is what a client predating
+    the picker, a resubmitted job and a scripted POST all send -- means "the
+    server decides", and `_resolveMOREBackend` does decide: it falls back to R,
+    deliberately and with a warning, when no more-rs binary is installed.
+    Refusing `auto` here contradicted that fallback, and contradicted
+    describeMOREBackends() too, whose `default` already names the first
+    AVAILABLE entry so the picker opens on something runnable -- the two are
+    meant to be one decision with no second opinion to drift.
+
+    The effect on a host with no binary was that every PLS1 submission naming
+    no engine was refused outright, with the R engine -- the reference
+    implementation -- sitting right there available. That is 17 failures and
+    one error in test_more_servlet_step1, which has been carried in
+    run_all.BASELINE rather than read as the report it was.
     """
     wanted = engineIdFor(method, engine)
     if wanted is None:
         return ("'%s' is not a regulatory model this server offers." % method)
 
     report = describeMOREBackends()
+    serverChose = str(engine or "").strip().lower() in ("", AUTO_ENGINE)
+
     for entry in report["engines"]:
         if entry["id"] != wanted:
             continue
         if entry["available"]:
+            return None
+        if serverChose and any(other["method"] == method and other["available"]
+                               for other in report["engines"]):
+            # Nobody asked for this engine; it is only where `auto` happens to
+            # point. Something else can run the method, so let it.
             return None
         alternatives = [e["label"] for e in report["engines"] if e["available"]]
         message = "%s is not available on this server. %s" % (
@@ -1068,7 +1092,14 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
         # engines that agree today can diverge, and a stored analysis that
         # cannot say which one produced it is not reproducible.
         jobInstance.backendUsed = backendName
-        jobInstance.engineId = engineIdFor(jobInstance.method, chosenEngine)
+        # From the backend that actually ran, not from what was asked for. Under
+        # `auto` on a host with no binary, _resolveMOREBackend falls back to R
+        # while engineIdFor(method, "auto") still answers "rust-pls1" -- so the
+        # job recorded backendUsed "R" and engineId "rust-pls1" at the same
+        # time, which is exactly the unreproducible state the stamp exists to
+        # prevent.
+        jobInstance.engineId = engineIdFor(
+            jobInstance.method, "rust" if backendName == "more-rs" else "r")
         cmd = backend + [
             "--target_file", os.path.join(input_dir, target_file),
             "--condition_file", os.path.join(input_dir, jobInstance.conditionsFile),

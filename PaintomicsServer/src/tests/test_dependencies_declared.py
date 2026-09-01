@@ -36,11 +36,90 @@ _REPO_ROOT = _SRC_ROOT.parent.parent
 # Packages resolved by the application's own sys.path manipulation rather than
 # by installation. AdminTools scripts insert their parent directory and then
 # import these as top-level modules.
+#
+# This set used to be the whole answer and it went stale: four first-party
+# modules imported exactly this way -- common_build_database (AdminTools
+# scripts, imported by test_build_warnings_handoff), run_suites (scripts/ci,
+# imported by test_shard_split_is_balanced) -- were reported as undeclared
+# dependencies, which is how this suite came to be carried in run_all.BASELINE
+# as "1 failure: an external import does not resolve". A hand-written list of
+# the repository's own module names has to be edited every time a file moves,
+# and nothing makes anyone edit it, so _firstPartyModules() below discovers
+# them instead. The set is kept only for the names that are packages reached by
+# path insert and so have no matching file of their own.
 _LOCAL_MODULES = {
     "src", "conf", "scripts", "common", "classes", "servlets", "resources",
     "paintomicsserver", "AdminTools", "tests", "bioscripts", "DAO",
     "JobInstances", "DBManager",
 }
+
+# Exception types that make a failed import survivable. A handler naming one of
+# these turns the import in the `try` body into an optional one.
+_IMPORT_SAFE = {"ImportError", "ModuleNotFoundError", "Exception", "BaseException"}
+
+
+def _firstPartyModules():
+    """Top-level names that resolve to a file or package in this repository.
+
+    Discovered, not listed, so that moving a file cannot silently turn it into
+    a phantom missing dependency.
+
+    The trade: a repository module whose name collides with a real third-party
+    package would hide that package from this check. Nothing in the tree
+    collides today, and the alternative -- the hand-maintained set above -- has
+    already failed in the other, noisier direction.
+    """
+    skip = {".git", "node_modules", "__pycache__", "dist", "docs", "runs", ".venv"}
+    names = set()
+    for path in _REPO_ROOT.rglob("*.py"):
+        if skip.intersection(path.parts):
+            continue
+        if path.name == "__init__.py":
+            names.add(path.parent.name)
+        else:
+            names.add(path.stem)
+    return names
+
+
+def _handlerCatchesImport(handler):
+    """Does this `except` clause swallow a failed import?"""
+    if handler.type is None:                       # bare `except:`
+        return True
+    types = (handler.type.elts if isinstance(handler.type, ast.Tuple)
+             else [handler.type])
+    for node in types:
+        name = (node.id if isinstance(node, ast.Name)
+                else node.attr if isinstance(node, ast.Attribute) else None)
+        if name in _IMPORT_SAFE:
+            return True
+    return False
+
+
+def _importNodes(node, guarded, out):
+    """Every import in the tree, paired with whether a `try` protects it.
+
+    An import inside a `try` whose handler catches ImportError cannot stop the
+    application booting -- which is the failure this suite exists to prevent --
+    so it is not a declared-dependency question. Two live examples: the rubric
+    scorer in benchmarks/ai_arm_bench.py, imported from a directory outside
+    this repository behind a handler that returns a reason instead of raising,
+    and wrap.freeze in test_pathway_clusters.py, behind a handler that calls
+    skipTest. Both are deliberately optional; both were reported as missing.
+    """
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        out.append((node, guarded))
+    if isinstance(node, ast.Try):
+        catches = any(_handlerCatchesImport(h) for h in node.handlers)
+        for stmt in node.body:
+            _importNodes(stmt, guarded or catches, out)
+        for handler in node.handlers:
+            for stmt in handler.body:
+                _importNodes(stmt, guarded, out)
+        for stmt in list(node.orelse) + list(node.finalbody):
+            _importNodes(stmt, guarded, out)
+        return
+    for child in ast.iter_child_nodes(node):
+        _importNodes(child, guarded, out)
 
 # Provided by the uWSGI runtime, not importable outside it.
 _RUNTIME_ONLY = {"uwsgi", "uwsgidecorators"}
@@ -60,7 +139,8 @@ def _check(name, fn):
 
 
 def _externalImports():
-    """{module: first source file} for every non-local top-level import."""
+    """{module: first source file} for every unguarded, non-local import."""
+    local = _LOCAL_MODULES | _firstPartyModules()
     found = {}
     for path in _SRC_ROOT.rglob("*.py"):
         text = str(path)
@@ -72,7 +152,11 @@ def _externalImports():
         except SyntaxError:
             continue
 
-        for node in ast.walk(tree):
+        nodes = []
+        _importNodes(tree, False, nodes)
+        for node, guarded in nodes:
+            if guarded:
+                continue
             if isinstance(node, ast.Import):
                 names = [alias.name for alias in node.names]
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
@@ -81,7 +165,7 @@ def _externalImports():
                 continue
             for name in names:
                 root = name.split(".")[0]
-                if root in _LOCAL_MODULES or root in _RUNTIME_ONLY or root.startswith("_"):
+                if root in local or root in _RUNTIME_ONLY or root.startswith("_"):
                     continue
                 found.setdefault(root, str(path.relative_to(_SRC_ROOT)))
     return found
@@ -219,12 +303,35 @@ def test_known_previously_missing_dependencies_are_declared():
             f"'{package}' is missing from requirements.txt again"
 
 
+def test_the_classifier_still_sees_third_party_imports():
+    """The two rules that quieten this suite must not silence it.
+
+    `_firstPartyModules()` calls any name matching a .py file in the repository
+    local, and `_importNodes` skips anything inside a try/except. Both are
+    loosenings, and a loosening that goes too far turns
+    test_every_external_import_resolves into a test that passes because it
+    checks nothing -- the exact shape of the failure this file was written to
+    catch, one level up. So: the packages the application cannot boot without
+    must still be classified external, and the count must stay plausible.
+    """
+    external = _externalImports()
+    for package in ("flask", "pymongo", "pandas", "numpy", "scipy"):
+        assert package in external, (
+            f"'{package}' is imported by the server but the classifier no "
+            "longer calls it external, so an undeclared dependency would now "
+            "go unreported")
+    assert len(external) >= 20, (
+        f"only {len(external)} external imports found; this tree has had "
+        "dozens for years, so the classifier is almost certainly broken")
+
+
 def main():
     tests = [
         test_every_external_import_resolves,
         test_there_is_exactly_one_requirements_file,
         test_the_interpreter_pin_agrees_everywhere,
         test_known_previously_missing_dependencies_are_declared,
+        test_the_classifier_still_sees_third_party_imports,
     ]
     for t in tests:
         _check(t.__name__, t)

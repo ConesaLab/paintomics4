@@ -403,6 +403,34 @@ class RefusalTest(unittest.TestCase):
     def test_a_method_the_catalogue_does_not_cover_is_refused_by_name(self):
         self.assertIn("PLS2", MOREServlet.engineRefusal("PLS2", None))
 
+    def test_naming_no_engine_falls_back_instead_of_being_refused(self):
+        """A host with no more-rs must still accept a PLS1 job that named none.
+
+        `auto` is what a client predating the picker, a resubmitted job and a
+        scripted POST all send, and _resolveMOREBackend answers it by running
+        PLS1 on R when there is no binary. engineRefusal used to resolve `auto`
+        straight to rust-pls1 and then refuse it, so on such a host every one of
+        those callers was turned away with the reference engine available -- the
+        whole of test_more_servlet_step1's 18 broken tests, and a real refusal
+        for real users, not only a test artefact.
+        """
+        with mock.patch.object(MOREServlet, "probeR", return_value=ALL_INSTALLED), \
+             mock.patch.object(MOREServlet, "_rustBinary", return_value=""):
+            self.assertIsNone(MOREServlet.engineRefusal("PLS1", None))
+            self.assertIsNone(MOREServlet.engineRefusal("PLS1", "auto"))
+            self.assertIsNone(MOREServlet.engineRefusal("PLS1", ""))
+            # The explicit ask is still refused: only "decide for me" may bend.
+            self.assertIsNotNone(MOREServlet.engineRefusal("PLS1", "rust"))
+
+    def test_naming_no_engine_is_still_refused_when_nothing_can_run_it(self):
+        """Falling back needs somewhere to fall back to."""
+        with mock.patch.object(MOREServlet, "probeR", return_value=NO_R), \
+             mock.patch.object(MOREServlet, "_rustBinary", return_value=""):
+            message = MOREServlet.engineRefusal("PLS1", None)
+
+        self.assertIsNotNone(message)
+        self.assertIn("administrator", message)
+
 
 class ApplyEngineChoiceTest(unittest.TestCase):
     """What STEP1 does with the form field."""

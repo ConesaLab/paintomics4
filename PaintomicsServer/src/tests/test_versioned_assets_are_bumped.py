@@ -126,7 +126,7 @@ PUBLISHED = {
     "app/view/common/CookieConsent.js": (
         "1.0", "e170c539dea089b0d88e090becd968d43a699aa319dbd02e681b75384a57f403"),
     "app/view/common/upload/Panel.js": (
-        "0.2", "34264cdec6faef81e46d28982f348003180b2e06d0af696f815f1b5b2a7a7458"),
+        "0.3", "d674eb13f512d72d71c662ec03305eb2c1a0b721cade230c6808c110b173e583"),
     # A development overlay, inert until ctrl+alt+G, and still recorded here:
     # it ships to every visitor as a script tag like any other, so a change to
     # it with an unbumped marker leaves returning browsers running the old

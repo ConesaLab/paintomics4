@@ -51,16 +51,39 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 # spelled out -- it ran for months recorded as "17 failures" while producing 17
 # failures and one error (ERROR: test_queues_step2_with_the_job), so the
 # eighteenth broken test was outside the count by construction.
-BASELINE = {
-    "test_ai_agent_endtoend": "4 failures: the stub gateway cannot satisfy the "
-                              "quote extractor, so reference [1] renders with no "
-                              "Cited Text and every citation is then redacted",
-    "test_more_servlet_step1": "18 failures: 17 assertions and one error, "
-                               "ERROR: test_queues_step2_with_the_job",
-    "test_pathway_universe_database_filter": "1 failure",
-    "test_relevance_file_shape_and_conditions": "2 failures",
-    "test_dependencies_declared": "1 failure: an external import does not resolve",
-}
+#
+# It is empty, and worth keeping empty. The five entries that used to live here
+# -- 26 tests, carried for months -- were read one at a time, and every one came
+# back either a defect in the test or, in the largest case, a defect in the
+# server. Not one was the "known broken, nothing to do" it was filed as:
+#
+#   test_more_servlet_step1 (18)  A REAL BUG. engineRefusal resolved `auto` to
+#       the Rust engine and then refused it, so on a host with no more-rs binary
+#       every PLS1 submission naming no engine -- an older client, a resubmitted
+#       job, a scripted POST -- was turned away with the reference R engine
+#       available. Fixed in MOREServlet.engineRefusal, along with the
+#       backendUsed/engineId mismatch the same resolution caused, and pinned by
+#       two new tests in test_more_engine_choice.
+#   test_ai_agent_endtoend (4)    Asserts on references built from PubMed, which
+#       this suite deliberately does not stub. Offline there are no papers, so
+#       those four skip with the reason; the four that need no retrieval run.
+#   test_relevance_file_shape_and_conditions (2)  Pinned `Nup50` and a literal
+#       region id in regenerated example data -- exactly the trap the file's own
+#       firstDataRow() helper exists to avoid, applied to its other tests but
+#       never to these two.
+#   test_pathway_universe_database_filter (1)  Asserted the size of the whole mmu
+#       universe, so installing a supported fourth database (OmniPath, +120)
+#       broke it while every KEGG and Reactome count stayed exactly right.
+#   test_dependencies_declared (1)  Reported four first-party modules as missing
+#       third-party ones, because the hand-written list of this repository's own
+#       module names had gone stale.
+#
+# The lesson is in that arithmetic. A list like this gets read as "known and
+# accepted", but nothing here was accepted on purpose, and one entry was hiding
+# a refusal real users would have hit. If a suite ever has to go back on it,
+# write the reason and the date into the value and treat the entry as a ticket
+# rather than as a fact.
+BASELINE = {}
 
 # Both conventions the suites use to name a broken test: unittest's
 # "FAIL: test_x (mod.Class)" / "ERROR: test_x (mod.Class)", and the hand-rolled

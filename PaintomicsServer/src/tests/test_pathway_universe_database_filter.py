@@ -133,12 +133,29 @@ class RealOrganismPathwayCountsTest(unittest.TestCase):
         return len(job(databases).filterPathwaysBySelectedDatabases(self.pathways))
 
     def test_mmu_universe_splits_into_364_kegg_and_524_reactome(self):
-        self.assertEqual(888, len(self.pathways),
-                         "the mmu snapshot changed; the expected counts below "
-                         "come from Counter(source) over mmu-paintomics.kegg")
+        """The per-database counts, and the filter that produces them.
+
+        This asserted `888 == len(self.pathways)` first -- the size of the
+        whole mmu universe, across every source. That number is not a property
+        of the filter under test, it is a property of how many databases happen
+        to be installed, so installing a supported fourth one broke it: an
+        OmniPath install adds 120 mmu pathways and the total becomes 1008 while
+        every KEGG and Reactome count below stays exactly right. The suite has
+        been carried in run_all.BASELINE as "1 failure" ever since.
+
+        What the filter actually promises is per-source, so that is what is
+        asserted: the two counts, and that asking for both returns their sum
+        and nothing else. A fifth database cannot disturb any of it.
+        """
         self.assertEqual(364, self.counts(["KEGG"]))
         self.assertEqual(524, self.counts(["Reactome"]))
-        self.assertEqual(888, self.counts(["KEGG", "Reactome"]))
+        self.assertEqual(364 + 524, self.counts(["KEGG", "Reactome"]),
+                         "asking for both databases must return exactly the "
+                         "two halves and nothing from a third source")
+        self.assertGreaterEqual(
+            len(self.pathways), 888,
+            "mmu has fewer pathways than KEGG and Reactome alone provide, so "
+            "the snapshot is incomplete rather than merely extended")
 
     def test_every_kept_pathway_belongs_to_a_selected_database(self):
         for databases in (["KEGG"], ["Reactome"], ["KEGG", "Reactome"]):

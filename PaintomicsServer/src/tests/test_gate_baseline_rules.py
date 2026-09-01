@@ -12,9 +12,16 @@ Offline, no fixtures, no server:
 
     cd PaintomicsServer && python -m src.tests.test_gate_baseline_rules
 """
+import os
+import sys
 import unittest
 
 from src.tests import run_all
+
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+sys.path.insert(0, os.path.join(REPO, "scripts", "ci"))
+
+import run_suites  # noqa: E402
 
 
 # What unittest really prints when a class fixture raises: one ERROR line that
@@ -213,6 +220,51 @@ class BaselineNotesTest(unittest.TestCase):
 
     def test_every_real_entry_states_its_count(self):
         run_all.check_baseline()
+
+
+class SkippedEverythingTest(unittest.TestCase):
+    """A suite that ran nothing must be told apart from one that ran plenty.
+
+    The report exists for the first case: a suite with no MongoDB, no binary or
+    no stored job prints "OK" that reads exactly like a real pass, and a
+    worktree in that state once reported green having executed zero tests.
+
+    The check was `re.search(r"Ran 0 tests|OK \(skipped", out)`, which only asks
+    whether the word appears. One skip anywhere in a passing suite therefore
+    reported the whole suite as having run nothing -- so eight tests, four
+    passed and four skipped on an unavailable optional dependency, was
+    indistinguishable from zero tests run. That is the same class of mistake as
+    matching a baseline on the suite name alone: a rule that cannot tell two
+    states apart eventually reports the wrong one.
+    """
+
+    def test_a_suite_that_skipped_every_test_is_reported(self):
+        self.assertTrue(run_suites.skipped_everything(
+            "Ran 12 tests in 0.000s\n\nOK (skipped=12)\n"))
+
+    def test_a_suite_that_ran_nothing_at_all_is_reported(self):
+        self.assertTrue(run_suites.skipped_everything(
+            "Ran 0 tests in 0.000s\n\nOK\n"))
+
+    def test_a_suite_that_skipped_some_and_passed_the_rest_is_not(self):
+        self.assertFalse(run_suites.skipped_everything(
+            "Ran 8 tests in 2.4s\n\nOK (skipped=4)\n"))
+        self.assertFalse(run_suites.skipped_everything(
+            "Ran 29 tests in 5.1s\n\nOK (skipped=1)\n"))
+
+    def test_a_clean_pass_is_not(self):
+        self.assertFalse(run_suites.skipped_everything(
+            "Ran 8 tests in 2.4s\n\nOK\n"))
+
+    def test_expected_failures_beside_the_skip_count_do_not_confuse_it(self):
+        self.assertTrue(run_suites.skipped_everything(
+            "Ran 5 tests in 0.1s\n\nOK (skipped=5, expected failures=0)\n"))
+
+    def test_a_suite_that_died_on_import_is_not_called_skipped(self):
+        # It said nothing at all; that is a failure, not a skip, and
+        # split_by_baseline is what must catch it.
+        self.assertFalse(run_suites.skipped_everything(
+            "Traceback (most recent call last):\n  ImportError\n"))
 
 
 if __name__ == "__main__":
