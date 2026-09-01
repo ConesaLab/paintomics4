@@ -1,76 +1,135 @@
-<div class="imageContainer" style="" >
-    <img src="paintomics_150x690.png" title="Paintomics LOGO." style=" height: 70px !important; margin-bottom: 20px; ">
-</div>
+# The KEGG pathways database
 
-# The KEGG Pathways database
+KEGG is the pathway database every PaintOmics job runs against. Its maps are
+drawn by hand and published together with the coordinates of everything on
+them, which is what makes a KEGG pathway paintable: PaintOmics puts your
+values into the boxes KEGG already drew.
 
-The **Kyoto Encyclopedia of Genes and Genomes** (KEGG) is a collection of databases and resources for studying high-level functions and utilities of the biological systems [Kanehisa et al. 2000, Kanehisa et al. 2014]. The KEGG database project started in 1995 at the Institute for Chemical Research, Kyoto University, looking for a computerized representation for the linkages between genomic information and higher-level systemic functions of the cell, the organism and the ecosystem  (Figure 1). 
+The application describes it in Step 2, in the **Multiple databases used** card
+that appears when a job runs more than one database, as *a database resource for
+understanding high-level functions and utilities of the biological system, such
+as the cell, the organism and the ecosystem, from molecular-level information* —
+see [kegg.jp/kegg](http://www.kegg.jp/kegg/).
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="kegg_overview.png" title="Overview for the integrated information in KEGG Database."/>
-    <p class="imageLegend">Figure 1: Overview for the integrated information in KEGG Database.</p>
-</div>
+## KEGG is not optional
 
-Last release of KEGG database (Release 76.0, October 1, 2015) includes 17 main databases maintained in the internal Oracle database [20, 21], which contain wide genomic and molecular-level information for up to 4000 species (313 eukaryotes, 3507 bacteria and 215 archaea). These databases are broadly categorized into systems information, genomic information, chemical information and health information (Table 1)
+In Step 1 the **KEGG** checkbox is ticked, greyed out and tagged **required**,
+and the server adds KEGG to the job's database list whatever the form posted.
+Every job therefore has KEGG pathways, even one run for the sake of Reactome or
+MapMan. The other three databases are offered only when this server has
+installed them for the organism you chose.
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="kegg_categories.png" title="Main categories for KEGG databases."/>
-    <p class="imageLegend">Table 1: Main categories for KEGG databases.</p>
-</div>
+## What PaintOmics installs from KEGG
 
-The KEGG PATHWAY database is a collection of graphical diagrams, usually known as pathway maps, that represent molecular interaction and reaction networks within a cell during specific biochemical processes, which usually leads into a product or change in the cell. KEGG PATHWAY contains about 478 reference pathways (Release 76.0, October 1, 2015), which are manually drawn and continuously updated according to biochemical evidences; that are categorized by the hierarchical classification of Figure 2. In addition to reference maps, KEGG PATHWAY contains over than 400,000 organism-specific pathways inferred by automatic mapping based on existing orthology events between species.
+Installing an organism pulls two kinds of data.
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="kegg_categories2.png" title="Hierarchical classification for KEGG Pathways."/>
-    <p class="imageLegend">Figure 2: Hierarchical classification for KEGG Pathways: main and secondary categories.</p>
-</div>
+Per organism:
 
-Each pathway in KEGG is identified by a 5 digit number (entry name or the accession number) preceded by a 2-4 letter code that indicates the organism or databases. Some examples for valid identifiers are *map03060* (Reference Protein export pathway, Figure 3), *mmu03060* (Mus Musculus Protein export pathway) or *hsa03060* (Homo Sapiens Protein export pathway).
+* the list of that organism's pathways, and one KGML file per pathway — the
+  machine-readable form of the map, which carries the position, width and
+  height of every gene and compound box;
+* the gene identifier tables the [identifier translation](1_4_id.md) works
+  through;
+* a pathway-to-pathway network, drawn in Step 3.
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="kegg_diagram.png" title="Kegg diagram for map03060."/>
-    <p class="imageLegend">Figure 3: KEGG diagram for Reference Protein export pathway (KEGG ID map03060).</p>
-</div>
+Shared by every organism on the server:
 
-Pathways are manually drawn using an in-house software named KegSketch using different graphics resources to visualize the information. For example, boxes represent gene products, mostly proteins but also RNA, while circles represent other molecules such as chemical compounds (Figure 4a). Interactions between biomolecules or other pathways are drawn using different arrows (Figure 4b); and the combination of multiple shapes can be interpreted as different biochemical processes or molecular interactions (Figure 4c). Coloring is also another resource for diagram interpretation: as general rule reference pathways are not colored while the variations of pathways for KEGG ENZYME (EC) database are colored blue, and organism-specific pathways are colored green, where coloring indicates that the biological entity (i.e gene or compound) exist in the corresponding database (Figure 4d).
+* the reference pathway images (`map00230.png` and so on) and their thumbnails;
+* the pathway classification, KEGG BRITE `br08901`;
+* the compound list with every synonym KEGG records, the pathway-to-compound
+  table, and a ChEBI-to-KEGG compound mapping.
 
+The shared download is about 1.4 GB and each species adds roughly 200–400 MB.
+See [Installing PaintOmics](0_install.md).
 
-<div class="imageContainer" style="box-shadow: 0px 0px 20px #D0D0D0; text-align:center; font-size:10px; color:#898989" >
-    <img src="kegg_diagram2.png" title="Kegg diagram for map03060."/>
-    <p class="imageLegend">Figure 4: Some examples for the graphics resources uses for KEGG diagram to visualize
-the information.</p>
-</div>
+One further piece of KEGG is bundled with the application rather than
+downloaded: the chemical classification of compounds, KEGG BRITE `br08001`,
+which is what the metabolite class activity analysis groups by.
 
-Finally, it is interesting to highlight the existence of an exchange format for the KEGG pathway maps known as KEGG Markup Language (KGML), which contain computer- ized information about graphical objects and their relations in the KEGG pathway, i.e. coordinates for shapes, dimensions, colors or links to databases, among others (Code
-fragment 1).
+## Why KEGG pathways can be painted
 
-```xml
-<?xml version="1.0"?>
-<!DOCTYPE pathway SYSTEM "http://www.kegg.jp/kegg/xml/KGML_v0.7.1_.dtd">
-<pathway name="path:hsa00010" org="hsa" title="Glycolysis/Gluconeogenesis" image="http://www.kegg.jp/.../hsa00010.png" link="...">
-<entry id="13" name="hsa:226 hsa:229 hsa:230" type="gene" reaction="rn:R01070" link="...">
-<graphics type="rectangle" x="483" y="407" width="46" height="17" name="ALDOA, ALDA, GSD12,..." fgcolor="#000" bgcolor="..." />
-</entry>
-<entry id="37" name="hsa:217 hsa:219 hsa:223 hsa:224 hsa:501" type="gene" reaction="rn:R00710">
-[...]
-</entry>
-[...]
-<entry id="113" name="cpd:C00036" type="compound"
-link="http://www.kegg.jp/dbget-bin/www_bget?C00036">
-<graphics name="C00036" fgcolor="#000000" bgcolor="#FFFFFF" type="circle" x="146" y="736" width="8" height="8"/>
-</entry>
-[...]
-<relation entry1="68" entry2="70" type="ECrel">
-<subtype name="compound" value="86"/>
-</relation>
-[...]
-<reaction id="47" name="rn:R00014" type="irreversible">
-<substrate id="98" name="cpd:C00022"/>
-<substrate id="136" name="cpd:C00068"/>
-<product id="99" name="cpd:C05125"/>
-</reaction>
-[...]
-</pathway>
+KEGG publishes both the picture and the geometry. The picture is the *reference*
+map — one image per pathway, the same for every organism — and the geometry
+comes from your organism's own KGML. When you paint `mmu00230`, PaintOmics
+serves the image `map00230.png` and reads the box coordinates out of the mouse
+KGML, so the diagram is KEGG's own drawing with your data laid over it, one box
+per matched feature and one coloured cell per condition.
 
-```
-<p class="imageLegend">Code fragment 1: Fragment for the KGML file for KEGG Pathway Glycolysis/Gluconeogenesis for Homo Sapiens.</p>
+This is the same mechanism Reactome uses, from a downloaded PNG. MapMan works
+the same way from its own diagrams. [OmniPath](1_6_omnipath.md) has no diagram
+at all and opens as an interaction network instead.
+
+![The per-database match counts in Step 2](img/ui/step2-databases-matrix.png)
+
+*Step 2 counts, for each omic, how many of your features carry an identifier
+each database is keyed on. Reading across a row is how you find out why one
+database matched more of your data than another.*
+
+## Identifiers
+
+KEGG pathways name their genes with the organism's own KEGG gene identifiers,
+and PaintOmics translates whatever you uploaded into the identifier space that
+organism's data is keyed on. That target is per organism, not universal. The
+shipped configuration names 23 organisms and splits them in two.
+
+* **Ten resolve through NCBI Gene IDs:** human, mouse, rat, cow, chimpanzee,
+  green anole, chicken, *Xenopus*, pig and dog.
+* **The other thirteen resolve through KEGG's own gene ids:** zebrafish, fly,
+  worm, budding yeast, *S. pombe*, *P. falciparum*, *D. discoideum*,
+  *Bifidobacterium animalis* subsp. *lactis* BB-12, tomato, potato,
+  *Arabidopsis*, and rice under both of the KEGG codes it has. Those two codes
+  spell a rice gene differently: KEGG names `osa` genes by their NCBI Gene ID,
+  and `dosa` genes by their RAP-DB locus (`Os01g0147900`). They are separate
+  installations, so pick the one whose identifiers your file uses.
+
+An organism with no entry in the shipped configuration falls back to KEGG gene
+ids and KEGG gene symbols.
+
+Metabolites are matched against KEGG compound names, case-insensitively.
+Bare KEGG compound ids (`C00002`) work because the installer files each id as a
+name of itself, and ChEBI ids are accepted with or without the `chebi:` prefix.
+A name that matches several KEGG compounds raises the disambiguation cards in
+Step 2.
+
+[Supported identifiers](1_4_id.md) has the per-organism detail.
+
+## Classification
+
+Each KEGG pathway carries two classification levels taken from `br08901`: a top
+level — Metabolism, Genetic Information Processing, Environmental Information
+Processing, Cellular Processes, Organismal Systems, Human Diseases, Drug
+Development — and a second level beneath it. Step 3 draws that as the Category Distribution pie and
+the **Filter by category** tree; only classes that have pathways for your
+organism appear. See [Pathway classification](4_2_kegg_categories.md).
+
+## Two analyses that are KEGG-only
+
+Two things in Step 3 come from KEGG data and are unaffected by which other
+databases the job runs:
+
+* the [metabolite hub analysis](4_4_metabolite_hub_analysis.md), whose
+  compound-gene graph is derived from the organism's KGML files;
+* the [metabolite class activity analysis](4_5_metabolite_class_activity_analysis.md),
+  whose chemical classes are the three levels of KEGG BRITE `br08001`.
+
+## How KEGG compares with the others
+
+| | KEGG | [Reactome](1_2_reactome.md) | [MapMan](1_3_mapman.md) | [OmniPath](1_6_omnipath.md) |
+|---|---|---|---|---|
+| Offered for | every installed organism | 15 organisms in the shipped configuration | 4 plant organisms | human, mouse, rat |
+| Can be switched off | no | yes | yes | yes |
+| Pathway opens as | a painted KEGG map | a painted Reactome diagram | a painted MapMan diagram | an interactive interaction network |
+| Genes keyed on | the organism's KEGG gene ids | Reactome gene ids | MapMan gene ids | UniProt accessions |
+| Matches metabolites | yes | yes, through ChEBI | yes, through MapMan bins | no |
+| Classification | KEGG BRITE `br08901`, two levels | Reactome's event hierarchy, two levels | MapMan's own, two levels | assigned by PaintOmics, resource second |
+
+Which of the four you can actually tick is a fact about the server you are
+using, not a fixed list. The Step 1 checkboxes are the authority: a database
+this deployment has not installed for your organism is disabled and labelled
+**not installed**.
+
+!!! note
+    KEGG data is dated per organism. The administration panel shows the KEGG
+    information date and the mapping date for every installed organism, and how
+    many pathways your organism has is reported per job in the Step 3 summary
+    band — not by any number quoted in this documentation.

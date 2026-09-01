@@ -1,23 +1,54 @@
-<div class="imageContainer" style="" >
-    <img src="img/paintomics_150x690.png" height="50" title="Paintomics LOGO." style=" height: 80px !important; margin-bottom: 20px; "/>
-</div>
+# PaintOmics
 
-**Integrative visualization of multiple *omic* data**
+PaintOmics paints your omics measurements onto the pathways that explain them.
+You upload one file per omic layer, it matches your identifiers to KEGG,
+Reactome, MapMan and OmniPath, tests which pathways your data has moved, and
+draws the result on the pathway diagrams themselves — every gene, protein,
+transcript, region and metabolite you measured, coloured by what it did, in
+every condition at once.
 
-For any question on PaintOmics, users can send a mail to paintomicsai@gmail.com
+It runs in a browser and needs no account: a job gets its own URL the moment it
+starts, and you can close the tab and come back to it.
 
-**Welcome to PaintOmics v4.0 documentation.**
+![The PaintOmics AI home page](img/ui/home-hero.png)
 
-**PaintOmics** is a web tool for the integrative visualization of multiple omic datasets onto KEGG, Reactome, and MapMan pathways. Currently, Paintomics supports integrated visualization of multiple species of different biological kingdoms and offers the user the possibility to request any other organism present in the KEGG database (Reactome and MapMan will also install if available).
+*The home page. **Load an example** fills the form with a published dataset,
+ready for you to press **Run PaintOmics** — the fastest way to see the whole
+tool work.*
 
-PaintOmics  is easy to run because the application itself guides you through the three different steps that are detailed next:
+## What you can do with it
 
-* **Data uploading:**
-    1. Choose your organism (see selection box below).
-    2. Choose database you want to explore (see checkbox below).
-    3. Upload your multi-omic data (see menu below). You can download the example data from here to check the format of the files. You can also load an example (“Load example” button in the upper right corner of the screen) to explore Paintomics functionalities.
-    4. Click on "RUN PAINTOMICS" button.
-* **Identifier and Name Matching and Metabolite assignment:** Paintomics requires Entrez IDs for working with KEGG pathways, so the tool will convert the names and identifiers from different sources and databases in user’s the input data. This screen give users information about the number of features successfully mapped to KEGG pathways. It also shows the data distribution that will be used for pathway colouring, which can be modified when visualizing a pathway. Additionally, the metabolite names assignments are displayed and users can choose their favourite option in case of ambiguity. Click NEXT STEP button when you are ready.
-* **Results:** Pathways summary, Pathways classification, Pathways network, Pathways enrichment, Pathways visualization (by clicking PAINT BUTTON for any of the displayed pathways in Pathways enrichment section). Read more about these analyses in our documentation.
+| | |
+|---|---|
+| **Integrate several omics at once** | Gene expression, proteomics, metabolomics, miRNA-seq and any region-based assay (DNase-seq, ChIP-seq, ATAC-seq, Methyl-seq) in one job, with a combined p-value per pathway. |
+| **Work across four pathway databases** | [KEGG](1_1_kegg.md), [Reactome](1_2_reactome.md), [MapMan](1_3_mapman.md) and the [OmniPath](1_6_omnipath.md) interaction network, in whatever combination is installed for your species. |
+| **See the whole time course on one diagram** | Each matched feature is drawn as one box per condition, so a trend is visible without leaving the map. |
+| **Go beyond enrichment** | A [pathway interaction network](4_3_pathways_network.md), a [metabolite hub analysis](4_4_metabolite_hub_analysis.md), a [metabolite class activity test](4_5_metabolite_class_activity_analysis.md) and [regulatory modelling with MORE](4_6_Regulatory_omics.md). |
+| **Ask the AI agent to read the result** | It queries your own values, searches the literature, checks every quotation it prints, and hands you a cited draft. See [What the AI does](ai-overview.md). |
 
-Please check the user guide for further information. For any question on Paintomics, you can send an e-mail to paintomicsai@gmail.com.
+## Start here
+
+* **[Your first analysis](8_step_by_step.md)** — the whole tool, screen by
+  screen, on a real dataset. Start here if you have never used PaintOmics.
+* **[Preparing your data](2_1_accepted_input.md)** — what a values file and a
+  relevant-features file look like, for each kind of omic.
+* **[The example datasets](examples.md)** — twelve ready-made jobs, from a
+  single gene-expression contrast to the full five-omic STATegra time course.
+* **[A worked example](6_1_use_case.md)** — one real five-omic run followed from
+  the files to a conclusion, and what that conclusion does not support.
+
+## The three databases, and the fourth
+
+KEGG is always installed. Reactome, MapMan and OmniPath are installed per
+species, and the upload form ticks the ones your organism actually has — so
+what you see offered is what this server can run. If your species is missing
+entirely, **Request an organism** on the upload form sends the maintainers a
+request; any organism KEGG carries can be installed.
+
+## Getting help
+
+Report a problem or ask a question at
+[paintomicsai@gmail.com](mailto:paintomicsai@gmail.com), or open an issue on
+[GitHub](https://github.com/ConesaLab/PaintOmics). If you use PaintOmics in
+published work, the **More ▸ Cite PaintOmics** menu in the application gives
+the BibTeX for each release.

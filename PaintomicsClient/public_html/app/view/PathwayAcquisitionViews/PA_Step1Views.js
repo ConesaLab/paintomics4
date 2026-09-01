@@ -1504,7 +1504,7 @@ function PA_Step1JobView() {
 								   actually wanted in. */
 								'<div class="po-hero-actions">' +
 									'<a href="javascript:void(0)" id="poHeroExampleButton" class="po-btn-primary">Load an example</a>' +
-									'<a href="https://paintomics.readthedocs.io/en/latest/" target="_blank" class="po-btn-outline">Documentation</a>' +
+									'<a href="https://conesalab.github.io/PaintOmics/" target="_blank" class="po-btn-outline">Documentation</a>' +
 									'<a href="https://github.com/ConesaLab/paintomics4/" target="_blank" class="po-btn-quiet">GitHub</a>' +
 									'<a href="mailto:paintomicsai@gmail.com" class="po-btn-quiet">Contact</a>' +
 									/* The abstract keeps its id and handler; it is a text link
@@ -1581,7 +1581,7 @@ function PA_Step1JobView() {
 								'<div class="po-step-number">3</div>' +
 								'<h3 data-guides="ignore">Explore results</h3>' +
 							'</div>' +
-							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small btn-paint" title="Paint this pathway"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small btn-ai">' + getAIMark() + ' AI Interpret</a>. Read more about these analyses in <a href="https://paintomics.readthedocs.io/en/latest/" target="_blank">our documentation</a>.</p>' +
+							'<p>You get a Pathways summary, a classification, a network and an enrichment analysis. Paint any of the listed pathways with <a href="javascript:void(0)" class="button btn-inline btn-small btn-paint" title="Paint this pathway"><i class="fa fa-paint-brush"></i></a>, or ask for an <b>AI-powered pathway interpretation</b> with <a href="javascript:void(0)" class="button btn-inline btn-small btn-ai">' + getAIMark() + ' AI Interpret</a>. Read more about these analyses in <a href="https://conesalab.github.io/PaintOmics/" target="_blank">our documentation</a>.</p>' +
 							'<div class="po-step-art">' + PO_STEP_ART_EXPLORE + '</div>' +
 						'</div>' +
 					'</div>' +
@@ -1595,7 +1595,7 @@ function PA_Step1JobView() {
 					/* The closing "Check the User guide ... email ... GitHub page"
 					   line is gone. Its three links were the hero's three buttons
 					   again, to the same three URLs: the user guide is the
-					   Documentation button's readthedocs address, the address in
+					   Documentation button's address, the address in
 					   the mailto is the Contact button's, and the GitHub page is
 					   the GitHub button's repository. It restated the top of the
 					   page at the bottom of it and added nothing in between.

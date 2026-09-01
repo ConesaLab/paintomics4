@@ -100,7 +100,7 @@ function DM_Bed2GenesJobView() {
 				'       The original tool from developed by P. Furio and S. Tarazona, was adapted to accept quantification values for each genomic region, ' +
 				'       so the resulting gene list includes quantification values at gene level. See below for more information about input format.</p>' +
 				'       <p><b>More info:</b></p>'+
-				'       <ul><li><a href="http://paintomics.readthedocs.io/en/latest/2_1_accepted_input/#matching-regions-to-genes-rgmatch" target="_blank">Matching Regions to Genes (PaintOmics 3 Documentation)</a></li>' +
+				'       <ul><li><a href="https://conesalab.github.io/PaintOmics/2_1_accepted_input/#matching-regions-to-genes-rgmatch" target="_blank">Matching regions to genes</a></li>' +
 				'       <li><a href="https://bitbucket.org/pfurio/rgmatch" target="_blank">RGmatch repository</a></li></ul>' +
 				'   </div>' +
 				'</div>' +

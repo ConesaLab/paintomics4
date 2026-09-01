@@ -1,0 +1,86 @@
+/* PaintOmics documentation theme.
+ *
+ * The values below are the application's own design tokens, read from
+ * :root in PaintomicsClient/public_html/resources/css/main.css so that the
+ * documentation and the tool a reader has open in the next tab agree:
+ *
+ *   --pa-accent-teal   #007383   the primary action colour
+ *   --pa-accent-blue   #19589E   the AI accent
+ *   --pa-link          #0060BA
+ *   --pa-ink           #18181B
+ *   --pa-surface-page  #FAF9F5   a warm off-white, not pure white
+ *
+ * Material asks for the light and dark ends of the primary hue separately;
+ * everything else is derived from these five.
+ */
+
+:root {
+  --md-primary-fg-color:        #007383;
+  --md-primary-fg-color--light: #2E93A1;
+  --md-primary-fg-color--dark:  #005460;
+  --md-accent-fg-color:         #19589E;
+  --md-accent-fg-color--transparent: rgba(25, 88, 158, 0.10);
+  --md-typeset-a-color:         #0060BA;
+}
+
+[data-md-color-scheme="default"] {
+  --md-default-bg-color:        #FAF9F5;
+  --md-default-fg-color:        #18181B;
+  --md-default-fg-color--light: #52525B;
+  --md-code-bg-color:           #F3F2ED;
+  --md-footer-bg-color:         #18181B;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-typeset-a-color:         #6FB3F2;
+  --md-accent-fg-color:         #6FB3F2;
+  --md-hue: 225;
+}
+
+/* Screenshots. Every figure is a picture of a real screen, so it earns a
+ * border and room to breathe; the caption is the paragraph immediately after
+ * the image, italicised by the source and picked out here. A figure is never
+ * wider than the text column, and a wide one scrolls rather than pushing the
+ * page sideways. */
+.md-typeset img[src*="img/ui/"] {
+  display: block;
+  /* `width: auto` with both maxima, not `width: 100%`: a screenshot of a tall
+   * narrow panel (a legend, a side rail) has far less in it than a full-width
+   * one, and stretching it to the text column blew it up to several times its
+   * captured size. Wide figures still fill the column, because their intrinsic
+   * width exceeds it. */
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 620px;
+  margin-inline: auto;
+  border: 1px solid rgba(24, 24, 27, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(24, 24, 27, 0.08);
+  margin: 1.2rem auto 0.4rem;
+}
+
+[data-md-color-scheme="slate"] .md-typeset img[src*="img/ui/"] {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: none;
+}
+
+/* The caption line: the paragraph directly after a figure, when it opens in
+ * italics. `:has()` keeps the markup plain — an image, then a line of italics
+ * — instead of asking every page to wrap figures in HTML.
+ *
+ * Matching on the STRUCTURE and not on `em:only-child`: a caption that bolds
+ * a UI label ("*... **Load an example** fills the form...*") is several <em>
+ * nodes with a <strong> between them, so `:only-child` silently missed every
+ * caption that named a button — which is most of them. */
+.md-typeset p:has(> img[src*="img/ui/"]) + p:has(> em:first-child) {
+  margin-top: 0;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Tables in the reference pages carry identifier lists and per-omic numbers;
+ * left-aligned and compact reads better than Material's default centring. */
+.md-typeset table:not([class]) th { text-align: left; }
+.md-typeset table:not([class]) td { vertical-align: top; }

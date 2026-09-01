@@ -2,8 +2,9 @@
 
 These pages are for people who run, deploy and debug PaintOmics — not for
 people who use it. The user guide is at
-[paintomics.readthedocs.io](https://paintomics.readthedocs.io/en/latest/), built
-from the rest of `docs/`. These pages are listed under `exclude_docs` in
+[conesalab.github.io/PaintOmics](https://conesalab.github.io/PaintOmics/), built
+from the rest of `docs/` by `.github/workflows/docs.yml` on every push to
+`master`. These pages are listed under `exclude_docs` in
 `mkdocs.yml`, so they are not built into that site at all — `not_in_nav`
 would only unlink them, leaving them published at their URLs.
 
