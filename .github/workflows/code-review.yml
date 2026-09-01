@@ -1,0 +1,91 @@
+# Automated code review on every pull request.
+#
+# This is ADVISORY, not a gate. `pr.yml`'s `gate` job is what branch protection
+# requires, and this workflow is deliberately not wired into it: a review that
+# blocks a merge on a model's judgement would make the required check depend on
+# a third-party service and a token, and `gate`'s own "waits on every job"
+# assertion only inspects pr.yml, so a reviewer job living here cannot silently
+# fall out of that list either way.
+#
+# Prerequisite: the CLAUDE_CODE_OAUTH_TOKEN secret, which carries a Claude
+# subscription. Generate it with `claude setup-token`, then, from the same
+# terminal so the value is never pasted anywhere it can be read back:
+#   gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ConesaLab/PaintOmics
+# (no value on the command line -- gh prompts for it with the echo off, so it
+# stays out of shell history). Until the secret exists every run of this
+# workflow fails at the action step. Setting it needs admin on the repository.
+#
+# `pull-requests: write` rather than the `read` in the upstream example: the
+# only tool this run is allowed is create_inline_comment, and creating a review
+# comment on a pull request is a write to the pull-requests scope. With `read`
+# the model does the review and then silently cannot post it.
+#
+# paths-ignore keeps the reviewer off pure documentation and lockfile churn --
+# the same edits `pr.yml` still lints and tests, but which carry no code to
+# review.
+
+# A GREEN "Claude review" DOES NOT MEAN A REVIEW HAPPENED. The action refuses
+# to run unless this file is byte-identical to the copy on the default branch
+# -- that is what stops a pull request from rewriting the workflow to read the
+# token -- and a refusal is logged as a warning and exits 0, so the check is
+# reported as passing. Measured on run 33539372977, the pull request that
+# added this file:
+#
+#   Skipping action due to workflow validation: Workflow validation failed.
+#   The workflow file must exist and have identical content to the version on
+#   the repository's default branch.
+#   ...
+#   Exiting due to workflow validation skip
+#
+# It never reached Anthropic, so that run proved nothing about the token. Two
+# consequences to remember: this workflow cannot review the pull request that
+# introduces or edits it, and a green tick beside zero comments is the signal
+# to read the log rather than to conclude the diff was clean.
+#
+# The token WAS tested, separately, because this workflow could not do it. Run
+# 33540488683 installed the CLI on a runner and spent one inference turn on
+# CLAUDE_CODE_OAUTH_TOKEN:
+#
+#   secret present: 108 characters
+#   2.1.257 (Claude Code)
+#   model replied: PAINTOMICS_TOKEN_OK
+#   the token authenticates and can run inference
+#
+# So if this workflow misbehaves after the merge, start with the action and
+# the plugin, not the secret. (The token is good for 365 days from 2026-09-01;
+# when it lapses, that is what a sudden failure here will be.)
+
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    paths-ignore: ["**/*.md", "**/*.lock", "**/generated/**"]
+
+# One review per pull request: a force-push mid-review should replace the run
+# in flight rather than race it and post two sets of comments on one diff.
+concurrency:
+  group: code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude review
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
+          plugins: "code-review@claude-code-plugins"
+          prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          claude_args: '--max-turns 15 --allowedTools "mcp__github_inline_comment__create_inline_comment"'
