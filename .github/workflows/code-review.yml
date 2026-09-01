@@ -7,10 +7,13 @@
 # assertion only inspects pr.yml, so a reviewer job living here cannot silently
 # fall out of that list either way.
 #
-# Prerequisite: the CLAUDE_CODE_OAUTH_TOKEN secret. Generate it with
-# `claude setup-token` and add it with
-#   gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ConesaLab/paintomics4
-# Until it exists every run of this workflow fails at the action step.
+# Prerequisite: the CLAUDE_CODE_OAUTH_TOKEN secret, which carries a Claude
+# subscription. Generate it with `claude setup-token`, then, from the same
+# terminal so the value is never pasted anywhere it can be read back:
+#   gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo ConesaLab/PaintOmics
+# (no value on the command line -- gh prompts for it with the echo off, so it
+# stays out of shell history). Until the secret exists every run of this
+# workflow fails at the action step. Setting it needs admin on the repository.
 #
 # `pull-requests: write` rather than the `read` in the upstream example: the
 # only tool this run is allowed is create_inline_comment, and creating a review
