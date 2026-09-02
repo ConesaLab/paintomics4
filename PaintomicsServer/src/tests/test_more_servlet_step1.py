@@ -23,6 +23,17 @@ What this pins down
   escaping to Flask -- these jobs are queued, and a raw traceback here is what
   the user sees.
 
+Engine availability is pinned, not inherited from the host
+----------------------------------------------------------
+STEP1 refuses a job whose engine this host cannot run (engineRefusal), and
+nothing here is about that: this suite covers form handling, so every test
+runs on a host where all four engines are available. Left to the real host
+the suite reported the machine, not the servlet -- 18 tests failed on any
+box without a more-rs binary, and the MLR test then passed on CI (binary,
+R without MORE) only because a fallback was too wide and let an unnamed MLR
+through to an Rscript that could not run it. Which host can run what is
+test_more_engine_choice's subject, with every host state mocked there.
+
 Usage:
     cd PaintomicsServer
     python -m src.tests.test_more_servlet_step1
@@ -32,6 +43,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -101,6 +113,16 @@ class Step1TestCase(unittest.TestCase):
         MOREServlet.saveFile = fakeSaveFile
         self.queue = FakeQueue()
         self.response = FakeResponse()
+
+        # A host with everything installed, so no test here can be refused
+        # for what the machine running it happens to lack (see the module
+        # docstring). mock.patch.stopall undoes both on cleanup.
+        mock.patch.object(MOREServlet, "probeR", return_value={
+            "rscript": "/usr/bin/Rscript", "more": True, "optparse": True,
+            "error": ""}).start()
+        mock.patch.object(MOREServlet, "_rustBinary",
+                          return_value="/x/more-rs").start()
+        self.addCleanup(mock.patch.stopall)
 
     def tearDown(self):
         MOREServlet.UserSessionManager = self._realSession
