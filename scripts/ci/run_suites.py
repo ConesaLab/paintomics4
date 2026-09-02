@@ -37,6 +37,37 @@ from src.tests import run_all  # noqa: E402
 
 TAIL_LINES = 25
 
+# unittest's tail line when nothing failed but something was skipped:
+#   OK (skipped=4)              OK (skipped=1, expected failures=2)
+_OK_SKIPPED = re.compile(r"^OK \(.*?\bskipped=(\d+)", re.M)
+
+
+def skipped_everything(out):
+    """Did this suite skip every test it has?
+
+    The point of the report is a suite that quietly ran nothing -- no MongoDB,
+    no binary, no stored job -- because "OK" from such a run looks exactly like
+    "OK" from a real one, and that is how a worktree at origin/master once
+    reported green while executing zero tests.
+
+    It used to be `re.search(r"Ran 0 tests|OK \\(skipped", out)`, which asks
+    only whether the word "skipped" appears at all. Any suite with ONE skip and
+    no failures was therefore reported as having skipped everything -- so a
+    suite that ran eight tests, passed four and skipped four on a missing
+    optional dependency was indistinguishable from one that ran none. Compare
+    the counts instead: skipping everything means the number skipped is the
+    number run.
+    """
+    ran = run_all.tests_run(out)
+    if ran == 0:
+        return True
+    if ran is None:
+        # No "Ran N"/"Passed: x / y" line at all: a suite that died on import
+        # says nothing, and "Ran 0 tests" is the only other way to say nothing.
+        return bool(re.search(r"Ran 0 tests", out))
+    match = _OK_SKIPPED.search(out)
+    return bool(match) and int(match.group(1)) >= ran
+
 
 def run_suite(name, timeout):
     """run_all.run_one, keeping the suite's output so a failure in CI can be
@@ -49,7 +80,7 @@ def run_suite(name, timeout):
                               cwd=SERVER, env=env)
         out = proc.stdout + proc.stderr
         state = run_all.classify(proc.returncode, out)
-        skipped = bool(re.search(r"Ran 0 tests|OK \(skipped", out))
+        skipped = skipped_everything(out)
     except subprocess.TimeoutExpired as exc:
         out = ((exc.stdout or b"").decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")) \
             + ((exc.stderr or b"").decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or ""))

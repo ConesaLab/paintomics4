@@ -403,6 +403,98 @@ class RefusalTest(unittest.TestCase):
     def test_a_method_the_catalogue_does_not_cover_is_refused_by_name(self):
         self.assertIn("PLS2", MOREServlet.engineRefusal("PLS2", None))
 
+    def test_naming_no_engine_falls_back_instead_of_being_refused(self):
+        """A host with no more-rs must still accept a PLS1 job that named none.
+
+        `auto` is what a client predating the picker, a resubmitted job and a
+        scripted POST all send, and _resolveMOREBackend answers it by running
+        PLS1 on R when there is no binary. engineRefusal used to resolve `auto`
+        straight to rust-pls1 and then refuse it, so on such a host every one of
+        those callers was turned away with the reference engine available -- the
+        whole of test_more_servlet_step1's 18 broken tests, and a real refusal
+        for real users, not only a test artefact.
+        """
+        with mock.patch.object(MOREServlet, "probeR", return_value=ALL_INSTALLED), \
+             mock.patch.object(MOREServlet, "_rustBinary", return_value=""):
+            self.assertIsNone(MOREServlet.engineRefusal("PLS1", None))
+            self.assertIsNone(MOREServlet.engineRefusal("PLS1", "auto"))
+            self.assertIsNone(MOREServlet.engineRefusal("PLS1", ""))
+            # The explicit ask is still refused: only "decide for me" may bend.
+            self.assertIsNotNone(MOREServlet.engineRefusal("PLS1", "rust"))
+
+    def test_naming_no_engine_is_still_refused_when_nothing_can_run_it(self):
+        """Falling back needs somewhere to fall back to."""
+        with mock.patch.object(MOREServlet, "probeR", return_value=NO_R), \
+             mock.patch.object(MOREServlet, "_rustBinary", return_value=""):
+            message = MOREServlet.engineRefusal("PLS1", None)
+
+        self.assertIsNotNone(message)
+        self.assertIn("administrator", message)
+
+    def test_naming_no_engine_for_mlr_is_refused_when_r_is_missing(self):
+        """The fallback runs from the port to R, never the other way.
+
+        A host with a more-rs binary and no R: `auto` PLS1 runs on the port,
+        so it is accepted. `auto` MLR points at R, and _resolveMOREBackend will
+        NOT swap an unnamed MLR onto the port (its output is not byte-identical
+        to R's), so accepting it hands the job to an Rscript that is not there.
+        The first version of the fallback accepted it because "some engine for
+        the method" -- rust-mlr -- was available; the review of pull request
+        #124 read the router and caught it. Naming the port is still fine.
+        """
+        with mock.patch.object(MOREServlet, "probeR", return_value=NO_R), \
+             mock.patch.object(MOREServlet, "_rustBinary", return_value="/x/more-rs"):
+            self.assertIsNone(MOREServlet.engineRefusal("PLS1", None))
+            self.assertIsNone(MOREServlet.engineRefusal("MLR", "rust"))
+            message = MOREServlet.engineRefusal("MLR", None)
+
+        self.assertIsNotNone(message)
+        self.assertIn("no R installation", message)
+        # The way out is to ask for the port by name, so the refusal says so.
+        self.assertIn("MLR \u2014 Rust engine", message)
+
+    def test_naming_no_engine_is_accepted_exactly_when_the_routers_pick_can_run(self):
+        """The invariant behind the two tests above, over every host state.
+
+        engineRefusal and _resolveMOREBackend are two functions with one
+        decision between them: a job that is not refused must land on an
+        engine this host can run. So for each method and each combination of
+        {binary, no binary} x {R, no R}, ask the router where `auto` goes, look
+        that engine up in the availability report, and check the refusal
+        agrees. A host with a real more-rs on PATH must not leak into the
+        no-binary rows, hence the discovery mock.
+        """
+        tmp = tempfile.mkdtemp(prefix="more_engine_")
+        binary = os.path.join(tmp, "more-rs")
+        with open(binary, "w") as handle:
+            handle.write("#!/bin/sh\nexit 0\n")
+        os.chmod(binary, os.stat(binary).st_mode | stat.S_IXUSR)
+        self.addCleanup(__import__("shutil").rmtree, tmp, ignore_errors=True)
+
+        for probe in (ALL_INSTALLED, NO_R):
+            for hostBinary in (binary, ""):
+                for method in ("PLS1", "MLR"):
+                    with mock.patch.object(MOREServlet, "probeR", return_value=probe), \
+                         mock.patch.object(MOREServlet, "_rustBinary",
+                                           return_value=hostBinary), \
+                         mock.patch.object(MOREServlet, "_discoverMoreRs",
+                                           return_value=hostBinary):
+                        argv = MOREServlet._resolveMOREBackend(
+                            method, R_SCRIPT, binaryPath=hostBinary, engine=None)
+                        picked = MOREServlet.engineIdFor(
+                            method, "r" if argv[0] == "Rscript" else "rust")
+                        canRun = any(
+                            e["id"] == picked and e["available"]
+                            for e in MOREServlet.describeMOREBackends()["engines"])
+                        refusal = MOREServlet.engineRefusal(method, None)
+                    self.assertEqual(
+                        refusal is None, canRun,
+                        "%s/auto with R=%s binary=%s: router picks %s (%s), "
+                        "refusal says %r" % (
+                            method, bool(probe["rscript"]), bool(hostBinary),
+                            picked, "runnable" if canRun else "NOT runnable",
+                            refusal))
+
 
 class ApplyEngineChoiceTest(unittest.TestCase):
     """What STEP1 does with the form field."""

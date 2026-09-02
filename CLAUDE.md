@@ -42,6 +42,11 @@ Summarize the edge cases addressed (e.g., NaNs, duplicate IDs) and suggest the n
 
 **Prerequisites:** conda environment `paintomics4`, MongoDB running on localhost:27017.
 
+That environment is Python 3.9 and is fine for running the server by hand. It is
+*not* the version anything else uses: `.python-version`, the CI jobs and production
+are all **3.11**. Reproduce a CI or regression result on 3.11, never on this one --
+the regression baselines are interpreter-pinned.
+
 ```bash
 cd /Users/tianyuan/Desktop/github_dev/paintomics4/PaintomicsServer
 /Users/tianyuan/miniforge3/envs/paintomics4/bin/python src/launch_server.py
@@ -73,7 +78,8 @@ Before verifying:
 
 ## 6. Redline / alignment QA
 
-Dev-only overlay at scripts/alignment-guides.js: red rails + HUD listing
+Dev-only overlay at PaintomicsClient/public_html/app/view/common/AlignmentGuides.js
+(loaded by index.html): red rails + HUD listing
 off-rail elements. Enable with ?guides=1 or Ctrl+Alt+G.
 After any layout/spacing/CSS change: open the page with guides on,
 screenshot it, fix every off-rail element in the HUD (except ones marked

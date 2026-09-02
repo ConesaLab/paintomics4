@@ -465,17 +465,56 @@ def engineRefusal(method, engine):
     without this the request spawns Rscript on a host with no MORE and fails
     deep in the job with whatever that produces. Same move, and the same
     reasoning, as refusing an AI job up front when the server has no LLM token.
+
+    Naming no engine is not the same as naming one that cannot run
+    --------------------------------------------------------------
+    Only the second is a refusal. `auto` -- which is what a client predating
+    the picker, a resubmitted job and a scripted POST all send -- means "the
+    server decides", and `_resolveMOREBackend` does decide: it falls back to R,
+    deliberately and with a warning, when no more-rs binary is installed.
+    Refusing `auto` here contradicted that fallback, and contradicted
+    describeMOREBackends() too, whose `default` already names the first
+    AVAILABLE entry so the picker opens on something runnable -- the two are
+    meant to be one decision with no second opinion to drift.
+
+    That fallback runs in ONE direction. `_resolveMOREBackend` sends PLS1 to
+    R when the port is missing; it never sends an unnamed MLR to the port,
+    because the port's MLR is not byte-identical to R's (see its docstring).
+    So `auto` may bend here only when what it pointed at was the port and R
+    can run the method. The first version of this let `auto` through whenever
+    ANY engine for the method was available, which on a host with a binary
+    and no R accepted an unnamed MLR that the router then handed to an
+    Rscript that was not there -- the deep failure this function exists to
+    prevent. Caught by the review on pull request #124.
+
+    The effect on a host with no binary was that every PLS1 submission naming
+    no engine was refused outright, with the R engine -- the reference
+    implementation -- sitting right there available. That is 17 failures and
+    one error in test_more_servlet_step1, which has been carried in
+    run_all.BASELINE rather than read as the report it was.
     """
     wanted = engineIdFor(method, engine)
     if wanted is None:
         return ("'%s' is not a regulatory model this server offers." % method)
 
     report = describeMOREBackends()
+    serverChose = str(engine or "").strip().lower() in ("", AUTO_ENGINE)
+
     for entry in report["engines"]:
         if entry["id"] != wanted:
             continue
         if entry["available"]:
             return None
+        if serverChose and entry["engine"] == "rust":
+            # Nobody asked for this engine; it is only where `auto` happens to
+            # point, and the router will fall back from the port to R. Let it,
+            # if R can run the method. The R-to-port direction does not exist
+            # in the router, so an unnamed method that lands on a missing R
+            # is refused below, with the port named as the alternative.
+            rEngine = engineIdFor(method, "r")
+            if any(other["id"] == rEngine and other["available"]
+                   for other in report["engines"]):
+                return None
         alternatives = [e["label"] for e in report["engines"] if e["available"]]
         message = "%s is not available on this server. %s" % (
             entry["label"], entry["unavailableReason"])
@@ -1068,7 +1107,14 @@ def fromMOREtoGenes_STEP2(jobInstance, userID, RESPONSE, formFields):
         # engines that agree today can diverge, and a stored analysis that
         # cannot say which one produced it is not reproducible.
         jobInstance.backendUsed = backendName
-        jobInstance.engineId = engineIdFor(jobInstance.method, chosenEngine)
+        # From the backend that actually ran, not from what was asked for. Under
+        # `auto` on a host with no binary, _resolveMOREBackend falls back to R
+        # while engineIdFor(method, "auto") still answers "rust-pls1" -- so the
+        # job recorded backendUsed "R" and engineId "rust-pls1" at the same
+        # time, which is exactly the unreproducible state the stamp exists to
+        # prevent.
+        jobInstance.engineId = engineIdFor(
+            jobInstance.method, "rust" if backendName == "more-rs" else "r")
         cmd = backend + [
             "--target_file", os.path.join(input_dir, target_file),
             "--condition_file", os.path.join(input_dir, jobInstance.conditionsFile),

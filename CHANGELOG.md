@@ -108,9 +108,11 @@ merged them where one exists.
 
 ## PaintOmics 4 and earlier
 
-Release history up to PaintOmics 4 is not restated here. It was recorded in the
-[`CHANGELOG`](CHANGELOG) file in this repository, whose last entry is
-`Changelog (v0.4.4) - 2017-04-28`, and in the papers that describe each release:
+Release history up to PaintOmics 4 is not restated here. It was kept in a
+plain-text `CHANGELOG` file, last written for `v0.4.4` on 2017-04-28 and since
+removed from the tree -- `git log --diff-filter=D -- CHANGELOG` still has every
+line of it if the v0.4.x detail is ever wanted. The papers below are the record
+it pointed at, and they describe each release:
 
 - **PaintOmics 4** — *Nucleic Acids Research* (2022), [10.1093/nar/gkac352](https://doi.org/10.1093/nar/gkac352)
 - **PaintOmics 3** — *Nucleic Acids Research* (2018), [10.1093/nar/gky466](https://doi.org/10.1093/nar/gky466)
