@@ -477,6 +477,16 @@ def engineRefusal(method, engine):
     AVAILABLE entry so the picker opens on something runnable -- the two are
     meant to be one decision with no second opinion to drift.
 
+    That fallback runs in ONE direction. `_resolveMOREBackend` sends PLS1 to
+    R when the port is missing; it never sends an unnamed MLR to the port,
+    because the port's MLR is not byte-identical to R's (see its docstring).
+    So `auto` may bend here only when what it pointed at was the port and R
+    can run the method. The first version of this let `auto` through whenever
+    ANY engine for the method was available, which on a host with a binary
+    and no R accepted an unnamed MLR that the router then handed to an
+    Rscript that was not there -- the deep failure this function exists to
+    prevent. Caught by the review on pull request #124.
+
     The effect on a host with no binary was that every PLS1 submission naming
     no engine was refused outright, with the R engine -- the reference
     implementation -- sitting right there available. That is 17 failures and
@@ -495,11 +505,16 @@ def engineRefusal(method, engine):
             continue
         if entry["available"]:
             return None
-        if serverChose and any(other["method"] == method and other["available"]
-                               for other in report["engines"]):
+        if serverChose and entry["engine"] == "rust":
             # Nobody asked for this engine; it is only where `auto` happens to
-            # point. Something else can run the method, so let it.
-            return None
+            # point, and the router will fall back from the port to R. Let it,
+            # if R can run the method. The R-to-port direction does not exist
+            # in the router, so an unnamed method that lands on a missing R
+            # is refused below, with the port named as the alternative.
+            rEngine = engineIdFor(method, "r")
+            if any(other["id"] == rEngine and other["available"]
+                   for other in report["engines"]):
+                return None
         alternatives = [e["label"] for e in report["engines"] if e["available"]]
         message = "%s is not available on this server. %s" % (
             entry["label"], entry["unavailableReason"])
