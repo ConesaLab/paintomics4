@@ -478,9 +478,13 @@ def write_mongo(code, dbname_docs, xref_docs, kegg_docs, mongo_host, mongo_port)
     db["versions"].drop()
     db["versions"].insert_many([{"name": "KEGG", "date": stamp},
                                 {"name": "MAPPING", "date": stamp}])
-    # Same two indexes the standard build creates (common_build_database.py:3254)
+    # Same indexes the standard build creates (common_build_database.createDatabase):
+    # the two xref lookups, and the pathway `source` index that keeps
+    # /organism_databases from scanning every pathway document
+    # (DatabaseAvailability.PATHWAY_SOURCE_INDEX).
     db.xref.create_index([("dbname_id", ASCENDING), ("_id", ASCENDING)])
     db.xref.create_index([("display_id", ASCENDING)])
+    db.kegg.create_index([("source", ASCENDING)])
     client.close()
 
 

@@ -45,8 +45,10 @@ from src.common import DatabaseAvailability
 
 
 class FakeCollection(object):
-    def __init__(self, sources):
+    def __init__(self, sources, indexLog=None, name=None):
         self._sources = sources
+        self._indexLog = indexLog
+        self._name = name
 
     def distinct(self, field):
         assert field == "source"
@@ -54,10 +56,21 @@ class FakeCollection(object):
             raise RuntimeError("connection refused")
         return list(self._sources)
 
+    def create_index(self, keys):
+        if self._sources is None:
+            raise RuntimeError("connection refused")
+        if self._indexLog is not None:
+            self._indexLog.append((self._name, keys))
+        return "source_1"
+
 
 class FakeDatabase(object):
-    def __init__(self, sources):
-        self.kegg = FakeCollection(sources)
+    def __init__(self, sources, indexLog=None, name=None):
+        self.kegg = FakeCollection(sources, indexLog=indexLog, name=name)
+
+    def __getitem__(self, collection):
+        """pymongo reaches a collection both ways; so does the code under test."""
+        return getattr(self, collection)
 
 
 class FakeClient(object):
@@ -70,9 +83,13 @@ class FakeClient(object):
     def __init__(self, sourcesByDatabase):
         self._sources = sourcesByDatabase
         self.closed = False
+        #: Every create_index call, as (database name, keys). What
+        #: ensurePathwaySourceIndexes is judged on.
+        self.indexes = []
 
     def __getitem__(self, name):
-        return FakeDatabase(self._sources.get(name, []))
+        return FakeDatabase(self._sources.get(name, []),
+                            indexLog=self.indexes, name=name)
 
     def list_database_names(self):
         return list(self._sources)
@@ -306,6 +323,91 @@ class OrganismMapTest(unittest.TestCase):
         finally:
             client.close()
 
+
+class PathwaySourceIndexTest(unittest.TestCase):
+    """distinct("source") must not read every pathway document.
+
+    Without an index on `source` the read is a collection scan of documents
+    that average 17 KB -- 28 MB for hsa -- repeated for every installed
+    organism on every cache miss. /organism_databases, which sweeps all 133
+    organisms on paintomics.uv.es, measured 4.9 s idle and 90 to 957 s under
+    I/O pressure (2026-09-02/03), nginx cut those off at 60 s, and visitors
+    reported the resulting 504 as "Unable to parse the error message". With
+    the index the same distinct is an index-only DISTINCT_SCAN.
+    """
+
+    def setUp(self):
+        DatabaseAvailability.clearCache()
+
+    def test_every_organism_collection_gets_the_source_index(self):
+        client = FakeClient({
+            "mmu-paintomics": ["KEGG", "Reactome"],
+            "ath-paintomics": ["KEGG", "MapMan"],
+            "global-paintomics": [],
+            "admin": [],
+            "PaintomicsDB": [],
+        })
+        indexed = DatabaseAvailability.ensurePathwaySourceIndexes(client)
+
+        self.assertEqual(["ath", "mmu"], indexed)
+        self.assertEqual(
+            sorted([("ath-paintomics", DatabaseAvailability.PATHWAY_SOURCE_INDEX),
+                    ("mmu-paintomics", DatabaseAvailability.PATHWAY_SOURCE_INDEX)]),
+            sorted(client.indexes),
+            "the shared database and the job database are not organisms")
+        self.assertFalse(client.closed, "a caller's connection is not closed for it")
+
+    def test_one_failing_organism_does_not_cost_the_others_their_index(self):
+        client = FakeClient({
+            "mmu-paintomics": ["KEGG"],
+            "bad-paintomics": None,          # create_index raises
+            "ath-paintomics": ["KEGG"],
+        })
+        self.assertEqual(["ath", "mmu"],
+                         DatabaseAvailability.ensurePathwaySourceIndexes(client))
+
+    def test_an_unreachable_mongodb_indexes_nothing_and_does_not_raise(self):
+        class Unreachable(FakeClient):
+            def list_database_names(self):
+                raise RuntimeError("connection refused")
+
+        self.assertEqual([], DatabaseAvailability.ensurePathwaySourceIndexes(
+            Unreachable({})))
+
+    def test_the_live_distinct_is_an_index_scan(self):
+        """Against a real MongoDB when one is running; skipped when not.
+
+        The fakes prove which collections are indexed; this proves the index
+        is the one the query planner picks for the read `_loadedSources`
+        actually issues, on the real collection name and field.
+        """
+        import json
+        try:
+            from pymongo import MongoClient
+            from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT
+            client = MongoClient(MONGODB_HOST, MONGODB_PORT,
+                                 serverSelectionTimeoutMS=1500)
+            client.list_database_names()
+        except Exception as ex:
+            raise unittest.SkipTest("no MongoDB to check against (%s)" % (ex,))
+
+        try:
+            indexed = DatabaseAvailability.ensurePathwaySourceIndexes(client)
+            populated = [organism for organism in indexed
+                         if client[organism + "-paintomics"].kegg.estimated_document_count()]
+            if not populated:
+                raise unittest.SkipTest("no organism with pathways is installed here")
+            for organism in populated:
+                database = client[organism + "-paintomics"]
+                plan = database.command(
+                    "explain", {"distinct": "kegg",
+                                "key": DatabaseAvailability.PATHWAY_SOURCE_INDEX},
+                    verbosity="queryPlanner")
+                self.assertIn("DISTINCT_SCAN", json.dumps(plan, default=str),
+                              "%s: distinct(\"source\") still scans the collection"
+                              % organism)
+        finally:
+            client.close()
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

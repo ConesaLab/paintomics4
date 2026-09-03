@@ -73,6 +73,23 @@ _DB_SUFFIX = "-paintomics"
 #: Not an organism: the shared database that holds cross-organism data.
 _NON_ORGANISM_DATABASES = frozenset(["global" + _DB_SUFFIX])
 
+#: The collection every pathway database writes its pathways into, whatever
+#: the source -- the name predates there being anything but KEGG.
+PATHWAY_COLLECTION = "kegg"
+
+#: The field `_loadedSources` runs distinct() over, and the index that read
+#: needs. Unindexed, distinct is a scan of every pathway document: 17 KB each
+#: on average, 28 MB for hsa, times every installed organism on every cache
+#: miss. On paintomics.uv.es (133 organisms, an 8 GB host in swap) the sweep
+#: behind /organism_databases measured 4.9 s idle and 90 to 957 s under I/O
+#: pressure, nginx cut it off at 60 s, and the visitor saw "Unable to parse
+#: the error message". Indexed, the same distinct is an index-only
+#: DISTINCT_SCAN that touches no document. The installers create it; the
+#: server's startup pass and the nightly cron backfill it for organisms
+#: installed before it existed (ensurePathwaySourceIndexes). The docstring's
+#: "half a millisecond" was measured with 888 documents in cache.
+PATHWAY_SOURCE_INDEX = "source"
+
 #: Installing an organism means running DBManager and, in practice, restarting;
 #: this exists so that a server which is *not* restarted still notices within a
 #: few minutes rather than never. The read it saves is cheap -- what it really
@@ -146,6 +163,57 @@ def _loadedSources(organism, client=None):
             "(%s: %s); falling back to the identifier mappings in "
             "organismDB.py", organism, type(ex).__name__, ex)
         return None
+    finally:
+        if ownClient is not None:
+            ownClient.close()
+
+
+def _organismCodes(databaseNames):
+    """The organism codes among MongoDB's database names, in a stable order."""
+    return sorted(name[:-len(_DB_SUFFIX)] for name in databaseNames
+                  if name.endswith(_DB_SUFFIX) and name not in _NON_ORGANISM_DATABASES)
+
+
+def ensurePathwaySourceIndexes(client=None):
+    """Create the `source` index on every installed organism's pathways.
+
+    Idempotent and near-free once the index exists, so it is safe to call from
+    the server's startup pass and from the nightly cron as well as after an
+    install. One organism that cannot be indexed is logged and skipped rather
+    than costing the others their index; an unreachable MongoDB indexes
+    nothing and does not raise, because neither caller may die of it.
+
+    @param {MongoClient} client, an open connection to reuse; one is opened and
+           closed here when omitted.
+    @returns {List} of the organism codes whose collection now has the index
+    """
+    ownClient = None
+    try:
+        if client is None:
+            from pymongo import MongoClient
+            from src.conf.serverconf import MONGODB_HOST, MONGODB_PORT
+            ownClient = MongoClient(MONGODB_HOST, MONGODB_PORT,
+                                    serverSelectionTimeoutMS=3000)
+            client = ownClient
+        try:
+            names = client.list_database_names()
+        except Exception as ex:
+            logging.warning(
+                "Could not list the installed organisms to index their pathway "
+                "sources (%s: %s)", type(ex).__name__, ex)
+            return []
+
+        indexed = []
+        for organism in _organismCodes(names):
+            try:
+                client[organism + _DB_SUFFIX][PATHWAY_COLLECTION].create_index(
+                    PATHWAY_SOURCE_INDEX)
+                indexed.append(organism)
+            except Exception as ex:
+                logging.warning(
+                    "Could not index pathway sources for organism %s (%s: %s)",
+                    organism, type(ex).__name__, ex)
+        return indexed
     finally:
         if ownClient is not None:
             ownClient.close()
@@ -233,10 +301,7 @@ def getInstalledDatabasesByOrganism(refresh=False):
 
     try:
         availability = {}
-        for name in names:
-            if not name.endswith(_DB_SUFFIX) or name in _NON_ORGANISM_DATABASES:
-                continue
-            organism = name[:-len(_DB_SUFFIX)]
+        for organism in _organismCodes(names):
             availability[organism] = getInstalledDatabases(
                 organism, client=client, refresh=refresh)
         return availability

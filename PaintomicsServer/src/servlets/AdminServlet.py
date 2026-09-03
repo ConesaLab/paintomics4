@@ -28,6 +28,7 @@ import csv
 import psutil
 import subprocess
 from datetime import datetime
+import html
 
 from src.common.UserSessionManager import UserSessionManager
 from src.common.ServerErrorManager import handleException
@@ -761,6 +762,90 @@ def adminServletDeleteReport(request, response, reportID):
         return response
 
 
+#: How the request dialog has always written the organism into its HTML
+#: message: <p><b>Specie:</b> Homo sapiens (human)</p>. Read when a client
+#: cached from before the `specie`/`specieCode` fields sends only that.
+_SPECIE_LABEL = "specie:"
+
+
+def _specieFromMessage(message):
+    """The organism an old client's HTML message names, or None.
+
+    Three plain searches, each linear and each run once. The message is
+    untrusted text of up to MAX_FORM_MEMORY_SIZE, posted without a session,
+    so the regex this replaces (``<b>\\s*Specie:\\s*</b>\\s*(.*?)\\s*</p>``)
+    was an outage waiting for one request: its three quantifiers overlap on
+    whitespace, so a label followed by a run of spaces and no ``</p>`` cost
+    cubic time. Dropping the inner ``\\s*`` still leaves a quadratic scan
+    when the label is repeated, which is why this is not a regex at all.
+    """
+    text = str(message or "")
+    lower = text.lower()
+    label = lower.find(_SPECIE_LABEL)
+    if label < 0:
+        return None
+    boldEnd = lower.find("</b>", label)
+    if boldEnd < 0 or lower[label + len(_SPECIE_LABEL):boldEnd].strip():
+        return None
+    paragraphEnd = lower.find("</p>", boldEnd)
+    if paragraphEnd < 0:
+        return None
+    return text[boldEnd + len("</b>"):paragraphEnd].strip()
+
+
+def _normaliseOrganismName(name):
+    return " ".join(str(name or "").split()).lower()
+
+
+def installedOrganisms():
+    """The organisms the step 1 combo offers: KEGG_DATA_DIR/current/species.json.
+
+    That file is what DBManager wrote when it last installed something, and it
+    is what the combo is loaded from -- so an organism in it is one the
+    visitor can pick right now, which is the sense of "installed" a request
+    dialog has to refuse. Unreadable means an empty list, never an error: a
+    request that gets through is a nuisance, a request that cannot be made is
+    a lost organism.
+    """
+    try:
+        with open(os_path.join(KEGG_DATA_DIR, "current", "species.json")) as handle:
+            species = json.load(handle).get("species") or []
+        return [organism for organism in species
+                if isinstance(organism, dict) and organism.get("value")]
+    except Exception as ex:
+        logging.warning("Could not read the installed organisms from species.json "
+                        "(%s: %s); organism requests are not screened", type(ex).__name__, ex)
+        return []
+
+
+def _installedOrganism(specieName, specieCode, message):
+    """The installed organism a request names, or None when it names none.
+
+    Matched by code first (what the dialog sends when a row was picked), then
+    by display name, whitespace and case aside (what the dialog sends when
+    the visitor typed), then by the name against the code, for a visitor who
+    typed "hsa" into a field that shows names.
+    """
+    name = specieName
+    if not name and message:
+        found = _specieFromMessage(message)
+        if found:
+            name = html.unescape(found)
+    code = str(specieCode or "").strip().lower()
+    name = _normaliseOrganismName(name)
+    if not code and not name:
+        return None
+
+    for organism in installedOrganisms():
+        organismCode = str(organism.get("value")).strip().lower()
+        organismName = _normaliseOrganismName(organism.get("name"))
+        if code and code == organismCode:
+            return organism
+        if name and name in (organismName, organismCode):
+            return organism
+    return None
+
+
 def adminServletSendReport(request, response, ROOT_DIRECTORY):
     """
     This function...
@@ -794,6 +879,19 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
 
         request_type = formFields.get("type")
         _message = formFields.get("message")
+
+        if request_type == "specie_request":
+            installed = _installedOrganism(formFields.get("specie"),
+                                           formFields.get("specieCode"), _message)
+            if installed is not None:
+                logging.info("Organism request for %s (%s) refused: already installed",
+                             installed["name"], installed["value"])
+                response.setContent({
+                    "success": False, "installed": True,
+                    "organism": installed["name"], "code": installed["value"],
+                    "errorMessage": installed["name"] + " is already installed. "
+                    "Choose it in the Organism field of the form; no request is needed."})
+                return response
 
         subject = "Other request"
         title = "<h1>Other request</h1>"

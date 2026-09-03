@@ -780,6 +780,10 @@ def _write(code, documents, networks, mongo_host, mongo_port):
 
     removed = database[PATHWAY_COLLECTION].delete_many({"source": SOURCE_NAME})
     database[PATHWAY_COLLECTION].insert_many(documents)
+    # The KEGG build creates this index; an organism restored from a dump or
+    # built before it existed may not have it, and this is the write that
+    # adds a second `source` value for DatabaseAvailability to find.
+    database[PATHWAY_COLLECTION].create_index("source")
     logger.info("%s: replaced %d OmniPath pathways with %d",
                 code, removed.deleted_count, len(documents))
 

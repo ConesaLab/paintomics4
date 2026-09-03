@@ -979,13 +979,31 @@ function extJSErrorHandler(form, responseObj) {
 }
 
 
-function sendReportMessage(type, message, fromEmail, fromName) {
+/**
+ * POST a report, organism request or contact message to the developers.
+ *
+ * `extra` is merged into the form as further fields -- the organism request
+ * sends the organism as `specie` and `specieCode` beside the HTML message it
+ * always sent, so the servlet can refuse one that is already installed
+ * without parsing HTML. That refusal comes back as success=false with
+ * installed=true, and is shown as a warning: showErrorMessage's dialog offers
+ * a "report this error" button, which turned a refusal into an invitation to
+ * file an error report about it.
+ */
+function sendReportMessage(type, message, fromEmail, fromName, extra) {
     showInfoMessage("Sending message to developers...", {logMessage: "Sending new report...", showSpin: true});
     $.ajax({
         type: "POST", headers: {"Content-Encoding": "gzip"},
         url: SERVER_URL_DM_SEND_REPORT,
-        data: {type: type, message: message, fromEmail: fromEmail, fromName: fromName},
+        data: $.extend({type: type, message: message, fromEmail: fromEmail, fromName: fromName}, extra || {}),
         success: function (response) {
+            if (response.success === false && response.installed === true) {
+                showWarningMessage(response.organism + " is already installed", {
+                    message: response.errorMessage, showButton: true,
+                    logMessage: "Organism request refused: " + response.organism + " is installed"
+                });
+                return;
+            }
             if (response.success === false) {
                 showErrorMessage(response.errorMessage);
                 return;

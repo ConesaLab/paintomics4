@@ -117,8 +117,12 @@ PUBLISHED = {
     # user's doing -- extJSErrorHandler's CLIENT_INVALID, which is only reached
     # after checkForm()/isValid() already approved the form, so it means ExtJS
     # refused something the app had just passed. That is #109's shape.
+    # v=2.9 lets sendReportMessage carry extra form fields (the organism
+    # request sends specie/specieCode beside its HTML) and shows the
+    # servlet's "already installed" refusal as a warning, not the error
+    # dialog with its report button. That is #130's shape.
     "app/view/common/Util.js": (
-        "2.8", "5e32bd98a485def921b7c64292bc735e43c08381871632e18e3d2202d27bd1f5"),
+        "2.9", "69c3bdaa628db402fd8e707c9a1d679b331df548301bf26316c8bebdfcddafaf"),
     "app/view/common/OrganismSearch.js": (
         "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
     "app/view/common/ExtJS_extensions.js": (
