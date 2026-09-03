@@ -33,6 +33,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -174,6 +175,32 @@ class OrganismRequestTest(unittest.TestCase):
         self.assertEqual("mmu", response.content["code"])
         self.assertEqual([], self._stored())
 
+    def test_an_old_client_message_is_read_in_bounded_time(self):
+        """The message is untrusted text of up to MAX_FORM_MEMORY_SIZE, posted
+        without a session. Reading the organism out of it was a regex with
+        three quantifiers overlapping on whitespace: a label followed by a run
+        of spaces and no </p> cost cubic time, so one request pinned a worker
+        for hours. Dropping the inner \\s* leaves a quadratic scan when the
+        label repeats. Run in a subprocess so a regression fails on a timeout
+        instead of hanging the suite."""
+        probe = (
+            "import sys\n"
+            "sys.path.insert(0, %r)\n"
+            "import test_organism_request_rejects_installed as suite\n"
+            "servlet = suite.AdminServlet\n"
+            "assert servlet._installedOrganism(None, None, '<p><b>Specie:</b>' + ' ' * 20000) is None\n"
+            "assert servlet._installedOrganism(None, None, '<b>Specie:</b>' * 200000) is None\n"
+            "print('bounded')\n"
+        ) % HERE
+        try:
+            result = subprocess.run([sys.executable, "-c", probe], capture_output=True,
+                                    text=True, timeout=20)
+        except subprocess.TimeoutExpired:
+            self.fail("reading the organism out of a 20 kB whitespace run and a "
+                      "2.8 MB run of repeated labels did not finish in 20 s")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("bounded", result.stdout)
+
     # -- allowed -------------------------------------------------------------
 
     def test_an_organism_that_is_not_installed_goes_through(self):
@@ -208,6 +235,25 @@ CLIENT = os.path.join(REPO, "PaintomicsClient", "public_html")
 def _read(*parts):
     with io.open(os.path.join(CLIENT, *parts), encoding="utf-8") as handle:
         return handle.read()
+
+
+class OldClientMessageTest(unittest.TestCase):
+    """_specieFromMessage reads <p><b>Specie:</b> name</p> and nothing else."""
+
+    def test_reads_the_name_between_the_label_and_the_end_of_its_paragraph(self):
+        self.assertEqual("Homo sapiens (human)", AdminServlet._specieFromMessage(
+            "<p><b>Specie:</b> Homo sapiens (human)</p><p><b>Comments:</b>hi</p>"))
+
+    def test_the_label_is_read_whatever_its_case_or_spacing(self):
+        self.assertEqual("Mus musculus", AdminServlet._specieFromMessage(
+            "<p><b> SPECIE: </b>\n Mus musculus \n</p>"))
+
+    def test_a_message_that_does_not_carry_the_label_names_nothing(self):
+        for message in (None, "", "<p>hello</p>",
+                        "<b>Specie:</b> hsa",             # no paragraph end
+                        "<b>Specie: hsa</b> x</p>",       # text inside the label
+                        "Specie: hsa</p>"):               # no bold end
+            self.assertIsNone(AdminServlet._specieFromMessage(message), repr(message))
 
 
 class DialogWiringTest(unittest.TestCase):

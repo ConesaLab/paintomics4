@@ -29,7 +29,6 @@ import psutil
 import subprocess
 from datetime import datetime
 import html
-import re
 
 from src.common.UserSessionManager import UserSessionManager
 from src.common.ServerErrorManager import handleException
@@ -766,7 +765,32 @@ def adminServletDeleteReport(request, response, reportID):
 #: How the request dialog has always written the organism into its HTML
 #: message: <p><b>Specie:</b> Homo sapiens (human)</p>. Read when a client
 #: cached from before the `specie`/`specieCode` fields sends only that.
-_SPECIE_IN_MESSAGE = re.compile(r"<b>\s*Specie:\s*</b>\s*(.*?)\s*</p>", re.I | re.S)
+_SPECIE_LABEL = "specie:"
+
+
+def _specieFromMessage(message):
+    """The organism an old client's HTML message names, or None.
+
+    Three plain searches, each linear and each run once. The message is
+    untrusted text of up to MAX_FORM_MEMORY_SIZE, posted without a session,
+    so the regex this replaces (``<b>\\s*Specie:\\s*</b>\\s*(.*?)\\s*</p>``)
+    was an outage waiting for one request: its three quantifiers overlap on
+    whitespace, so a label followed by a run of spaces and no ``</p>`` cost
+    cubic time. Dropping the inner ``\\s*`` still leaves a quadratic scan
+    when the label is repeated, which is why this is not a regex at all.
+    """
+    text = str(message or "")
+    lower = text.lower()
+    label = lower.find(_SPECIE_LABEL)
+    if label < 0:
+        return None
+    boldEnd = lower.find("</b>", label)
+    if boldEnd < 0 or lower[label + len(_SPECIE_LABEL):boldEnd].strip():
+        return None
+    paragraphEnd = lower.find("</p>", boldEnd)
+    if paragraphEnd < 0:
+        return None
+    return text[boldEnd + len("</b>"):paragraphEnd].strip()
 
 
 def _normaliseOrganismName(name):
@@ -804,9 +828,9 @@ def _installedOrganism(specieName, specieCode, message):
     """
     name = specieName
     if not name and message:
-        found = _SPECIE_IN_MESSAGE.search(message)
+        found = _specieFromMessage(message)
         if found:
-            name = html.unescape(found.group(1))
+            name = html.unescape(found)
     code = str(specieCode or "").strip().lower()
     name = _normaliseOrganismName(name)
     if not code and not name:
