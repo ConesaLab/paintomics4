@@ -3491,6 +3491,12 @@ def createDatabase():
 
         db.xref.create_index([("dbname_id", ASCENDING),("_id", ASCENDING)])
         db.xref.create_index([("display_id", ASCENDING)])
+        # DatabaseAvailability reads distinct("source") from every organism
+        # on every /organism_databases cache miss; without this index that
+        # is a scan of every pathway document (DatabaseAvailability.
+        # PATHWAY_SOURCE_INDEX has the numbers). mongoimport recreated the
+        # collection just above, so the index has to be recreated here.
+        db.kegg.create_index([("source", ASCENDING)])
 
     except CalledProcessError as ex:
         raise ex

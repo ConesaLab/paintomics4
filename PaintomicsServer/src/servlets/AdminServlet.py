@@ -28,6 +28,8 @@ import csv
 import psutil
 import subprocess
 from datetime import datetime
+import html
+import re
 
 from src.common.UserSessionManager import UserSessionManager
 from src.common.ServerErrorManager import handleException
@@ -761,6 +763,65 @@ def adminServletDeleteReport(request, response, reportID):
         return response
 
 
+#: How the request dialog has always written the organism into its HTML
+#: message: <p><b>Specie:</b> Homo sapiens (human)</p>. Read when a client
+#: cached from before the `specie`/`specieCode` fields sends only that.
+_SPECIE_IN_MESSAGE = re.compile(r"<b>\s*Specie:\s*</b>\s*(.*?)\s*</p>", re.I | re.S)
+
+
+def _normaliseOrganismName(name):
+    return " ".join(str(name or "").split()).lower()
+
+
+def installedOrganisms():
+    """The organisms the step 1 combo offers: KEGG_DATA_DIR/current/species.json.
+
+    That file is what DBManager wrote when it last installed something, and it
+    is what the combo is loaded from -- so an organism in it is one the
+    visitor can pick right now, which is the sense of "installed" a request
+    dialog has to refuse. Unreadable means an empty list, never an error: a
+    request that gets through is a nuisance, a request that cannot be made is
+    a lost organism.
+    """
+    try:
+        with open(os_path.join(KEGG_DATA_DIR, "current", "species.json")) as handle:
+            species = json.load(handle).get("species") or []
+        return [organism for organism in species
+                if isinstance(organism, dict) and organism.get("value")]
+    except Exception as ex:
+        logging.warning("Could not read the installed organisms from species.json "
+                        "(%s: %s); organism requests are not screened", type(ex).__name__, ex)
+        return []
+
+
+def _installedOrganism(specieName, specieCode, message):
+    """The installed organism a request names, or None when it names none.
+
+    Matched by code first (what the dialog sends when a row was picked), then
+    by display name, whitespace and case aside (what the dialog sends when
+    the visitor typed), then by the name against the code, for a visitor who
+    typed "hsa" into a field that shows names.
+    """
+    name = specieName
+    if not name and message:
+        found = _SPECIE_IN_MESSAGE.search(message)
+        if found:
+            name = html.unescape(found.group(1))
+    code = str(specieCode or "").strip().lower()
+    name = _normaliseOrganismName(name)
+    if not code and not name:
+        return None
+
+    for organism in installedOrganisms():
+        organismCode = str(organism.get("value")).strip().lower()
+        organismName = _normaliseOrganismName(organism.get("name"))
+        if code and code == organismCode:
+            return organism
+        if name and name in (organismName, organismCode):
+            return organism
+    return None
+
+
 def adminServletSendReport(request, response, ROOT_DIRECTORY):
     """
     This function...
@@ -794,6 +855,19 @@ def adminServletSendReport(request, response, ROOT_DIRECTORY):
 
         request_type = formFields.get("type")
         _message = formFields.get("message")
+
+        if request_type == "specie_request":
+            installed = _installedOrganism(formFields.get("specie"),
+                                           formFields.get("specieCode"), _message)
+            if installed is not None:
+                logging.info("Organism request for %s (%s) refused: already installed",
+                             installed["name"], installed["value"])
+                response.setContent({
+                    "success": False, "installed": True,
+                    "organism": installed["name"], "code": installed["value"],
+                    "errorMessage": installed["name"] + " is already installed. "
+                    "Choose it in the Organism field of the form; no request is needed."})
+                return response
 
         subject = "Other request"
         title = "<h1>Other request</h1>"

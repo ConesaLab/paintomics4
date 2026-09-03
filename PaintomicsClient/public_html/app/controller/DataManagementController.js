@@ -279,6 +279,67 @@ this.submitForm = function (URL, form) {
  * now where it is needed: inside the Comments box, as its placeholder.
  */
 this.requestNewSpecieHandler = function(){
+	/* What is installed here: the same species.json the step 1 Organism combo
+	   is drawn from, so an organism this dialog refuses is one the visitor can
+	   pick on the form behind it. On 2026-09-03 a visitor requested Homo
+	   sapiens on paintomics.uv.es, where hsa has been installed for years --
+	   the dialog offered every organism in KEGG and let them ask for what they
+	   already had. Fetched per opening (a few KB, cached by the browser);
+	   never rejects, so an unreachable list degrades to the old dialog rather
+	   than to no dialog. The servlet checks again: this file is cached
+	   JavaScript and the POST can be made without it. */
+	var installed = {byCode: {}, byName: {}};
+	var installedReady = $.Deferred();
+	function normaliseName(name) {
+		return String(name == null ? "" : name).replace(/\s+/g, " ").replace(/^ | $/g, "").toLowerCase();
+	}
+	/* The installed organism a name/code pair denotes, or null. By code when a
+	   row was picked; by name when the visitor typed, and by name-as-code for
+	   a visitor who typed "hsa" into a field that shows names. */
+	function installedOrganismFor(name, code) {
+		var codeKey = String(code == null ? "" : code).toLowerCase(), nameKey = normaliseName(name);
+		if (codeKey && installed.byCode.hasOwnProperty(codeKey)) return installed.byCode[codeKey];
+		if (nameKey && installed.byName.hasOwnProperty(nameKey)) return installed.byName[nameKey];
+		if (nameKey && installed.byCode.hasOwnProperty(nameKey)) return installed.byCode[nameKey];
+		return null;
+	}
+	$.getJSON(SERVER_URL_GET_AVAILABLE_SPECIES)
+		.done(function(response) {
+			Ext.Array.each((response && response.species) || [], function(organism) {
+				if (organism == null || organism.value == null) return;
+				installed.byCode[String(organism.value).toLowerCase()] = organism;
+				installed.byName[normaliseName(organism.name)] = organism;
+			});
+		})
+		.always(function() { installedReady.resolve(installed); });
+
+	var requestStore = Ext.create('Ext.data.ArrayStore', {
+		fields: ['name', 'value'],
+		autoLoad: true,
+		proxy: {
+			type: 'ajax',
+			//TODO: MOVE THIS FILE TO KEGG_DATA FOLDER AND UPDATE
+			url: "resources/data/all_species.json",
+			reader: {
+				type: 'json',
+				root: 'species',
+				successProperty: 'success'
+			}
+		}
+	});
+	/* Installed organisms are not offered: the list is what can be requested.
+	   A filter rather than a second file, so the check lives in one place and
+	   the ~9,000-row list is downloaded once. Kept in the store's own filter
+	   set beside the combo's query filter (OrganismSearch.js), and re-run when
+	   the installed list lands, whichever of the two downloads finishes first. */
+	requestStore.addFilter(new Ext.util.Filter({
+		id: "installed-organisms",
+		filterFn: function(record) {
+			return installedOrganismFor(record.get('name'), record.get('value')) === null;
+		}
+	}), false);
+	installedReady.done(function() { requestStore.filter(); });
+
 	var messageDialog = Ext.create('Ext.window.Window', {
 		title: "Request an organism",
 		/* No height: the window shrink-wraps its two fields. It was 400px for
@@ -300,7 +361,8 @@ this.requestNewSpecieHandler = function(){
 				xtype: "box", cls: "po-dialog-intro",
 				html: '<p>Any organism in KEGG can be installed &mdash; ' +
 					'<a href="https://www.genome.jp/kegg/catalog/org_list.html"' +
-					' target="_blank" rel="noopener">see the full list</a>.</p>'
+					' target="_blank" rel="noopener">see the full list</a>. ' +
+					'Organisms already installed here are not listed: pick those in the Organism field of the form.</p>'
 			},
 			{
 				xtype: 'organismcombo', fieldLabel: 'Organism', name: 'specie',
@@ -310,20 +372,19 @@ this.requestNewSpecieHandler = function(){
 				displayField: 'name',
 				valueField: 'name',
 				editable: true,
-				store: Ext.create('Ext.data.ArrayStore', {
-					fields: ['name', 'value'],
-					autoLoad: true,
-					proxy: {
-						type: 'ajax',
-						//TODO: MOVE THIS FILE TO KEGG_DATA FOLDER AND UPDATE
-						url: "resources/data/all_species.json",
-						reader: {
-							type: 'json',
-							root: 'species',
-							successProperty: 'success'
-						}
-					}
-				})
+				store: requestStore,
+				listeners: {
+					/* The hint answers the value as typed; retyping clears it. */
+					change: function() { messageDialog.queryById('installedHint').hide(); }
+				}
+			},
+			{
+				/* Shown, in place of sending, when the chosen organism is one the
+				   form already offers. The dialog stays open with the choice in
+				   it, so the visitor can read the hint and pick something else. */
+				xtype: "box", itemId: "installedHint", cls: "po-dialog-hint",
+				hidden: true, html: "",
+				style: "color:#b5541c; margin:-8px 0 12px 0; font-size:13px;"
 			},
 			{
 				xtype: 'textareafield', name: 'comments', itemId: 'commentsTextArea',
@@ -342,10 +403,25 @@ this.requestNewSpecieHandler = function(){
 				text: 'Send request',
 				cls: 'po-dialog-primary',
 				handler : function() {
+					var combo = messageDialog.queryById('speciesCombobox');
+					var specie = combo.getValue();
+					/* valueField is the name, so the code comes from the row --
+					   when there is one: the field is free text for organisms
+					   KEGG lists under a name the file does not. */
+					var record = combo.findRecordByValue(specie);
+					var specieCode = record ? record.get('value') : "";
+					var already = installedOrganismFor(specie, specieCode);
+					if (already !== null) {
+						var hint = messageDialog.queryById('installedHint');
+						hint.update('<i class="fa fa-info-circle"></i> ' + Ext.String.htmlEncode(already.name) +
+							' is already installed &mdash; choose it in the Organism field of the form. No request is needed.');
+						hint.show();
+						return;
+					}
 					var type = "specie_request";
-					var message= "<p><b>Specie:</b> " + messageDialog.queryById('speciesCombobox').getValue()+ "</p><p><b>Comments:</b>" +  messageDialog.queryById('commentsTextArea').getValue() + "</p>";
+					var message= "<p><b>Specie:</b> " + specie + "</p><p><b>Comments:</b>" +  messageDialog.queryById('commentsTextArea').getValue() + "</p>";
 					messageDialog.close();
-					sendReportMessage(type, message);
+					sendReportMessage(type, message, undefined, undefined, {specie: specie, specieCode: specieCode});
 				}
 			},
 			{text: 'Cancel', handler : function() {messageDialog.close();}}

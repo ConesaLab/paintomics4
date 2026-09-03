@@ -1059,6 +1059,7 @@ class Application(object):
         # closed. Daemon so it can never keep a shutting-down process alive.
         def createIndexes():
             from src.AdminTools.scripts.clean_databases import JOBID_INDEXES
+            from src.common import DatabaseAvailability
             from src.common.DBmanager import getSharedClient
             from src.conf.serverconf import MONGODB_DATABASE
             try:
@@ -1070,6 +1071,14 @@ class Application(object):
                 # An unreachable database must not stop the server from
                 # serving; it did not before this call existed.
                 logging.warning("Could not ensure jobID indexes at startup: " + str(ex))
+
+            # Same thread, same reasoning: the organisms installed before the
+            # pathway `source` index existed get it here, once, so that
+            # /organism_databases stops scanning their pathway documents.
+            # Never raises; it logs the organism it could not index and goes
+            # on to the next.
+            indexed = DatabaseAvailability.ensurePathwaySourceIndexes(getSharedClient())
+            logging.info("Pathway source index ensured for %d organisms.", len(indexed))
 
         import threading
         threading.Thread(target=createIndexes, name="ensureIndexes", daemon=True).start()

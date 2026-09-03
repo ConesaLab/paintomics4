@@ -430,6 +430,15 @@ def rebuildIndexes(connection):
             log("Failed to create index " + str(keys) + " on " + collectionName + ": " + str(err))
     log("jobID indexes created.")
 
+    # The per-organism pathway `source` index, for the same reason the jobID
+    # indexes are here: a deployment restored from a dump, or an organism
+    # installed by a build that predates the index, must not wait for a
+    # rebuild. Idempotent; see DatabaseAvailability.PATHWAY_SOURCE_INDEX.
+    from src.common import DatabaseAvailability
+    log("Creating pathway source indexes...")
+    indexed = DatabaseAvailability.ensurePathwaySourceIndexes(connection)
+    log("Pathway source index ensured for " + str(len(indexed)) + " organisms.")
+
 def log(msg):
     print(msg)
     frame,filename,line_number,function_name,lines,index=inspect.getouterframes(inspect.currentframe())[1]
