@@ -472,9 +472,19 @@ class _RegulationTable(object):
     """
 
     def __init__(self, regulationData):
-        self.columns = list((regulationData or {}).get("columns") or [])
-        self.rows = list((regulationData or {}).get("rows") or [])
-        self.symbols = dict((regulationData or {}).get("symbols") or {})
+        # A job that never ran MORE stores this field as null. DAO.adaptBSON
+        # turns every None leaf into the string "None" on load, so what arrives
+        # here is "None" (truthy), not None -- and `("None" or {}).get(...)`
+        # called .get on a str, raising `'str' object has no attribute 'get'`.
+        # On paintomics.uv.es that surfaced as a 400 on /pa_pathway_evidence for
+        # the Step 4 diagram of every MORE-less job (the common case). Treat any
+        # non-dict as "no regulation" -- the same guard pa_recover_job already
+        # applies to these adaptBSON'd fields.
+        if not isinstance(regulationData, dict):
+            regulationData = {}
+        self.columns = list(regulationData.get("columns") or [])
+        self.rows = list(regulationData.get("rows") or [])
+        self.symbols = dict(regulationData.get("symbols") or {})
 
         index = {name: position for position, name in enumerate(self.columns)}
         self._target = index.get("targetF")

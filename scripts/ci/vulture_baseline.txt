@@ -250,6 +250,7 @@ PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'Evide
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'KeggRelationGraph' (60% confidence)
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'PrintedObstacles' (60% confidence)
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'ReactomeRelationGraph' (60% confidence)
+PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'RegulationTableToleratesLoadedNone' (60% confidence)
 PaintomicsServer/src/tests/test_pathway_evidence_sources.py: unused class 'TranslatedSource' (60% confidence)
 PaintomicsServer/src/tests/test_quote_source_covers_full_text.py: unused class 'QuoteSourceCoversFullText' (60% confidence)
 PaintomicsServer/src/tests/test_reactome_matches_get_symbol_names.py: unused class 'ReactomeMatchesGetSymbolNames' (60% confidence)
