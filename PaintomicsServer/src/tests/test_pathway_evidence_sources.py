@@ -338,5 +338,40 @@ class TranslatedSource(unittest.TestCase):
         self.assertFalse(source.knows("anything"))
 
 
+class RegulationTableToleratesLoadedNone(unittest.TestCase):
+    """The stored MORE table survives DAO.adaptBSON's None -> "None".
+
+    A job with no MORE analysis stores ``regulationPerConditionData`` as null.
+    DAO.adaptBSON turns every None leaf into the string ``"None"`` on load, so
+    the evidence overlay receives the string, not None -- and ``("None" or {})``
+    is truthy, so the old ``(regulationData or {}).get(...)`` called ``.get`` on
+    a str. On paintomics.uv.es that surfaced as a 400 with
+    ``'str' object has no attribute 'get'`` on /pa_pathway_evidence for every
+    Step 4 diagram of a job that never ran MORE (the common case), which is 43%
+    of all evidence requests in the production log.
+    """
+
+    def test_string_none_is_not_usable_and_does_not_raise(self):
+        table = PathwayEvidence._RegulationTable("None")
+        self.assertFalse(table.usable)
+        self.assertEqual(table.rows, [])
+        self.assertEqual(table.columns, [])
+        self.assertEqual(table.conditionNames, [])
+
+    def test_python_none_is_not_usable(self):
+        self.assertFalse(PathwayEvidence._RegulationTable(None).usable)
+
+    def test_any_other_non_dict_is_treated_as_empty(self):
+        for value in ("", "[]", [], 0, 3.5):
+            self.assertFalse(PathwayEvidence._RegulationTable(value).usable)
+
+    def test_a_real_dict_still_reads(self):
+        table = PathwayEvidence._RegulationTable(
+            {"columns": ["targetF", "regulator", "Group_C1"],
+             "rows": [["t1", "r1", "0.5"]]})
+        self.assertTrue(table.usable)
+        self.assertEqual(table.conditionNames, ["C1"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
