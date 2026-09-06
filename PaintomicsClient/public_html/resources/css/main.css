@@ -2527,26 +2527,32 @@ body > .x-mask {
    so the disc takes its tone from whatever header it sits on. Hover and press
    answer to `.x-tool-over` / `.x-tool-pressed`, the classes ExtJS sets on the
    wrapper, so the visual state and the framework's agree. dark.css restates
-   the colours for the dark theme; the drawings are shared. */
+   the colours for the dark theme; the drawings are shared.
+
+   One panel opts out. Step 3's MORE network panel (`.more-net-panel`, a
+   card on the page rather than a window) draws its own collapse control
+   in more-network.css - a Font Awesome chevron on a rounded chip - and a
+   disc under that chip would be two controls in one. The panel selectors
+   here exclude it by name; the window selectors need no exception. */
 .x-window .x-tool,
-.x-panel-header-default .x-tool {
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool {
 	background-color: rgba(120, 120, 128, 0.16);
 	border-radius: 50%;
 	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.16);
 	transition: background-color var(--pa-transition), box-shadow var(--pa-transition);
 }
 .x-window .x-tool-over,
-.x-panel-header-default .x-tool-over {
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-over {
 	background-color: rgba(120, 120, 128, 0.28);
 	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.28);
 }
 .x-window .x-tool-pressed,
-.x-panel-header-default .x-tool-pressed {
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-pressed {
 	background-color: rgba(120, 120, 128, 0.36);
 	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.36);
 }
 .x-window .x-tool .x-tool-img,
-.x-panel-header-default .x-tool .x-tool-img {
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool .x-tool-img {
 	opacity: 1;
 	margin: -0.5px 0 0 -0.5px;
 	background-color: #5F5F66;
@@ -2558,8 +2564,8 @@ body > .x-mask {
 }
 .x-window .x-tool-over .x-tool-img,
 .x-window .x-tool-pressed .x-tool-img,
-.x-panel-header-default .x-tool-over .x-tool-img,
-.x-panel-header-default .x-tool-pressed .x-tool-img {
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-over .x-tool-img,
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-pressed .x-tool-img {
 	opacity: 1;
 	background-color: #3F3F46;
 }

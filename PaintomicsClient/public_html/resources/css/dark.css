@@ -725,28 +725,28 @@
  * the img's background colour, so this is colours only; the drawings are not
  * repeated here. */
 [data-theme="dark"] .x-window .x-tool,
-[data-theme="dark"] .x-panel-header-default .x-tool {
+[data-theme="dark"] .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool {
 	background-color: rgba(120, 120, 128, 0.36);
 	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.36);
 }
 [data-theme="dark"] .x-window .x-tool-over,
-[data-theme="dark"] .x-panel-header-default .x-tool-over {
+[data-theme="dark"] .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-over {
 	background-color: rgba(120, 120, 128, 0.48);
 	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.48);
 }
 [data-theme="dark"] .x-window .x-tool-pressed,
-[data-theme="dark"] .x-panel-header-default .x-tool-pressed {
+[data-theme="dark"] .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-pressed {
 	background-color: rgba(120, 120, 128, 0.56);
 	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.56);
 }
 [data-theme="dark"] .x-window .x-tool .x-tool-img,
-[data-theme="dark"] .x-panel-header-default .x-tool .x-tool-img {
+[data-theme="dark"] .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool .x-tool-img {
 	background-color: #E5E5EA;
 }
 [data-theme="dark"] .x-window .x-tool-over .x-tool-img,
 [data-theme="dark"] .x-window .x-tool-pressed .x-tool-img,
-[data-theme="dark"] .x-panel-header-default .x-tool-over .x-tool-img,
-[data-theme="dark"] .x-panel-header-default .x-tool-pressed .x-tool-img {
+[data-theme="dark"] .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-over .x-tool-img,
+[data-theme="dark"] .x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-pressed .x-tool-img {
 	background-color: #FFFFFF;
 }
 [data-theme="dark"] .x-mask { background-color: var(--pa-scrim); }
