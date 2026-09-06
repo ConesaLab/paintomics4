@@ -125,8 +125,12 @@ PUBLISHED = {
         "2.9", "69c3bdaa628db402fd8e707c9a1d679b331df548301bf26316c8bebdfcddafaf"),
     "app/view/common/OrganismSearch.js": (
         "1.0", "7903626835e7703bdb6a1e31b78e3ca00539eee23b8fa67a37524cd9cc4d2e7f"),
+    # v=0.8 turns off ExtJS's own shadow element under every window
+    # (`shadow: false` on Ext.window.Window): main.css draws the window's
+    # shadow, and the framework's 5px-radius one only showed as a grey box
+    # under each 8px corner. That is #132's shape.
     "app/view/common/ExtJS_extensions.js": (
-        "0.7", "f1e68f670cc56064fc15649d259004ccbd96f49181ced049cffbe62c29bf1d80"),
+        "0.8", "c463dffb7cf4a73991e61fdc6d5f2a367ae1c9a5710a017cf1d89b90ef355ca3"),
     "app/view/common/CookieConsent.js": (
         "1.0", "e170c539dea089b0d88e090becd968d43a699aa319dbd02e681b75384a57f403"),
     "app/view/common/upload/Panel.js": (
