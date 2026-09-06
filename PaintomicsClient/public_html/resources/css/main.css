@@ -2458,33 +2458,142 @@ body > .x-mask {
    upload dialogs with a white title on a near-white bar. */
 .x-window-default > .x-window-header .x-header-text {
 	color: #222;
+	/* Neptune sets the title in 13px bold Arial, the one place in the app
+	   still doing so; the rest of the chrome is Source Sans, and next to the
+	   close disc below the mismatch showed. Same weight the example picker's
+	   window title already uses (.po-example-window, further down). */
+	font-family: var(--pa-font-sans);
+	font-size: 14px;
+	font-weight: 600;
 }
 
-/* The close control is an <img> whose glyph comes from a sprite laid over a
-   background *colour* - Neptune fills it #3892d3, which was invisible against
-   the old blue header and is a saturated dot against the new light one.
+/* ExtJS focuses the window element itself when a window opens, and the global
+   :focus-visible rule near the top of this file then draws its 3px ring around
+   the whole dialog - a blue frame hugging the rounded corners, as if the
+   dialog were one enormous button. .userViewsDialog already suppresses this
+   on the account window; every other window gets the same treatment here. A
+   focus ring belongs on the control the keyboard is about to act on, and the
+   first Tab lands there with its own ring intact. `!important` because the
+   global rule carries one. */
+.x-window:focus,
+.x-window:focus-visible {
+	outline: none !important;
+}
 
-   Only the fill changes. Blanking the sprite instead was tried and is wrong
-   twice over: it leaves a bare coloured square, and an <img> is a replaced
-   element so it cannot carry the ::before/::after that would redraw the ✕.
-   A muted grey keeps the knocked-out glyph legible and stops the control from
-   being the brightest thing in a header whose whole point is now to be quiet. */
-.x-window .x-tool-img.x-tool-close,
-.x-window .x-tool-img.x-tool-pin,
-.x-window .x-tool-img.x-tool-unpin,
-.x-window .x-tool-img.x-tool-plus,
-.x-window .x-tool-img.x-tool-minus {
-	background-color: #8A8B92;
-	border-radius: 3px;
+/* The header takes the window's top radius (above); the body and any docked
+   footer take the bottom one, for the same reason. A window's overflow is
+   visible - Neptune needs it so for the resize handles - so a child with
+   square corners paints past the rounded border, and each bottom corner had
+   a pale nub of body or toolbar sticking out beyond the curve into the scrim.
+   The message dialog has no header (Util.js builds its own title inside the
+   body) so its body takes all four. */
+.x-window-default > .x-window-body,
+.x-window-default > .x-toolbar-docked-bottom {
+	border-radius: 0 0 var(--pa-radius) var(--pa-radius);
+}
+#messageDialog > .x-window-body {
+	border-radius: var(--pa-radius);
+}
+
+/* Header tools - the close control above all - drawn the way a sheet's close
+   button is drawn on Apple's platforms: a quiet grey disc with a thin dark
+   glyph, not a filled square with a white glyph knocked out of it.
+
+   Two elements share the work. The disc is the tool wrapper, `.x-tool`: the
+   15px box ExtJS sizes inline (the header's hbox layout reads that size, so it
+   is left alone - growing it would grow every window by the same amount),
+   rounded, filled, and brought to 22px by a 3.5px box-shadow spread in the
+   same colour, which follows the radius and takes no layout space.
+
+   The glyph is the <img> inside it, a transparent 1×1 gif that Neptune paints
+   with a PNG sprite. The sprite is a raster - soft on Retina - and a white
+   one, invisible on a light disc, so it is dropped: each glyph is a vector, a
+   16px SVG held in a custom property that the img uses as a *mask* over its
+   own background colour. The drawing carries no colour, so one of each serves
+   the light theme, the dark theme and hover alike; those are colour rules, not
+   further icons. The img is offset half a pixel so that its 16px box shares a
+   centre with the 15px disc.
+
+   A drawing exists for every tool type this client creates: close (every
+   window), pin / unpin / plus / minus (the Step 4 pathway windows) and the
+   collapse / expand chevrons (the Step 3 network panel; one chevron, rotated).
+   A type without one shows as a plain dot on the disc - add its drawing below
+   rather than let the sprite back in.
+
+   Neptune ships every tool at 50% opacity (`.x-tool .x-tool-img`), 60% on
+   hover, so the opacity is restored alongside; that was why the old grey
+   square looked lighter than the #8A8B92 it declared. Fills are Apple's
+   system fills - rgba(120,120,128) at 16% resting, 28% on hover, 36% pressed -
+   so the disc takes its tone from whatever header it sits on. Hover and press
+   answer to `.x-tool-over` / `.x-tool-pressed`, the classes ExtJS sets on the
+   wrapper, so the visual state and the framework's agree. dark.css restates
+   the colours for the dark theme; the drawings are shared.
+
+   One panel opts out. Step 3's MORE network panel (`.more-net-panel`, a
+   card on the page rather than a window) draws its own collapse control
+   in more-network.css - a Font Awesome chevron on a rounded chip - and a
+   disc under that chip would be two controls in one. The panel selectors
+   here exclude it by name; the window selectors need no exception. */
+.x-window .x-tool,
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool {
+	background-color: rgba(120, 120, 128, 0.16);
+	border-radius: 50%;
+	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.16);
+	transition: background-color var(--pa-transition), box-shadow var(--pa-transition);
+}
+.x-window .x-tool-over,
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-over {
+	background-color: rgba(120, 120, 128, 0.28);
+	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.28);
+}
+.x-window .x-tool-pressed,
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-pressed {
+	background-color: rgba(120, 120, 128, 0.36);
+	box-shadow: 0 0 0 3.5px rgba(120, 120, 128, 0.36);
+}
+.x-window .x-tool .x-tool-img,
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool .x-tool-img {
+	opacity: 1;
+	margin: -0.5px 0 0 -0.5px;
+	background-color: #5F5F66;
+	background-image: none;
+	border-radius: 50%;
+	-webkit-mask: var(--pa-tool-glyph) center / 16px 16px no-repeat;
+	mask: var(--pa-tool-glyph) center / 16px 16px no-repeat;
 	transition: background-color var(--pa-transition);
 }
-.x-window .x-tool-img.x-tool-close:hover,
-.x-window .x-tool-img.x-tool-pin:hover,
-.x-window .x-tool-img.x-tool-unpin:hover,
-.x-window .x-tool-img.x-tool-plus:hover,
-.x-window .x-tool-img.x-tool-minus:hover {
-	background-color: #5A5B62;
+.x-window .x-tool-over .x-tool-img,
+.x-window .x-tool-pressed .x-tool-img,
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-over .x-tool-img,
+.x-panel:not(.more-net-panel) > .x-panel-header-default .x-tool-pressed .x-tool-img {
+	opacity: 1;
+	background-color: #3F3F46;
 }
+/* The drawings: a 16px box, 1.75px round-capped strokes. They are masks, so
+   the `#000` inside each is opacity, not a colour. */
+.x-tool-img.x-tool-close { --pa-tool-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5 5l6 6M11 5l-6 6' fill='none' stroke='%23000' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+.x-tool-img.x-tool-plus { --pa-tool-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 4.25v7.5M4.25 8h7.5' fill='none' stroke='%23000' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+.x-tool-img.x-tool-minus { --pa-tool-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.25 8h7.5' fill='none' stroke='%23000' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+/* A push-pin. ExtJS shows `pin` while the window is NOT pinned (click to pin)
+   and `unpin` while it is; hollow for the first and filled for the second is
+   the convention Mail and Notes use. */
+.x-tool-img.x-tool-pin { --pa-tool-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.75 2.75h4.5M6.5 2.75v3.75L4.5 9.5h7L9.5 6.5V2.75M8 9.5v4' fill='none' stroke='%23000' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+.x-tool-img.x-tool-unpin { --pa-tool-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M6.5 2.75v3.75L4.5 9.5h7L9.5 6.5V2.75z' fill='%23000' stroke='%23000' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M5.75 2.75h4.5M8 9.5v4' fill='none' stroke='%23000' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+/* One chevron, pointing down, turned to face the way the type names. */
+.x-tool-img.x-tool-collapse-top,
+.x-tool-img.x-tool-collapse-bottom,
+.x-tool-img.x-tool-collapse-left,
+.x-tool-img.x-tool-collapse-right,
+.x-tool-img.x-tool-expand-top,
+.x-tool-img.x-tool-expand-bottom,
+.x-tool-img.x-tool-expand-left,
+.x-tool-img.x-tool-expand-right { --pa-tool-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.25L8 9.75l3.5-3.5' fill='none' stroke='%23000' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+.x-tool-img.x-tool-collapse-top,
+.x-tool-img.x-tool-expand-top { transform: rotate(180deg); }
+.x-tool-img.x-tool-collapse-left,
+.x-tool-img.x-tool-expand-left { transform: rotate(90deg); }
+.x-tool-img.x-tool-collapse-right,
+.x-tool-img.x-tool-expand-right { transform: rotate(-90deg); }
 
 /* Panel headers get the window header's treatment, for the same reason and in
    the same colours. Neptune paints `.x-panel-header-default` #157FCC with a
@@ -2515,17 +2624,8 @@ body > .x-mask {
 .x-panel-header-default .x-header-text {
 	color: #222;
 }
-/* The tools are <img> sprites knocked out of a background *colour*, which
-   Neptune fills with the same #157FCC. Left alone they are saturated dots on a
-   near-white band; muted, exactly like the window's close control above. */
-.x-panel-header-default .x-tool-img {
-	background-color: #8A8B92;
-	border-radius: 3px;
-	transition: background-color var(--pa-transition);
-}
-.x-panel-header-default .x-tool-img:hover {
-	background-color: #5A5B62;
-}
+/* The panel's tools share the window tools' disc; see that block above,
+   whose selectors cover `.x-panel-header-default` as well. */
 
 /* A window carries *two* frames: its own border, and a second one on
    `.x-window-body` inside it. Neptune paints that inner one 1px #3892d3, so

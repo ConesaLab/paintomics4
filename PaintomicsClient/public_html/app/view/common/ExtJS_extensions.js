@@ -1702,3 +1702,26 @@ Ext.define('Ext.slider.MultiCustom', {
 
 
 });
+
+/************************************************************
+ *
+ * WINDOW SHADOW
+ *
+ * ExtJS draws every floating window over a second element it owns,
+ * `.x-css-shadow`: a box the window's size, 4px lower, with a 5px radius and
+ * a 6px #888 blur, created by Ext.dom.Layer when the window renders. main.css
+ * gives the window its own box-shadow and an 8px radius, so all this one
+ * contributed was a grey square peeking out from under each rounded corner -
+ * the "box outside the window" that the corner fix was reported against.
+ *
+ * Turned off on the class rather than hidden in CSS because the shadow
+ * element carries no link to its owner: `.x-css-shadow { display: none }`
+ * would also strip the shadows from menus, combo pickers and tooltips, which
+ * have no CSS shadow of their own. `shadow` is read when the Layer is built,
+ * at render, so this reaches Ext.MessageBox too even though that singleton is
+ * constructed while ext-all.js loads, before this file runs.
+ *
+ ************************************************************/
+Ext.override(Ext.window.Window, {
+    shadow: false
+});
