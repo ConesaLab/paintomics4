@@ -14,9 +14,9 @@ mkdocs==1.6.1
 # light/dark toggle the rebuilt guide is written against; the built-in
 # `readthedocs` theme has none of them. `mkdocs build --strict` fails on an
 # unknown theme name, so this pin is load-bearing, not cosmetic.
-mkdocs-material==9.5.49
+mkdocs-material==9.7.7
 # The five `pymdownx.*` extensions mkdocs.yml configures live here. It
 # arrives as a mkdocs-material dependency, but unpinned it floats, and a
 # markdown extension changing its parse is exactly the kind of drift that
 # would silently alter the rendered guide. Pin it with the rest.
-pymdown-extensions==10.21.3
+pymdown-extensions==11.0.2

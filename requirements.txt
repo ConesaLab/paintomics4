@@ -53,27 +53,27 @@ Werkzeug==3.1.8
 Jinja2==3.1.6
 MarkupSafe==3.0.3
 itsdangerous==2.2.0
-click==8.1.8
+click==8.5.0
 blinker==1.9.0
 
 # --- WSGI server ---
 # processes = 1 is mandatory: src/common/PySiQ.py holds the job queue in process
 # memory, so a second process would get its own empty queue. Concurrency comes
 # from threads.
-uWSGI==2.0.28
+uWSGI==2.0.31
 
 # --- Database ---
 # pymongo 4 is required, not optional: the deployment runs MongoDB 7, and
 # pymongo 3.11 speaks wire-protocol opcodes MongoDB removed in 5.1. See
 # src/tests/test_pymongo4_compat.py.
-pymongo==4.10.1
+pymongo==4.18.0
 
 # --- Scientific stack ---
-numpy==1.26.4
-pandas==1.5.3
-scipy==1.13.1
-statsmodels==0.14.6
-patsy==1.0.2
+numpy==2.4.6
+pandas==3.0.5
+scipy==1.17.1
+statsmodels==0.15.0
+patsy==1.0.3
 
 # --- Image and SVG rendering ---
 # pycairo is deliberately absent: nothing imports it, it is not installed in the
@@ -95,12 +95,12 @@ patsy==1.0.2
 CairoSVG==2.9.0
 cairocffi==1.7.1
 Pillow==12.3.0
-tinycss2==1.4.0
-cssselect2==0.8.0
-webencodings==0.5.1
+tinycss2==1.5.1
+cssselect2==0.10.1
+webencodings==0.6.1
 defusedxml==0.7.1
-cffi==1.17.1
-pycparser==2.22
+cffi==2.1.1
+pycparser==3.0
 
 # --- HTTP ---
 # requests is imported by AdminTools/DBManager.py and scripts/downloadReactome.py
@@ -114,11 +114,11 @@ requests==2.34.2
 # chardet detects the encoding of uploaded omics files
 # (classes/JobInstances/PathwayAcquisitionJob.py). Also undeclared: the app
 # failed to boot in a clean container with ModuleNotFoundError.
-chardet==5.2.0
+chardet==7.6.0
 
 # --- AI interpretation pipeline (src/classes/AIInterpret/) ---
-openai==2.25.0
-openai-agents==0.8.4
+openai==3.8.0
+openai-agents==0.22.0
 # Imported directly by AIInterpret/agent.py (httpx.Timeout for the SDK client,
 # httpx.HTTPError while iterating a completion stream). openai pulls it in
 # anyway; pinned here so the direct import is declared, at the version openai
@@ -134,7 +134,7 @@ httpx==0.28.1
 # would silently reintroduce the import failure for anyone running the tree on
 # 3.9, which the test suite still does. Remove it only when 3.9 is no longer
 # supported anywhere.
-eval_type_backport==0.3.1
+eval_type_backport==0.4.0
 
 # --- Scheduling and utilities ---
 # setuptools 81 deprecated pkg_resources and 82 removed it outright, but
@@ -143,12 +143,12 @@ eval_type_backport==0.3.1
 # A clean image installed setuptools 82 and the app died at start-up with
 # ModuleNotFoundError: No module named 'pkg_resources'. Pin below the removal
 # until APScheduler is upgraded (4.x drops the dependency but changes its API).
-setuptools<81
-APScheduler==3.6.3
-psutil==5.7.2
+setuptools<85
+APScheduler==3.11.3
+psutil==7.2.2
 python-dateutil==2.9.0.post0
-pytz==2026.1.post1
-tzlocal==2.1
+pytz==2026.3.post1
+tzlocal==5.4.4
 six==1.17.0
-wrapt==1.12.1
+wrapt==2.4.0
 scriptinep3==0.3.1
