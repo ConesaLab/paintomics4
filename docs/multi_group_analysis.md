@@ -245,7 +245,9 @@ already full blue. Trust the stars for significance, and widen the range under
 
 **20.** Click **Show Heatmap** in the top bar, then **Apply**. Each omic gets a block
 whose columns are your three contrasts; [Heatmaps](5_3_heatmaps.md) covers
-the options.
+the options. **Download**, in the panel's header, saves the whole heatmap — every
+omic and every row, with the contrast names in full — as a PNG for a report or
+an SVG to edit.
 
 **21.** The relevant genes of Steroid biosynthesis are blue and starred in
 `TrtA_vs_Ctrl`, near zero in `TrtB_vs_Ctrl`, and red in `TrtB_vs_TrtA`:

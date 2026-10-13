@@ -8990,6 +8990,587 @@ var paColorLegend = function (limits, colorScale, options) {
 		'</div>';
 };
 
+/* =====================================================================
+ * Heatmap figure export: the global heatmap as one PNG or SVG file.
+ *
+ * Users wanted the heatmap in their reports next to the painted diagram, and
+ * the only way to get it was a screenshot - which takes what fits on the
+ * screen, not a heatmap a few hundred rows tall, and never all the omics at
+ * once.
+ *
+ * Highcharts' own exporter cannot do this: it exports one chart, and the
+ * figure is several (one per omic, each with its heading and colour scale
+ * drawn in HTML around it). Its row labels and significance stars are HTML
+ * too (useHTML), which an SVG export of the chart drops. So the figure is
+ * rebuilt as one standalone SVG:
+ *
+ *   paCollectHeatmapFigure  reads the drawn figure out of the DOM: each
+ *                           chart's own SVG verbatim, plus the HTML around and
+ *                           over it re-expressed as SVG text, stars and
+ *                           gradients, all in page coordinates;
+ *   paHeatmapFigureSVG      writes that description out as one SVG document.
+ *                           Pure, so it runs under node in the tests;
+ *   paRasteriseSVG          draws the SVG onto a canvas for the PNG.
+ *
+ * Everything is done in the browser: the SVG carries no external reference
+ * (no image, no web font), so the canvas is never tainted and nothing has to
+ * go through the server.
+ * ===================================================================== */
+
+/* A face every system has. The page's SourceSansPro is a web font, and an SVG
+   drawn as an image - or opened in another program - cannot load it. */
+var PA_FIGURE_FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
+
+/* The ink of the export, which is always drawn on white: a figure exported
+   from the dark theme must not come out as pale text on a white page. */
+var PA_FIGURE_INK = "#3F3F46";
+
+/**
+ * The ten corners of a five-pointed star centred on (cx, cy), as an SVG
+ * points list. The inner radius is half the outer one, the proportion of the
+ * Font Awesome star the screen draws, so the export reads as the same mark.
+ */
+var paStarPoints = function (cx, cy, r) {
+	var points = [];
+	var i, radius, angle;
+
+	for (i = 0; i < 10; i++) {
+		radius = (i % 2 === 0) ? r : r / 2;
+		angle = -Math.PI / 2 + i * Math.PI / 5;
+		points.push((cx + radius * Math.cos(angle)).toFixed(2) + "," +
+			(cy + radius * Math.sin(angle)).toFixed(2));
+	}
+	return points.join(" ");
+};
+
+/**
+ * A file name for an exported figure: "paintomics_<kind>_<pathway>_<job>.<ext>".
+ * Pathway names carry commas, slashes and brackets ("Glycolysis / Gluconeogenesis"),
+ * and a slash in a download name is a directory to some browsers.
+ */
+var paFigureFileName = function (kind, name, jobID, extension) {
+	var clean = function (text) {
+		return String(text || "").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
+	};
+	var parts = ["paintomics", kind, clean(name), clean(jobID)].filter(function (part) { return part !== ""; });
+
+	return parts.join("_") + "." + extension;
+};
+
+/**
+ * The scale a PNG is rendered at: 3x for print, less when that would exceed
+ * what a browser canvas will hold. Chrome refuses a canvas side over 32,767 px
+ * and starts failing well before its area limit, so the caps are deliberately
+ * conservative; a heatmap too tall even then is reported to the user, who can
+ * take the SVG instead.
+ */
+var paFigureScale = function (width, height) {
+	var scale = Math.min(3, 16000 / Math.max(width, height, 1), Math.sqrt(6e7 / Math.max(width * height, 1)));
+
+	return Math.floor(scale * 100) / 100;
+};
+
+/**
+ * Serialises a heatmap figure description into a standalone SVG document.
+ *
+ * figure = {
+ *   bounds: {left, top, right, bottom}   the extent of the items, page px
+ *   title, subtitle, footer: strings      optional
+ *   key: [{fill, text}]                   optional star legend, under the figure
+ *   items: [ ...one of...
+ *     {type: "svg", x, y, markup}         a chart's own <svg>, placed at (x, y)
+ *     {type: "text", x, y, text, size, weight, italic, fill, anchor}
+ *     {type: "star", cx, cy, r, fill}
+ *     {type: "gradient", x, y, width, height, stops: [{offset, color}]}
+ *     {type: "rect", x, y, width, height, fill, opacity}
+ *     {type: "line", x1, y1, x2, y2, stroke, width, dash}
+ *   ]
+ * }
+ *
+ * Item coordinates are page pixels; the whole set is translated so the
+ * figure's own top-left corner sits inside a white margin. Returns
+ * {svg, width, height}.
+ */
+var paHeatmapFigureSVG = function (figure) {
+	var pad = 16;
+	var titleHeight = figure.title ? (figure.subtitle ? 46 : 30) : 0;
+	var keyHeight = (figure.key && figure.key.length) ? 18 : 0;
+	var footerHeight = figure.footer ? 18 : 0;
+	var bounds = figure.bounds;
+	var contentWidth = Math.max(0, bounds.right - bounds.left);
+	var contentHeight = Math.max(0, bounds.bottom - bounds.top);
+
+	/* A title wider than the heatmap (a long pathway name over one narrow
+	   omic) must widen the page, not run off its edge. 0.6em is a generous
+	   average advance for Helvetica. */
+	var textWidth = function (text, size) {
+		return String(text || "").length * size * 0.6;
+	};
+	var keyWidth = (figure.key || []).reduce(function (total, entry) {
+		return total + 30 + textWidth(entry.text, 10);
+	}, 0);
+	var width = Math.ceil(Math.max(contentWidth, textWidth(figure.title, 16), textWidth(figure.subtitle, 11), keyWidth) + 2 * pad);
+	var height = Math.ceil(contentHeight + titleHeight + keyHeight + footerHeight + 2 * pad);
+
+	var number = function (value) {
+		return String(Math.round(value * 100) / 100);
+	};
+	var attributes = function (map) {
+		return Object.keys(map).filter(function (key) {
+			return map[key] !== undefined && map[key] !== null && map[key] !== "";
+		}).map(function (key) {
+			return key + '="' + paEscapeAttribute(map[key]) + '"';
+		}).join(" ");
+	};
+	var text = function (x, y, content, style) {
+		style = style || {};
+		return "<text " + attributes({
+			x: number(x),
+			y: number(y),
+			"font-family": PA_FIGURE_FONT,
+			"font-size": number(style.size || 10),
+			"font-weight": (style.weight && String(style.weight) !== "400" && style.weight !== "normal") ? style.weight : null,
+			"font-style": style.italic ? "italic" : null,
+			fill: style.fill || PA_FIGURE_INK,
+			"text-anchor": (style.anchor && style.anchor !== "start") ? style.anchor : null
+		}) + ">" + paEscapeAttribute(content) + "</text>";
+	};
+
+	var defs = [];
+	var body = [];
+	var gradients = 0;
+
+	(figure.items || []).forEach(function (item) {
+		switch (item.type) {
+			case "svg":
+				body.push('<g transform="translate(' + number(item.x) + "," + number(item.y) + ')">' + item.markup + "</g>");
+				break;
+			case "text":
+				body.push(text(item.x, item.y, item.text, item));
+				break;
+			case "star":
+				body.push("<polygon " + attributes({points: paStarPoints(item.cx, item.cy, item.r), fill: item.fill}) + "/>");
+				break;
+			case "gradient":
+				gradients++;
+				defs.push('<linearGradient id="paFigureRamp' + gradients + '" x1="0" y1="0" x2="1" y2="0">' +
+					(item.stops || []).map(function (stop) {
+						return "<stop " + attributes({offset: number(stop.offset) + "%", "stop-color": stop.color}) + "/>";
+					}).join("") + "</linearGradient>");
+				body.push("<rect " + attributes({
+					x: number(item.x), y: number(item.y), width: number(item.width), height: number(item.height),
+					rx: 2, fill: "url(#paFigureRamp" + gradients + ")"
+				}) + "/>");
+				break;
+			case "rect":
+				body.push("<rect " + attributes({
+					x: number(item.x), y: number(item.y), width: number(item.width), height: number(item.height),
+					fill: item.fill, "fill-opacity": item.opacity
+				}) + "/>");
+				break;
+			case "line":
+				body.push("<line " + attributes({
+					x1: number(item.x1), y1: number(item.y1), x2: number(item.x2), y2: number(item.y2),
+					stroke: item.stroke || PA_FIGURE_INK, "stroke-width": item.width || 1,
+					"stroke-dasharray": item.dash
+				}) + "/>");
+				break;
+		}
+	});
+
+	var parts = [
+		'<?xml version="1.0" encoding="UTF-8"?>',
+		'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" ' +
+			attributes({width: width, height: height, viewBox: "0 0 " + width + " " + height}) + ">",
+		defs.length ? "<defs>" + defs.join("") + "</defs>" : "",
+		'<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="#FFFFFF"/>'
+	];
+
+	if (figure.title) {
+		parts.push(text(pad, pad + 14, figure.title, {size: 16, weight: "bold"}));
+		if (figure.subtitle) {
+			parts.push(text(pad, pad + 32, figure.subtitle, {size: 11, fill: "#71717A"}));
+		}
+	}
+
+	parts.push('<g transform="translate(' + number(pad - bounds.left) + "," + number(pad + titleHeight - bounds.top) + ')">' +
+		body.join("") + "</g>");
+
+	var y = pad + titleHeight + contentHeight;
+	if (keyHeight) {
+		var x = pad;
+		figure.key.forEach(function (entry) {
+			parts.push("<polygon " + attributes({points: paStarPoints(x + 5, y + 10, 5), fill: entry.fill}) + "/>");
+			parts.push(text(x + 14, y + 14, entry.text, {size: 10}));
+			x += 30 + textWidth(entry.text, 10);
+		});
+		y += keyHeight;
+	}
+	if (figure.footer) {
+		parts.push(text(width - pad, y + 13, figure.footer, {size: 9, fill: "#A1A1AA", anchor: "end"}));
+	}
+
+	parts.push("</svg>");
+
+	return {svg: parts.join("\n"), width: width, height: height};
+};
+
+/**
+ * Reads a drawn heatmap figure out of the DOM, for paHeatmapFigureSVG().
+ *
+ * root is the element holding the figure (the global heatmap's container).
+ * Positions are taken from the live layout with getBoundingClientRect, so the
+ * export is the figure as drawn - order, clustering, dendrogram, the omics
+ * the user chose - and nothing has to re-derive how Highcharts placed a cell.
+ *
+ * What it reads:
+ *  - each chart's <svg>, cloned. The cell gaps are repainted white (they are
+ *    drawn in the panel's background colour, which in the dark theme is
+ *    near-black), the tooltip, the grid and anything hidden - the
+ *    row-under-the-pointer outline - are dropped, and the condition names
+ *    under the columns are written out in full;
+ *  - each row label (an HTML span from paRowLabel) as two lines of text, set
+ *    from the label's untruncated title rather than the ellipsised screen copy
+ *    - a figure is where the full identifier is wanted - and shrunk to fit the
+ *    label column when it is too long for it;
+ *  - the relevance stars before a label, and the per-condition stars on cells;
+ *  - every other piece of text (omic headings, the colour-scale numbers,
+ *    "No data"), the colour ramps, the zero ticks and the dashed separators.
+ *
+ * Returns the figure description, with `stars` naming which star kinds were
+ * drawn, so the caller can print a key for exactly those.
+ */
+var paCollectHeatmapFigure = function (root) {
+	var origin = root.getBoundingClientRect();
+	var items = [];
+	var stars = {relevant: null, association: null, cell: false};
+	var bounds = {left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity};
+	var measure = document.createElement("canvas").getContext("2d");
+
+	var grow = function (left, top, right, bottom) {
+		bounds.left = Math.min(bounds.left, left);
+		bounds.top = Math.min(bounds.top, top);
+		bounds.right = Math.max(bounds.right, right);
+		bounds.bottom = Math.max(bounds.bottom, bottom);
+	};
+	var local = function (rect) {
+		return {left: rect.left - origin.left, top: rect.top - origin.top, right: rect.right - origin.left, bottom: rect.bottom - origin.top};
+	};
+	var widthOf = function (content, size, weight, italic) {
+		measure.font = (italic ? "italic " : "") + (weight || "normal") + " " + size + "px " + PA_FIGURE_FONT;
+		return measure.measureText(content).width;
+	};
+	/* Text ink for a white page: a colour light enough to have been chosen for
+	   the dark theme comes out as the figure's ink instead. */
+	var ink = function (color) {
+		var channels = String(color || "").match(/\d+(\.\d+)?/g);
+		if (!channels || channels.length < 3) {
+			return PA_FIGURE_INK;
+		}
+		var luma = (0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]) / 255;
+		return (luma > 0.6) ? PA_FIGURE_INK : "rgb(" + channels.slice(0, 3).join(",") + ")";
+	};
+	var isShown = function (element) {
+		var style = window.getComputedStyle(element);
+		return style.visibility !== "hidden" && style.display !== "none" && parseFloat(style.opacity) !== 0;
+	};
+	var addText = function (content, x, y, style) {
+		var width = widthOf(content, style.size, style.weight, style.italic);
+		var left = (style.anchor === "end") ? x - width : (style.anchor === "middle") ? x - width / 2 : x;
+		items.push({type: "text", x: x, y: y, text: content, size: style.size, weight: style.weight,
+			italic: style.italic, fill: style.fill, anchor: style.anchor});
+		grow(left, y - style.size, left + width, y + style.size * 0.3);
+	};
+	var addStar = function (cx, cy, r, fill) {
+		items.push({type: "star", cx: cx, cy: cy, r: r, fill: fill});
+		grow(cx - r, cy - r, cx + r, cy + r);
+	};
+	/* The colour a Font Awesome <i> paints its glyph in: relevantFeature sets
+	   it on ::before, the cell stars inline on the element itself. */
+	var glyphColor = function (element, fallback) {
+		if (!element) {
+			return fallback;
+		}
+		var glyph = window.getComputedStyle(element, "::before");
+		return (glyph.content && glyph.content !== "none" && glyph.color) ? glyph.color : (window.getComputedStyle(element).color || fallback);
+	};
+
+	/* 1. The charts. */
+	Array.prototype.forEach.call(root.querySelectorAll(".highcharts-container"), function (container) {
+		var svg = container.querySelector("svg");
+		if (!svg || !isShown(container)) {
+			return;
+		}
+		var rect = local(svg.getBoundingClientRect());
+
+		/* The condition names, in full. On screen they are cut to fit the
+		   panel - paConditionAxis caps them at 10 characters and Highcharts
+		   ellipsises again over a narrow column - so "TrtA_vs_Ctrl" reads
+		   "...A_vs_Ctrl", with a tooltip behind it. A figure has no tooltip.
+		   Each live label is tagged with its category just long enough to be
+		   cloned, and the page is grown to hold the longer, rotated text. */
+		var chart = (window.Highcharts && Highcharts.charts) ? Highcharts.charts[container.parentNode.getAttribute("data-highcharts-chart")] : null;
+		var axis = (chart && chart.xAxis) ? chart.xAxis[0] : null;
+		var tagged = [];
+		if (axis && axis.categories && axis.ticks) {
+			var angle = ((axis.options.labels && axis.options.labels.rotation) || 0) * Math.PI / 180;
+			Object.keys(axis.ticks).forEach(function (position) {
+				var tick = axis.ticks[position];
+				var name = axis.categories[position];
+				if (!tick || !tick.label || !tick.label.element || name === undefined || name === null) {
+					return;
+				}
+				var element = tick.label.element;
+				var labelRect = local(element.getBoundingClientRect());
+				var size = parseFloat(window.getComputedStyle(element).fontSize) || 9;
+				var length = widthOf(String(name), size);
+				/* Right-aligned, so the text ends at the tick and runs back
+				   along the rotation from there. */
+				grow(labelRect.right - length * Math.cos(angle) - size, labelRect.top - size,
+					labelRect.right + size, labelRect.top - length * Math.sin(angle) + size);
+				element.setAttribute("data-pa-full", String(name));
+				tagged.push(element);
+			});
+		}
+		var clone = svg.cloneNode(true);
+		tagged.forEach(function (element) {
+			element.removeAttribute("data-pa-full");
+		});
+		Array.prototype.forEach.call(clone.querySelectorAll("[data-pa-full]"), function (label) {
+			label.textContent = label.getAttribute("data-pa-full");
+			label.removeAttribute("data-pa-full");
+		});
+		/* A full name can run past the chart's own box; the page holds it. */
+		clone.setAttribute("overflow", "visible");
+		clone.style.overflow = "visible";
+
+		/* The grid goes too: the cells cover it, except for one 50px stub of
+		   y-axis grid line above the first row (yAxis.width is 50) that the
+		   dark theme hides and a white page shows. */
+		Array.prototype.forEach.call(clone.querySelectorAll('.highcharts-tooltip, .highcharts-grid, [display="none"], [visibility="hidden"]'), function (node) {
+			node.parentNode.removeChild(node);
+		});
+		Array.prototype.forEach.call(clone.querySelectorAll(".highcharts-heatmap-series .highcharts-point"), function (cell) {
+			cell.setAttribute("stroke", "#FFFFFF");
+		});
+
+		/* Highcharts writes clip paths as url(<page address>#id) in some
+		   browsers; a standalone file has no page, so keep only the #id. */
+		var markup = new XMLSerializer().serializeToString(clone)
+			.replace(/url\((["']?)[^)#"']*#/g, "url($1#");
+
+		items.push({type: "svg", x: rect.left, y: rect.top, markup: markup});
+		grow(rect.left, rect.top, rect.right, rect.bottom);
+	});
+
+	/* 2. Row labels: "Symbol (KEGG id)" over the identifier it was matched
+	   from, right-aligned against the cells, relevance stars in front. */
+	Array.prototype.forEach.call(root.querySelectorAll(".highcharts-axis-labels span[title]"), function (label) {
+		if (!isShown(label.parentNode)) {
+			return;
+		}
+		var rect = local(label.getBoundingClientRect());
+		var title = label.getAttribute("title") || "";
+		var split = title.indexOf("  |  ");
+		var primary = (split >= 0) ? title.slice(0, split) : title;
+		var secondary = (split >= 0) ? title.slice(split + 5) : "";
+		var lower = label.querySelector("i.yAxisLabel");
+		var lowerRect = lower ? local(lower.getBoundingClientRect()) : null;
+		var style = window.getComputedStyle(label);
+		var size = parseFloat(style.fontSize) || 9;
+		var available = Math.max(rect.right - rect.left, 20);
+		var markers = [];
+
+		/* paRowLabel's primary side leads with the markers as "* " and "^ ". */
+		while (/^[\*\^]\s/.test(primary)) {
+			markers.push(primary.charAt(0));
+			primary = primary.slice(2);
+		}
+		var markerWidth = markers.length * size * 1.1;
+		var fit = function (content, italic, room) {
+			var width = widthOf(content, size, "normal", italic);
+			return (width > room) ? Math.max(5, size * room / width) : size;
+		};
+
+		var primarySize = fit(primary, false, available - markerWidth);
+		var primaryBaseline = lowerRect ? rect.top + (lowerRect.top - rect.top) * 0.8 : rect.top + (rect.bottom - rect.top) * 0.78;
+		addText(primary, rect.right, primaryBaseline, {size: primarySize, fill: ink(style.color), anchor: "end"});
+
+		var x = rect.right - widthOf(primary, primarySize) - size * 0.6;
+		markers.reverse().forEach(function (marker) {
+			var kind = (marker === "*") ? "relevant" : "association";
+			var fill = glyphColor(label.querySelector((kind === "relevant") ? "i.relevantFeature" : "i.relevantAssociationFeature"),
+				(kind === "relevant") ? "rgb(255, 0, 0)" : "rgb(244, 200, 0)");
+			stars[kind] = fill;
+			addStar(x, primaryBaseline - primarySize * 0.35, size * 0.5, fill);
+			x -= size * 1.1;
+		});
+
+		if (secondary) {
+			var lowerStyle = lower ? window.getComputedStyle(lower) : style;
+			var secondaryBaseline = lowerRect ? lowerRect.top + (lowerRect.bottom - lowerRect.top) * 0.8 : rect.bottom;
+			addText(secondary, rect.right, secondaryBaseline, {
+				size: fit(secondary, true, available), italic: true, fill: ink(lowerStyle.color), anchor: "end"
+			});
+		}
+	});
+
+	/* 3. Stars on cells: significant in that condition. Their ink was chosen
+	   per cell (paInkOnCell), so it is kept as drawn. */
+	Array.prototype.forEach.call(root.querySelectorAll(".highcharts-container i.fa-star"), function (icon) {
+		if (!isShown(icon)) {
+			return;
+		}
+		var rect = local(icon.getBoundingClientRect());
+		var size = parseFloat(window.getComputedStyle(icon, "::before").fontSize) || (rect.bottom - rect.top);
+		stars.cell = true;
+		addStar(rect.right - size / 2, (rect.top + rect.bottom) / 2, size * 0.55, glyphColor(icon, "#FFFFFF"));
+	});
+
+	/* 4. Colour ramps, their zero ticks, and the dashed rule between omics. */
+	Array.prototype.forEach.call(root.querySelectorAll(".paColorLegend-bar"), function (bar) {
+		var rect = local(bar.getBoundingClientRect());
+		var stops = [];
+		var pattern = /(rgba?\([^)]*\)|#[0-9a-fA-F]{3,8})\s+(-?[\d.]+)%/g;
+		var background = window.getComputedStyle(bar).backgroundImage;
+		var match;
+
+		while ((match = pattern.exec(background)) !== null) {
+			stops.push({color: match[1], offset: parseFloat(match[2])});
+		}
+		if (stops.length) {
+			items.push({type: "gradient", x: rect.left, y: rect.top, width: rect.right - rect.left,
+				height: rect.bottom - rect.top, stops: stops});
+			grow(rect.left, rect.top, rect.right, rect.bottom);
+		}
+	});
+	Array.prototype.forEach.call(root.querySelectorAll(".paColorLegend-tick"), function (tick) {
+		var rect = local(tick.getBoundingClientRect());
+		items.push({type: "rect", x: rect.left, y: rect.top, width: Math.max(rect.right - rect.left, 1),
+			height: rect.bottom - rect.top, fill: "#000000", opacity: 0.42});
+	});
+	Array.prototype.forEach.call(root.querySelectorAll(".omicHeatmapsContainer > div"), function (block) {
+		var style = window.getComputedStyle(block);
+		if (!block.querySelector(".heatmapContainer") || style.borderRightStyle === "none" || !parseFloat(style.borderRightWidth)) {
+			return;
+		}
+		var rect = local(block.getBoundingClientRect());
+		var x = rect.right - parseFloat(style.borderRightWidth) / 2;
+		items.push({type: "line", x1: x, y1: rect.top, x2: x, y2: rect.bottom, stroke: "#BABABA",
+			width: parseFloat(style.borderRightWidth), dash: "4,3"});
+	});
+
+	/* 5. Every other piece of text: headings, scale numbers, "No data". */
+	var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+		acceptNode: function (node) {
+			var parent = node.parentNode;
+			if (!node.nodeValue.trim() || !parent || parent.closest(".highcharts-container, .highcharts-tooltip")) {
+				return NodeFilter.FILTER_REJECT;
+			}
+			return isShown(parent) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+		}
+	});
+	var range = document.createRange();
+	var node;
+
+	while ((node = walker.nextNode()) !== null) {
+		var parentStyle = window.getComputedStyle(node.parentNode);
+		var textStyle = {
+			size: parseFloat(parentStyle.fontSize) || 10,
+			weight: parentStyle.fontWeight,
+			italic: parentStyle.fontStyle === "italic",
+			fill: ink(parentStyle.color)
+		};
+		var words = node.nodeValue.split(/(\s+)/);
+		var offset = 0;
+		var line = null;
+
+		/* One <text> per rendered line: a heading that wrapped on screen keeps
+		   its line break, which a single run would lose. */
+		for (var w = 0; w < words.length; w++) {
+			if (words[w].trim()) {
+				range.setStart(node, offset);
+				range.setEnd(node, offset + words[w].length);
+				var rects = range.getClientRects();
+				if (rects.length) {
+					var wordRect = local(rects[0]);
+					if (line && Math.abs(wordRect.top - line.top) < 2) {
+						line.text += " " + words[w];
+					} else {
+						if (line) {
+							addText(line.text, line.left, line.baseline, textStyle);
+						}
+						line = {text: words[w], left: wordRect.left, top: wordRect.top,
+							baseline: wordRect.top + (wordRect.bottom - wordRect.top) * 0.78};
+					}
+				}
+			}
+			offset += words[w].length;
+		}
+		if (line) {
+			addText(line.text, line.left, line.baseline, textStyle);
+		}
+	}
+	range.detach();
+
+	if (bounds.left === Infinity) {
+		bounds = {left: 0, top: 0, right: 0, bottom: 0};
+	}
+
+	return {bounds: bounds, items: items, stars: stars};
+};
+
+/**
+ * Draws an SVG document onto a canvas and hands back the PNG as a Blob, or
+ * null when the browser could not (a canvas past its size limit gives an
+ * empty blob rather than an error).
+ */
+var paRasteriseSVG = function (svgText, width, height, scale, callback) {
+	var url = URL.createObjectURL(new Blob([svgText], {type: "image/svg+xml;charset=utf-8"}));
+	var image = new Image();
+
+	image.onload = function () {
+		var canvas = document.createElement("canvas");
+		canvas.width = Math.round(width * scale);
+		canvas.height = Math.round(height * scale);
+
+		var context = canvas.getContext("2d");
+		if (!context) {
+			URL.revokeObjectURL(url);
+			callback(null);
+			return;
+		}
+		context.fillStyle = "#FFFFFF";
+		context.fillRect(0, 0, canvas.width, canvas.height);
+		context.drawImage(image, 0, 0, canvas.width, canvas.height);
+		URL.revokeObjectURL(url);
+
+		canvas.toBlob(function (blob) {
+			callback((blob && blob.size) ? blob : null);
+		}, "image/png");
+	};
+	image.onerror = function () {
+		URL.revokeObjectURL(url);
+		callback(null);
+	};
+	image.src = url;
+};
+
+/** Hands a Blob to the browser as a download named fileName. */
+var paSaveBlob = function (blob, fileName) {
+	var url = URL.createObjectURL(blob);
+	var link = document.createElement("a");
+
+	link.href = url;
+	link.download = fileName;
+	link.style.display = "none";
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+	/* Revoked later, not now: the download may not have read it yet. */
+	setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+};
+
 
 var renderFunctionLimit = function (value, metadata, record) {
 		var myToolTipText = "<b style='display:block; width:200px'>" + "Metabolism" + "</b>";

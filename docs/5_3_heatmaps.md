@@ -9,7 +9,9 @@ for the toolbar and for the diagram itself, and
 
 The panel takes the same slot as the **Feature set overview**, so opening one
 closes the other. Its header carries hide, configure (the cogs), expand and
-shrink controls, and its left edge can be dragged to widen it.
+shrink controls and a **Download** button (see
+[Downloading the heatmap](#downloading-the-heatmap)), and its left edge can be
+dragged to widen it.
 
 ## Choosing what to draw
 
@@ -132,10 +134,31 @@ zero where the range crosses it, and a caption naming the reference in words —
 default Blue-Grey-Red scale a value past either end of the range is painted
 darker rather than clipped, so an extreme value still reads as extreme.
 
+## Downloading the heatmap
+
+**Download**, in the panel's header, saves the heatmap as one picture: every
+omic you drew, each under its heading and colour scale, however many rows it
+runs to. Draw it first — with nothing drawn yet, the button says so instead.
+It offers two formats:
+
+| Format | What you get |
+|---|---|
+| **PNG image (high resolution)** | A picture at three times screen size, for a report or a slide. A heatmap too tall for that is drawn smaller, and one too tall for any PNG your browser can make is refused with a message pointing you to the SVG. |
+| **SVG (vector, editable)** | The same figure as vector graphics, with no size limit, which opens in a browser, Inkscape or Illustrator, where the text stays editable. |
+
+The figure is what the panel shows, with the omics side by side whatever width
+the panel had wrapped them to: the omics and order you chose, the clustering and
+its dendrogram, the relevance stars and the per-condition stars. Two things are
+written out in full that the panel shortens to fit: the row labels (gene symbol
+with its KEGG id, and the identifier it was matched from) and the condition
+names under the columns. It is always drawn on white, in the dark theme too. A
+title names the pathway and the job, a key under the figure explains the stars
+it uses, and the file arrives as `paintomics_heatmap_<pathway>_<jobID>.png` (or
+`.svg`).
+
 ## What this panel does not do
 
-There is no download here: the heatmaps cannot be exported as an image or as a
-table, and the only export in the pathway view is the diagram's own **Download**
-button, which writes a PNG of the map. If you need the numbers themselves, they
-are in the files you uploaded, and the matched feature lists are in the
-**Pathway information** panel.
+It does not export a table: the values and p-values behind the heatmap cannot
+be downloaded from here. If you need the numbers themselves, they are in the
+files you uploaded, and the matched feature lists are in the **Pathway
+information** panel.

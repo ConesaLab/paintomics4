@@ -287,10 +287,11 @@ currently painted. What goes into the file:
 The whole map is exported, whatever you have zoomed or panned to, and rendered
 at three times the artwork's own size; the file arrives as
 `paintomics_<pathway>_<jobID>.png`.
-Pop-ups, side panels and heatmaps are not part of it, and there is no
-table-of-numbers export from this step — the **Global heatmap** panel has no
-download button, and neither the values nor the p-values behind the diagram can
-be exported as a file from here.
+Pop-ups, side panels and heatmaps are not part of it — the **Global heatmap**
+panel has its own **Download**, described in
+[Heatmaps](5_3_heatmaps.md#downloading-the-heatmap). There is no
+table-of-numbers export from this step: neither the values nor the p-values
+behind the diagram can be exported as a file from here.
 
 **Download** is present on an OmniPath pathway too, but do not press it there.
 The export copies the pathway artwork, and an OmniPath pathway has none — the
