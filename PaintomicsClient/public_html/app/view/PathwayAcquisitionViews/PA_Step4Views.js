@@ -3626,8 +3626,130 @@ function PA_Step4GlobalHeatmapView() {
 		this.getParent().getComponent().doLayout();
 	};
 
-	this.download = function() {
-		throw "Not implemented"
+	/**
+	* Saves the drawn heatmap - every omic, with its heading and colour scale,
+	* however many rows it runs to - as one PNG or SVG file. The figure is read
+	* out of the page by paCollectHeatmapFigure (PA_Step3Views.js), so it is the
+	* heatmap as drawn: the omics, order and clustering chosen in the
+	* configurator.
+	* @param {String} format "png" or "svg"
+	*/
+	this.download = function(format) {
+		var container = document.getElementById("globalHeatmapContainer");
+
+		if (!container || container.querySelector(".heatmapContainer .highcharts-container") === null) {
+			showWarningMessage("Nothing to download yet", {
+				message: "Draw the heatmap first: choose the omics with the <i class='fa fa-cogs'></i> Configure heatmap button above and click Apply.",
+				showButton: true
+			});
+			return;
+		}
+
+		// The omics side by side, whatever the panel's width wrapped them into:
+		// with "Force order" the rows line up across omics, which only reads
+		// when they sit next to each other. The width is put back before the
+		// browser paints - the measurement below is synchronous - and only the
+		// drawn items set the figure's extent, so the slack costs nothing.
+		var previousWidth = container.style.width;
+		var collected;
+		container.style.width = Math.max(4000, $(container).find(".omicHeatmapsContainer").length * 1000) + "px";
+		try {
+			collected = paCollectHeatmapFigure(container);
+		} finally {
+			container.style.width = previousWidth;
+		}
+
+		var jobView = this.getParent("PA_Step4JobView");
+		var jobID = (jobView && jobView.getModel()) ? jobView.getModel().getJobID() : "";
+		var pathwayName = (this.getModel() && this.getModel().getName) ? this.getModel().getName() : "";
+
+		// A key for exactly the stars this figure carries.
+		var key = [];
+		if (collected.stars.relevant) {
+			key.push({fill: collected.stars.relevant, text: "Relevant feature"});
+		}
+		if (collected.stars.association) {
+			key.push({fill: collected.stars.association, text: "Relevant association"});
+		}
+		if (collected.stars.cell) {
+			key.push({fill: PA_FIGURE_INK, text: "On a cell: significant in that condition"});
+		}
+
+		var figure = paHeatmapFigureSVG({
+			bounds: collected.bounds,
+			items: collected.items,
+			title: pathwayName,
+			subtitle: "Global heatmap" + (jobID ? " · PaintOmics job " + jobID : ""),
+			key: key,
+			footer: "Created with PaintOmics AI"
+		});
+		var fileName = paFigureFileName("heatmap", pathwayName, jobID, format);
+
+		if (format === "svg") {
+			paSaveBlob(new Blob([figure.svg], {type: "image/svg+xml;charset=utf-8"}), fileName);
+			return;
+		}
+
+		// Below screen size the labels would be unreadable; say so, and offer
+		// the format that has no size limit, rather than save a blurred file.
+		var scale = paFigureScale(figure.width, figure.height);
+		if (scale === 0) {
+			showWarningMessage("This heatmap is too large for a PNG", {
+				message: "At " + figure.width + " x " + figure.height + " px it is past what a browser can draw as one picture. " +
+					"Download it as SVG instead: it has no size limit and opens in any browser, Inkscape or Illustrator.",
+				showButton: true
+			});
+			return;
+		}
+
+		showInfoMessage("Generating image, please wait...", {
+			logMessage: "Rasterising the global heatmap (" + figure.width + " x " + figure.height + " px at " + scale + "x)",
+			showSpin: true,
+			icon: "clock"
+		});
+		paRasteriseSVG(figure.svg, figure.width, figure.height, scale, function(png) {
+			if (png === null) {
+				showWarningMessage("Your browser could not make a PNG of this heatmap", {
+					message: "Download it as SVG instead: it is the same figure, with no size limit, " +
+						"and opens in any browser, Inkscape or Illustrator.",
+					showButton: true
+				});
+				return;
+			}
+			showSuccessMessage("Done", {logMessage: "Heatmap image generated", closeTimeout: 0.5});
+			paSaveBlob(png, fileName);
+		});
+	};
+
+	/**
+	* The Download button's two formats, offered under the button.
+	* @param {HTMLElement} target the button
+	*/
+	this.showDownloadMenu = function(target) {
+		var me = this;
+
+		if (!this.downloadMenu) {
+			this.downloadMenu = new Ext.menu.Menu({
+				items: [{
+					text: '<i class="fa fa-file-image-o"></i> PNG image (high resolution)',
+					handler: function() {
+						me.download("png");
+					}
+				}, {
+					text: '<i class="fa fa-file-code-o"></i> SVG (vector, editable)',
+					handler: function() {
+						me.download("svg");
+					}
+				}]
+			});
+		}
+		// The button's tooltip opens below it, exactly where the menu does, and
+		// it is interactive: left open, it sits on the PNG item and takes the
+		// click meant for it.
+		if ($(target).hasClass("tooltipstered")) {
+			$(target).tooltipster("close");
+		}
+		this.downloadMenu.showBy(target, "tr-br?");
 	};
 
 	this.updateObserver = function() {
@@ -4269,7 +4391,7 @@ function PA_Step4GlobalHeatmapView() {
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="configureHeatmapButton" title="Configure heatmap" aria-label="Configure heatmap"><i class="fa fa-cogs"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="expandHeatmapButton" title="Expand this panel" aria-label="Expand this panel"><i class="fa fa-expand"></i></a>' +
 			'    <a href="javascript:void(0)" class="toolbarOption btn-secondary helpTip" id="shrinkHeatmapButton" style="display:none;"  title="Shrink this panel" aria-label="Shrink this panel"><i class="fa fa-compress"></i></a>' +
-			// '    <a href="javascript:void(0)" class="toolbarOption helpTip" id="downloadHeatmapButton"><i class="fa fa-download"></i></a>' +
+			'    <a href="javascript:void(0)" class="toolbarOption btn-default downloadTool helpTip" id="downloadHeatmapButton" title="Download the whole heatmap as a PNG or SVG image" aria-haspopup="menu"><i class="fa fa-download"></i> Download</a>' +
 			'  </div>' +
 			"  <h2>Global heatmap</h2>" +
 			"</div>" +
@@ -4317,7 +4439,7 @@ function PA_Step4GlobalHeatmapView() {
 						me.shrink();
 					});
 					$("#downloadHeatmapButton").click(function() {
-						me.download();
+						me.showDownloadMenu(this);
 					});
 					$("#clusterize-check").click(function() {
 						$(".clusterSelection").slideToggle();
@@ -4354,6 +4476,10 @@ function PA_Step4GlobalHeatmapView() {
 				},
 				beforedestroy: function() {
 					me.getModel().deleteObserver(me);
+					if (me.downloadMenu) {
+						me.downloadMenu.destroy();
+						me.downloadMenu = null;
+					}
 				}
 			}
 		});

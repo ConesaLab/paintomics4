@@ -208,6 +208,7 @@ In pieces, yes:
 |---|---|
 | Matched and unmatched identifiers, per omic, as a zip | **Download ID/Name mapping results**, on Steps 2 and 3 |
 | A painted pathway diagram, as PNG | **Download** in the pathway toolbar |
+| A pathway's global heatmap, as PNG or SVG | **Download** in the **Global heatmap** panel's header |
 | A pathway network, as PNG or SVG | The **PNG** / **SVG** buttons in the network toolbar |
 | MORE's regulation-per-condition table, as TSV | **Download (TSV)** under that table |
 | The pathway enrichment table, as XLS | **Download as XLS**, at the right-hand end of that table's toolbar |
