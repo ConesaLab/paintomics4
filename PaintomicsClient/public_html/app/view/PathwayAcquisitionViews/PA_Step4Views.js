@@ -3690,16 +3690,28 @@ function PA_Step4GlobalHeatmapView() {
 			return;
 		}
 
+		// Below screen size the labels would be unreadable; say so, and offer
+		// the format that has no size limit, rather than save a blurred file.
+		var scale = paFigureScale(figure.width, figure.height);
+		if (scale === 0) {
+			showWarningMessage("This heatmap is too large for a PNG", {
+				message: "At " + figure.width + " x " + figure.height + " px it is past what a browser can draw as one picture. " +
+					"Download it as SVG instead: it has no size limit and opens in any browser, Inkscape or Illustrator.",
+				showButton: true
+			});
+			return;
+		}
+
 		showInfoMessage("Generating image, please wait...", {
-			logMessage: "Rasterising the global heatmap (" + figure.width + " x " + figure.height + " px)",
+			logMessage: "Rasterising the global heatmap (" + figure.width + " x " + figure.height + " px at " + scale + "x)",
 			showSpin: true,
 			icon: "clock"
 		});
-		paRasteriseSVG(figure.svg, figure.width, figure.height, paFigureScale(figure.width, figure.height), function(png) {
+		paRasteriseSVG(figure.svg, figure.width, figure.height, scale, function(png) {
 			if (png === null) {
-				showWarningMessage("This heatmap is too large for a PNG", {
-					message: "Your browser could not draw a picture this size. Download it as SVG instead: " +
-						"it has no size limit and opens in any browser, Inkscape or Illustrator.",
+				showWarningMessage("Your browser could not make a PNG of this heatmap", {
+					message: "Download it as SVG instead: it is the same figure, with no size limit, " +
+						"and opens in any browser, Inkscape or Illustrator.",
 					showButton: true
 				});
 				return;

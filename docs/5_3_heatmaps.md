@@ -143,7 +143,7 @@ It offers two formats:
 
 | Format | What you get |
 |---|---|
-| **PNG image (high resolution)** | A picture at three times screen size, for a report or a slide. A heatmap too tall for that is drawn smaller, and one too tall for any PNG your browser can make is refused with a message pointing you to the SVG. |
+| **PNG image (high resolution)** | A picture at three times screen size, for a report or a slide. A very tall heatmap is drawn at a lower scale, never below screen size; one too tall for even that — roughly a thousand rows — is refused with a message pointing you to the SVG. |
 | **SVG (vector, editable)** | The same figure as vector graphics, with no size limit, which opens in a browser, Inkscape or Illustrator, where the text stays editable. |
 
 The figure is what the panel shows, with the omics side by side whatever width
@@ -151,7 +151,8 @@ the panel had wrapped them to: the omics and order you chose, the clustering and
 its dendrogram, the relevance stars and the per-condition stars. Two things are
 written out in full that the panel shortens to fit: the row labels (gene symbol
 with its KEGG id, and the identifier it was matched from) and the condition
-names under the columns. It is always drawn on white, in the dark theme too. A
+names under the columns — under **Force order**, where an omic's heatmaps stack,
+only under the bottom one, since a longer name would run into the heatmap below. It is always drawn on white, in the dark theme too. A
 title names the pathway and the job, a key under the figure explains the stars
 it uses, and the file arrives as `paintomics_heatmap_<pathway>_<jobID>.png` (or
 `.svg`).

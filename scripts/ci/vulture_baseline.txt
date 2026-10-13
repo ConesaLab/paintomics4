@@ -154,6 +154,7 @@ PaintomicsServer/src/tests/test_gtf_cache_and_attribute_parsing.py: unused metho
 PaintomicsServer/src/tests/test_gtf_cache_and_attribute_parsing.py: unused method 'testTruncatedCacheFallsBackInsteadOfRaising' (60% confidence)
 PaintomicsServer/src/tests/test_heatmap_axis_and_labels.py: unused class 'HeatmapAxisStaticGuards' (60% confidence)
 PaintomicsServer/src/tests/test_heatmap_axis_and_labels.py: unused class 'HeatmapLabelHelperBehaviour' (60% confidence)
+PaintomicsServer/src/tests/test_heatmap_figure_export.py: unused class 'CollectorGuards' (60% confidence)
 PaintomicsServer/src/tests/test_heatmap_figure_export.py: unused class 'DownloadButtonIsWired' (60% confidence)
 PaintomicsServer/src/tests/test_heatmap_figure_export.py: unused class 'FigureSerialisation' (60% confidence)
 PaintomicsServer/src/tests/test_input_convert_gateway_timeout.py: unused class 'ServletFailurePath' (60% confidence)

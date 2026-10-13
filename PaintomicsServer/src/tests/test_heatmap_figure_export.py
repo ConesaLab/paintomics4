@@ -103,6 +103,43 @@ class DownloadButtonIsWired(unittest.TestCase):
         destroy = self.view[self.view.index("beforedestroy"):]
         self.assertIn("me.downloadMenu.destroy()", destroy[:400])
 
+    def test_a_png_too_large_for_1x_is_refused_before_drawing(self):
+        """paFigureScale answers 0 below screen size; the view must check it
+        before the spinner goes up, not hand 0 to the rasteriser."""
+        download = self.view[self.view.index("this.download = function"):self.view.index("this.showDownloadMenu")]
+        self.assertIn("scale === 0", download)
+        self.assertLess(download.index("scale === 0"), download.index("showInfoMessage"))
+
+
+class CollectorGuards(unittest.TestCase):
+    """The DOM-reading half needs a browser; these pin the review fixes in it."""
+
+    @classmethod
+    def setUpClass(cls):
+        code = strip_comments(read(STEP3))
+        start = code.index("var paCollectHeatmapFigure = function")
+        cls.collector = code[start:code.index("var paRasteriseSVG = function", start)]
+        start = code.index("var paRasteriseSVG = function")
+        cls.rasterise = code[start:code.index("var paSaveBlob = function", start)]
+
+    def test_the_hover_outline_is_dropped_from_the_clone(self):
+        """Nothing hides the row outline when the pointer leaves, so it is
+        tagged on the live chart and removed from the copy."""
+        self.assertIn("chart.heatmapSelector.element", self.collector)
+        self.assertIn("[data-pa-drop]", self.collector)
+        self.assertIn('removeAttribute("data-pa-drop")', self.collector)
+
+    def test_full_condition_names_only_where_nothing_is_stacked_below(self):
+        self.assertIn("nextElementSibling", self.collector)
+        self.assertIn("!stacked", self.collector)
+
+    def test_the_serialised_charts_are_stripped_of_illegal_xml_characters(self):
+        self.assertIn(".replace(PA_XML_ILLEGAL", self.collector)
+
+    def test_a_failure_while_drawing_still_reaches_the_caller(self):
+        """The caller's spinner is cleared only by the callback."""
+        self.assertRegex(self.rasterise, r"catch \(error\) \{[^}]*callback\(null\)")
+
 
 @unittest.skipIf(NODE is None, "node is not available")
 class FigureSerialisation(unittest.TestCase):
@@ -255,13 +292,31 @@ class FigureSerialisation(unittest.TestCase):
 
     def test_png_scale_is_three_unless_the_canvas_cannot_hold_it(self):
         self.assertEqual(3, self.evaluate("paFigureScale(1700, 1400)"))
-        # 300 rows x 30 px: the 16,000 px side cap decides.
-        tall = self.evaluate("paFigureScale(1500, 9500)")
-        self.assertLess(tall * 9500, 16001)
-        self.assertGreater(tall, 1.5)
-        # Area cap: never more than 6e7 pixels.
+        # About 600 rows: the area cap decides, and it stays above 1x.
+        tall = self.evaluate("paFigureScale(1500, 18000)")
+        self.assertLessEqual(1500 * tall * 18000 * tall, 6e7)
+        self.assertGreater(tall, 1.4)
+        # Chrome's side limit is 32,767 px.
+        self.assertLessEqual(self.evaluate("paFigureScale(400, 20000)") * 20000, 32767)
         wide = self.evaluate("paFigureScale(6000, 6000)")
         self.assertLessEqual((6000 * wide) ** 2, 6e7)
+
+    def test_png_scale_never_goes_below_screen_size(self):
+        """A scale under 1 shrank 9px labels to 2-5px and still downloaded as
+        a success; 0 tells the caller to refuse and offer the SVG."""
+        self.assertEqual(0, self.evaluate("paFigureScale(700, 60000)"))
+        self.assertEqual(0, self.evaluate("paFigureScale(1500, 45000)"))
+        self.assertGreaterEqual(self.evaluate("paFigureScale(1500, 30000)"), 1)
+
+    def test_control_characters_do_not_break_the_document(self):
+        """A vertical tab or a DOS end-of-file in a name is legal in a TSV
+        and illegal in XML 1.0: one of them made the whole file unparseable."""
+        figure = dict(self.BASE, title="Path\u000bway\u001a name")
+        figure["items"] = [{"type": "text", "x": 10, "y": 60, "text": "Gene\u0001A", "size": 9}]
+        _, root = self.figure(figure)
+        texts = [t.text for t in root.iter(SVG_NS + "text")]
+        self.assertIn("Pathway name", texts)
+        self.assertIn("GeneA", texts)
 
 
 if __name__ == "__main__":

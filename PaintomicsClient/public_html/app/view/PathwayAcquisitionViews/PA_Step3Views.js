@@ -9026,6 +9026,17 @@ var PA_FIGURE_FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
 var PA_FIGURE_INK = "#3F3F46";
 
 /**
+ * Text made safe for an XML document: escaped like an HTML attribute, and
+ * stripped of the C0 control characters XML 1.0 forbids outright. Those are
+ * legal in a gene or condition name read from a user's file - a vertical tab,
+ * a DOS end-of-file - and one of them makes the whole SVG unparseable.
+ */
+var PA_XML_ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g;
+var paXmlText = function (text) {
+	return paEscapeAttribute(String((text === undefined || text === null) ? "" : text).replace(PA_XML_ILLEGAL, ""));
+};
+
+/**
  * The ten corners of a five-pointed star centred on (cx, cy), as an SVG
  * points list. The inner radius is half the outer one, the proportion of the
  * Font Awesome star the screen draws, so the export reads as the same mark.
@@ -9059,15 +9070,19 @@ var paFigureFileName = function (kind, name, jobID, extension) {
 
 /**
  * The scale a PNG is rendered at: 3x for print, less when that would exceed
- * what a browser canvas will hold. Chrome refuses a canvas side over 32,767 px
- * and starts failing well before its area limit, so the caps are deliberately
- * conservative; a heatmap too tall even then is reported to the user, who can
- * take the SVG instead.
+ * what a browser canvas will hold - Chrome refuses a side over 32,767 px, and
+ * 60 million pixels (240 MB of canvas) is kept as the ceiling on memory.
+ *
+ * Returns 0 when even 1x does not fit. The caller refuses the PNG then and
+ * points to the SVG: a figure scaled below screen size shrinks a 9px label
+ * to an illegible smudge, and a blurry file that downloads "successfully"
+ * is worse than an honest refusal.
  */
 var paFigureScale = function (width, height) {
-	var scale = Math.min(3, 16000 / Math.max(width, height, 1), Math.sqrt(6e7 / Math.max(width * height, 1)));
+	var scale = Math.min(3, 32000 / Math.max(width, height, 1), Math.sqrt(6e7 / Math.max(width * height, 1)));
 
-	return Math.floor(scale * 100) / 100;
+	scale = Math.floor(scale * 100) / 100;
+	return (scale < 1) ? 0 : scale;
 };
 
 /**
@@ -9119,7 +9134,7 @@ var paHeatmapFigureSVG = function (figure) {
 		return Object.keys(map).filter(function (key) {
 			return map[key] !== undefined && map[key] !== null && map[key] !== "";
 		}).map(function (key) {
-			return key + '="' + paEscapeAttribute(map[key]) + '"';
+			return key + '="' + paXmlText(map[key]) + '"';
 		}).join(" ");
 	};
 	var text = function (x, y, content, style) {
@@ -9133,7 +9148,7 @@ var paHeatmapFigureSVG = function (figure) {
 			"font-style": style.italic ? "italic" : null,
 			fill: style.fill || PA_FIGURE_INK,
 			"text-anchor": (style.anchor && style.anchor !== "start") ? style.anchor : null
-		}) + ">" + paEscapeAttribute(content) + "</text>";
+		}) + ">" + paXmlText(content) + "</text>";
 	};
 
 	var defs = [];
@@ -9228,7 +9243,8 @@ var paHeatmapFigureSVG = function (figure) {
  *    drawn in the panel's background colour, which in the dark theme is
  *    near-black), the tooltip, the grid and anything hidden - the
  *    row-under-the-pointer outline - are dropped, and the condition names
- *    under the columns are written out in full;
+ *    under the columns are written out in full, except on a chart with
+ *    another stacked under it ("Force order"), which keeps the screen's;
  *  - each row label (an HTML span from paRowLabel) as two lines of text, set
  *    from the label's untruncated title rather than the ellipsised screen copy
  *    - a figure is where the full identifier is wanted - and shrunk to fit the
@@ -9312,7 +9328,13 @@ var paCollectHeatmapFigure = function (root) {
 		var chart = (window.Highcharts && Highcharts.charts) ? Highcharts.charts[container.parentNode.getAttribute("data-highcharts-chart")] : null;
 		var axis = (chart && chart.xAxis) ? chart.xAxis[0] : null;
 		var tagged = [];
-		if (axis && axis.categories && axis.ticks) {
+		/* Only where nothing is drawn underneath: with "Force order" the
+		   charts of one omic stack in a column, and a longer name would run
+		   into the chart below it. Those keep their on-screen labels. */
+		var holder = container.parentNode;
+		var below = holder ? holder.nextElementSibling : null;
+		var stacked = !!(below && below.classList && below.classList.contains("heatmapContainer"));
+		if (axis && axis.categories && axis.ticks && !stacked) {
 			var angle = ((axis.options.labels && axis.options.labels.rotation) || 0) * Math.PI / 180;
 			Object.keys(axis.ticks).forEach(function (position) {
 				var tick = axis.ticks[position];
@@ -9332,9 +9354,17 @@ var paCollectHeatmapFigure = function (root) {
 				tagged.push(element);
 			});
 		}
+		/* The row-under-the-pointer outline is hover state, not data, and
+		   nothing hides it when the pointer leaves: hovering a row on the way
+		   to Download would otherwise frame that row in the figure. */
+		if (chart && chart.heatmapSelector && chart.heatmapSelector.element) {
+			chart.heatmapSelector.element.setAttribute("data-pa-drop", "1");
+			tagged.push(chart.heatmapSelector.element);
+		}
 		var clone = svg.cloneNode(true);
 		tagged.forEach(function (element) {
 			element.removeAttribute("data-pa-full");
+			element.removeAttribute("data-pa-drop");
 		});
 		Array.prototype.forEach.call(clone.querySelectorAll("[data-pa-full]"), function (label) {
 			label.textContent = label.getAttribute("data-pa-full");
@@ -9347,7 +9377,7 @@ var paCollectHeatmapFigure = function (root) {
 		/* The grid goes too: the cells cover it, except for one 50px stub of
 		   y-axis grid line above the first row (yAxis.width is 50) that the
 		   dark theme hides and a white page shows. */
-		Array.prototype.forEach.call(clone.querySelectorAll('.highcharts-tooltip, .highcharts-grid, [display="none"], [visibility="hidden"]'), function (node) {
+		Array.prototype.forEach.call(clone.querySelectorAll('.highcharts-tooltip, .highcharts-grid, [data-pa-drop], [display="none"], [visibility="hidden"]'), function (node) {
 			node.parentNode.removeChild(node);
 		});
 		Array.prototype.forEach.call(clone.querySelectorAll(".highcharts-heatmap-series .highcharts-point"), function (cell) {
@@ -9357,7 +9387,8 @@ var paCollectHeatmapFigure = function (root) {
 		/* Highcharts writes clip paths as url(<page address>#id) in some
 		   browsers; a standalone file has no page, so keep only the #id. */
 		var markup = new XMLSerializer().serializeToString(clone)
-			.replace(/url\((["']?)[^)#"']*#/g, "url($1#");
+			.replace(/url\((["']?)[^)#"']*#/g, "url($1#")
+			.replace(PA_XML_ILLEGAL, "");
 
 		items.push({type: "svg", x: rect.left, y: rect.top, markup: markup});
 		grow(rect.left, rect.top, rect.right, rect.bottom);
@@ -9534,20 +9565,26 @@ var paRasteriseSVG = function (svgText, width, height, scale, callback) {
 		canvas.width = Math.round(width * scale);
 		canvas.height = Math.round(height * scale);
 
-		var context = canvas.getContext("2d");
-		if (!context) {
-			URL.revokeObjectURL(url);
+		/* Any throw here (a canvas the browser will not allocate, a security
+		   error on an older engine) has to reach the caller as null: the
+		   caller is showing a spinner that only the callback clears. */
+		try {
+			var context = canvas.getContext("2d");
+			if (!context) {
+				throw new Error("no 2d context");
+			}
+			context.fillStyle = "#FFFFFF";
+			context.fillRect(0, 0, canvas.width, canvas.height);
+			context.drawImage(image, 0, 0, canvas.width, canvas.height);
+			canvas.toBlob(function (blob) {
+				callback((blob && blob.size) ? blob : null);
+			}, "image/png");
+		} catch (error) {
+			console.error(Date.logFormat() + " could not rasterise the heatmap figure.", error);
 			callback(null);
-			return;
+		} finally {
+			URL.revokeObjectURL(url);
 		}
-		context.fillStyle = "#FFFFFF";
-		context.fillRect(0, 0, canvas.width, canvas.height);
-		context.drawImage(image, 0, 0, canvas.width, canvas.height);
-		URL.revokeObjectURL(url);
-
-		canvas.toBlob(function (blob) {
-			callback((blob && blob.size) ? blob : null);
-		}, "image/png");
 	};
 	image.onerror = function () {
 		URL.revokeObjectURL(url);
